@@ -45,7 +45,7 @@ Next.js(App Router) 프론트와 FastAPI 백엔드가 분리된 구조입니다.
 
 ```bash
 cd backend
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 

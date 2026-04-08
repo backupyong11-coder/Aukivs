@@ -1,9 +1,37 @@
+# --- Secrets & local env (절대 커밋 금지) ---
 credentials.json
 .env
 .env.local
 backend/.env
 frontend/.env.local
-frontend/.next
-frontend/node_modules
-backend/__pycache__
+
+# --- Frontend (Next.js) ---
+frontend/.next/
+frontend/node_modules/
+
+# --- Python ---
+backend/__pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
+.Python
+.venv/
+venv/
+env/
+
+# --- Build / dist ---
+dist/
+build/
+
+# --- Logs & OS ---
+*.log
+.DS_Store
+Thumbs.db
+
+# --- 기타 (로컬·캐시) ---
+.pytest_cache/
+coverage/
+*.tsbuildinfo
+
+# --- IDE / 로컬 도구 (저장소에 불필요) ---
+.codebuddy/

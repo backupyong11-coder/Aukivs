@@ -1,0 +1,3 @@
+# 로컬 개발·CI 테스트용 (pytest 포함)
+-r requirements.txt
+pytest>=8.0.0,<9

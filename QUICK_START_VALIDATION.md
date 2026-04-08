@@ -10,7 +10,7 @@
 |------|------|------|
 | Python | 시스템 | 3.11+ 권장, `python` 이 PATH에 있어야 함 |
 | Node.js | 시스템 | 20+ 권장, `npm` 사용 가능 |
-| 백엔드 의존성 | `backend/` | `python -m pip install -r requirements.txt` |
+| 백엔드 의존성 | `backend/` | `python -m pip install -r requirements-dev.txt` (테스트 포함) |
 | 프론트 의존성 | `frontend/` | `npm install` |
 | 백엔드 환경 | `backend/.env` | `backend/.env.example` 참고 (pytest는 대부분 mock이라 비워도 통과하는 경우 많음) |
 | 프론트 API URL | `frontend/.env.local` | `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` |
@@ -60,7 +60,7 @@ chmod +x scripts/dev-smoke-check.sh   # 최초 1회
 
 ```powershell
 Set-Location -LiteralPath '<저장소루트>\backend'
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
