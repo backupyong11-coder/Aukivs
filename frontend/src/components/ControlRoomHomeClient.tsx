@@ -655,7 +655,7 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-              ???? ???
+              오키브스 관제실
             </h1>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               PC??????????? ?? ? ?????{" "}
@@ -709,7 +709,7 @@ export function ControlRoomHomeClient() {
         </div>
 
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
             <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "??? ?????)}>
               ??? ?????            </button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "??? ???????)}>
