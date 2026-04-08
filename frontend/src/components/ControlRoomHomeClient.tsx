@@ -81,6 +81,35 @@ function isUploadThisWeek(iso: string): boolean {
   return t >= start && t < end;
 }
 
+/** ?? ?? ?? ?????? ?? ?? ??? ???? */
+function isUploadOnLocalCalendarDay(
+  iso: string,
+  year: number,
+  month1to12: number,
+  day: number,
+): boolean {
+  const t = parseUploadDayMs(iso);
+  if (t == null) return false;
+  const d = new Date(t);
+  return (
+    d.getFullYear() === year &&
+    d.getMonth() + 1 === month1to12 &&
+    d.getDate() === day
+  );
+}
+
+function formatLocalYmd(year: number, month1to12: number, day: number): string {
+  return `${year}-${String(month1to12).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** ?? ?? ??(?? YYYY-MM-DD)? ??? */
+function normalizeMemoYmd(raw: string): string | null {
+  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return null;
+  return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
+
 type HubLoadState =
   | { kind: "loading" }
   | {
@@ -655,7 +684,7 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-              오키브스 관제실
+              ???? ???
             </h1>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               PC??????????? ?? ? ?????{" "}
@@ -849,7 +878,7 @@ export function ControlRoomHomeClient() {
             className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
             aria-label="???????)"
           >
-            <CalendarPlaceholder />
+            <ControlRoomCalendar hub={hub} openPanel={openPanel} />
           </section>
 
           {hub.kind === "loading" ? (
@@ -922,37 +951,223 @@ export function ControlRoomHomeClient() {
   );
 }
 
-function CalendarPlaceholder() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
-  const label = `${y}??${m}??;
-  const first = new Date(y, m - 1, 1).getDay();
-  const daysInMonth = new Date(y, m, 0).getDate();
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function ControlRoomCalendar(props: {
+  hub: HubLoadState;
+  openPanel: (next: PanelState) => void;
+}) {
+  const today = new Date();
+  const [view, setView] = useState(() => ({
+    year: today.getFullYear(),
+    month: today.getMonth() + 1,
+  }));
+  const viewYear = view.year;
+  const viewMonth = view.month;
+
+  const activityByYmd = useMemo(() => {
+    const map = new Map<string, { uploads: number; memos: number }>();
+    if (props.hub.kind !== "ready") return map;
+    const { uploads, memos } = props.hub;
+    for (const it of uploads.items) {
+      const t = parseUploadDayMs(it.uploaded_at);
+      if (t == null) continue;
+      const d = new Date(t);
+      const key = formatLocalYmd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const cur = map.get(key) ?? { uploads: 0, memos: 0 };
+      cur.uploads += 1;
+      map.set(key, cur);
+    }
+    for (const memo of memos) {
+      const ymd = normalizeMemoYmd(memo.memo_date);
+      if (!ymd) continue;
+      const cur = map.get(ymd) ?? { uploads: 0, memos: 0 };
+      cur.memos += 1;
+      map.set(ymd, cur);
+    }
+    return map;
+  }, [props.hub]);
+
+  const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
   const cells: (number | null)[] = [];
-  for (let i = 0; i < first; i++) cells.push(null);
+  for (let i = 0; i < firstDow; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
+
+  const label = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
+  const ready = props.hub.kind === "ready";
+
+  const showDay = (day: number) => {
+    const ymd = formatLocalYmd(viewYear, viewMonth, day);
+    if (!ready) {
+      props.openPanel({
+        kind: "error",
+        message:
+          props.hub.kind === "error"
+            ? props.hub.message
+            : "Data is still loading. Please try again in a moment.",
+      });
+      return;
+    }
+    const { uploads, memos, briefing } = props.hub;
+    const uploadRows = uploads.items.filter((it) =>
+      isUploadOnLocalCalendarDay(it.uploaded_at, viewYear, viewMonth, day),
+    );
+    const memoRows = memos.filter((m) => normalizeMemoYmd(m.memo_date) === ymd);
+    const urgentUpload = briefing.urgent_items.filter(
+      (it) =>
+        it.source === "upload" &&
+        it.uploaded_at != null &&
+        isUploadOnLocalCalendarDay(it.uploaded_at, viewYear, viewMonth, day),
+    );
+
+    props.openPanel({
+      kind: "render",
+      title: `Day: ${ymd}`,
+      node: (
+        <div className="space-y-4 text-sm text-zinc-800 dark:text-zinc-200">
+          <section>
+            <p className="text-xs font-semibold uppercase text-zinc-500">
+              Uploads ({uploadRows.length})
+            </p>
+            <div className="mt-2">
+              <UploadPreviewList
+                items={uploadRows}
+                empty="No upload rows for this date (by local calendar / upload time)."
+                actionHref="/uploads"
+                actionLabel="Open uploads"
+              />
+            </div>
+          </section>
+          <section>
+            <p className="text-xs font-semibold uppercase text-zinc-500">
+              Memos ({memoRows.length})
+            </p>
+            <div className="mt-2">
+              {props.hub.memosError ? (
+                <p
+                  className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+                  role="alert"
+                >
+                  Memos could not be loaded: {props.hub.memosError}
+                </p>
+              ) : null}
+              <MemoPreviewList
+                items={memoRows}
+                emptyHint="No memos for this memo_date."
+              />
+            </div>
+          </section>
+          {urgentUpload.length > 0 ? (
+            <section>
+              <p className="text-xs font-semibold uppercase text-amber-700 dark:text-amber-300">
+                Briefing urgent (upload, this day)
+              </p>
+              <ul className="mt-2 space-y-2">
+                {urgentUpload.map((it) => (
+                  <li
+                    key={it.uid}
+                    className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30"
+                  >
+                    <p className="font-medium">{it.title}</p>
+                    {it.note ? (
+                      <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                        {it.note}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      ),
+    });
+  };
+
+  const shiftMonth = (delta: number) => {
+    setView(({ year: y, month: m }) => {
+      let nm = m + delta;
+      let ny = y;
+      while (nm < 1) {
+        nm += 12;
+        ny -= 1;
+      }
+      while (nm > 12) {
+        nm -= 12;
+        ny += 1;
+      }
+      return { year: ny, month: nm };
+    });
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">{label}</p>
-        <span className="text-[10px] text-zinc-500">??? ??? ??? ???</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            onClick={() => shiftMonth(-1)}
+            aria-label="Previous month"
+          >
+            ?
+          </button>
+          <p className="text-sm font-semibold tabular-nums">{label}</p>
+          <button
+            type="button"
+            className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            onClick={() => shiftMonth(1)}
+            aria-label="Next month"
+          >
+            ?
+          </button>
+        </div>
+        <span className="text-[10px] text-zinc-500">
+          Click a date to load uploads & memos
+        </span>
       </div>
-      <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-zinc-500">
-        {["??, "??, "??, "??, "??, "??, "??].map((d) => (
+      <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-zinc-500">
+        {WEEKDAY_LABELS.map((d) => (
           <div key={d}>{d}</div>
         ))}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
-        {cells.map((d, i) => (
-          <div
-            key={i}
-            className={`rounded py-1 ${d === now.getDate() ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 dark:text-zinc-300"}`}
-          >
-            {d ?? ""}
-          </div>
-        ))}
+        {cells.map((d, i) => {
+          if (d == null) {
+            return <div key={`e-${i}`} className="min-h-[2rem]" />;
+          }
+          const ymd = formatLocalYmd(viewYear, viewMonth, d);
+          const act = activityByYmd.get(ymd);
+          const hasDot = (act?.uploads ?? 0) + (act?.memos ?? 0) > 0;
+          const isToday =
+            today.getFullYear() === viewYear &&
+            today.getMonth() + 1 === viewMonth &&
+            today.getDate() === d;
+          return (
+            <button
+              key={`${ymd}-${i}`}
+              type="button"
+              disabled={!ready}
+              title={ready ? `View ${ymd}` : "Loading?"}
+              onClick={() => showDay(d)}
+              className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                isToday
+                  ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <span>{d}</span>
+              {hasDot ? (
+                <span
+                  className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-sky-500"
+                  aria-hidden
+                />
+              ) : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
