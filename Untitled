@@ -1,0 +1,2 @@
+$env:PATH += ";C:\Users\webtoon\.fly\bin"
+flyctl logs -a backend-patient-wave-707
