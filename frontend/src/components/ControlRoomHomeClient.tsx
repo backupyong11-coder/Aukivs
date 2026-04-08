@@ -27,21 +27,21 @@ import { fetchMemos, type MemoItem } from "@/lib/memos";
 import { userFacingListError } from "@/lib/userFacingErrors";
 
 const SUGGESTED_QUERIES: { id: string; label: string }[] = [
-  { id: "due_today", label: "??? ?? ??" },
-  { id: "week_upload", label: "??? ?????????? ???? },
-  { id: "incomplete_check", label: "??????????? ???? },
-  { id: "upload_gaps", label: "???????? ??? ???? },
-  { id: "data_bad", label: "?????????????? ???? },
-  { id: "dup_id", label: "?? id ??? ????????? },
-  { id: "platform_stub", label: "?? ???????????? },
-  { id: "today_triage", label: "??? ????????? ??????" },
-  { id: "memo_all", label: "??????? ??" },
+  { id: "due_today", label: "?ㅻ뒛 留덇컧 萸먯빞" },
+  { id: "week_upload", label: "?대쾲 二??낅줈???쇱젙 蹂댁뿬以? },
+  { id: "incomplete_check", label: "誘몄셿猷?泥댄겕由ъ뒪?몃쭔 蹂댁뿬以? },
+  { id: "upload_gaps", label: "?낅줈???꾨씫 ?먮즺 李얠븘以? },
+  { id: "data_bad", label: "?곗씠???댁긽????ぉ 蹂댁뿬以? },
+  { id: "dup_id", label: "以묐났 id ?덈뒗 ?낅줈??蹂댁뿬以? },
+  { id: "platform_stub", label: "誘명댆 愿???먮즺留?蹂댁뿬以? },
+  { id: "today_triage", label: "?ㅻ뒛 ?먮킄????寃껊쭔 ?뺣━?댁쨾" },
+  { id: "memo_all", label: "硫붾え???꾩껜 蹂닿린" },
 ];
 
 function uploadLooksIncomplete(status: string | null): boolean {
   if (!status || !status.trim()) return true;
   const s = status.trim().toLowerCase();
-  const done = ["???", "?????, "??, "done", "complete", "ok"];
+  const done = ["?꾨즺", "?꾨즺??, "??, "done", "complete", "ok"];
   return !done.some((x) => s === x || s.includes(x));
 }
 
@@ -79,35 +79,6 @@ function isUploadThisWeek(iso: string): boolean {
   const start = startOfWeekMondayMs();
   const end = start + 7 * 86400000;
   return t >= start && t < end;
-}
-
-/** ?? ?? ?? ?????? ?? ?? ??? ???? */
-function isUploadOnLocalCalendarDay(
-  iso: string,
-  year: number,
-  month1to12: number,
-  day: number,
-): boolean {
-  const t = parseUploadDayMs(iso);
-  if (t == null) return false;
-  const d = new Date(t);
-  return (
-    d.getFullYear() === year &&
-    d.getMonth() + 1 === month1to12 &&
-    d.getDate() === day
-  );
-}
-
-function formatLocalYmd(year: number, month1to12: number, day: number): string {
-  return `${year}-${String(month1to12).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-/** ?? ?? ??(?? YYYY-MM-DD)? ??? */
-function normalizeMemoYmd(raw: string): string | null {
-  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (!m) return null;
-  return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
 }
 
 type HubLoadState =
@@ -186,7 +157,7 @@ export function ControlRoomHomeClient() {
           message:
             e instanceof Error
               ? e.message
-              : "??????? ?????? ???????",
+              : "?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??",
         });
       }
     })();
@@ -239,7 +210,7 @@ export function ControlRoomHomeClient() {
           message:
             hub.kind === "error"
               ? hub.message
-              : "??? ?????????? ????? ?????. ??? ????? ????????",
+              : "?꾩쭅 愿???곗씠?곕? 遺덈윭?ㅻ뒗 以묒엯?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?섏꽭??",
         });
         return;
       }
@@ -252,23 +223,23 @@ export function ControlRoomHomeClient() {
         );
         openPanel({
           kind: "render",
-          title: "??? ?????? ??(????",
+          title: "?ㅻ뒛 留덇컧쨌?ㅻ뒛 泥섎━(釉뚮━??",
           node: (
             <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
               <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
-                ??? ?????? ??:{" "}
+                ?ㅻ뒛 吏묎퀎??泥댄겕 嫄댁닔:{" "}
                 <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
                   {briefing.summary.today_checklist_count}
                 </span>
-                ?? ?? ??? ???? ??????????? ?? ???? ?????{" "}
+                嫄? 湲닿툒 ?꾨낫 以?泥댄겕 異쒖쿂???꾨옒??誘몃━ 蹂댁뿬 以띾땲?? ?섏젙?{" "}
                 <Link href="/checklist" className="font-medium underline">
-                  ?? ???
+                  泥댄겕 ?묒뾽
                 </Link>
-                ??? ?????
+                ?먯꽌 ?섏꽭??
               </p>
               {checklistUrgent.length === 0 ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  ?? ?? ?? ???? ??????.
+                  泥댄겕 異쒖쿂 湲닿툒 ?꾨낫媛 ?놁뒿?덈떎.
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -297,13 +268,13 @@ export function ControlRoomHomeClient() {
         const rows = uploads.items.filter((it) => isUploadToday(it.uploaded_at));
         openPanel({
           kind: "render",
-          title: "??? ????????????? ??,
+          title: "?ㅻ뒛 ?낅줈???쒓컖???≫엺 ??,
           node: (
             <UploadPreviewList
               items={rows}
-              empty="??? ???(D??????? ???????? ??????."
+              empty="?ㅻ뒛 ?좎쭨(D??濡??≫엺 ?낅줈???됱씠 ?놁뒿?덈떎."
               actionHref="/uploads"
-              actionLabel="??????????? ??? ??"
+              actionLabel="?낅줈???묒뾽?먯꽌 ?꾩껜 蹂닿린"
             />
           ),
         });
@@ -314,13 +285,13 @@ export function ControlRoomHomeClient() {
         const rows = uploads.items.filter((it) => isUploadThisWeek(it.uploaded_at));
         openPanel({
           kind: "render",
-          title: "??? ??????????(?? ???)",
+          title: "?대쾲 二??낅줈???쇱젙(紐⑸줉 湲곗?)",
           node: (
             <UploadPreviewList
               items={rows}
-              empty="??? ??????????(D????? ??? ??? ??????."
+              empty="?대쾲 二??낅줈???쒓컖(D???쇰줈 ?≫엺 ?됱씠 ?놁뒿?덈떎."
               actionHref="/uploads"
-              actionLabel="??????????? ???????"
+              actionLabel="?낅줈???묒뾽?먯꽌 ?꾩껜쨌?꾪꽣"
             />
           ),
         });
@@ -328,7 +299,7 @@ export function ControlRoomHomeClient() {
       }
 
       if (id === "incomplete_check") {
-        openPanel({ kind: "loading", label: "??????????? ??? });
+        openPanel({ kind: "loading", label: "泥댄겕由ъ뒪??遺덈윭?ㅻ뒗 以묅? });
         try {
           const r = await fetchChecklist();
           if (!r.ok) {
@@ -340,7 +311,7 @@ export function ControlRoomHomeClient() {
           }
           openPanel({
             kind: "render",
-            title: "????????????? ??",
+            title: "誘몄셿猷?泥댄겕由ъ뒪???쒖꽦 ??",
             node: (
               <ChecklistPreviewList
                 items={r.items.slice(0, 15)}
@@ -354,7 +325,7 @@ export function ControlRoomHomeClient() {
             message:
               e instanceof Error
                 ? e.message
-                : "???????? ?????? ???????",
+                : "泥댄겕由ъ뒪?몃? 遺덈윭?ㅼ? 紐삵뻽?듬땲??",
           });
         }
         return;
@@ -364,13 +335,13 @@ export function ControlRoomHomeClient() {
         const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
         openPanel({
           kind: "render",
-          title: "???????????? ???)",
+          title: "誘몄셿猷??낅줈???곹깭 湲곗?)",
           node: (
             <UploadPreviewList
               items={rows.slice(0, 20)}
-              empty="???? ???? ???????? ??? ??? ??????."
+              empty="?곹깭媛 鍮꾩뿀嫄곕굹 ?꾨즺濡?蹂댁씠吏 ?딅뒗 ?됱씠 ?놁뒿?덈떎."
               actionHref="/uploads"
-              actionLabel="??????????? ??"
+              actionLabel="?낅줈???묒뾽?먯꽌 泥섎━"
             />
           ),
         });
@@ -382,7 +353,7 @@ export function ControlRoomHomeClient() {
         const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
         openPanel({
           kind: "render",
-          title: "??????????? ???",
+          title: "?곗씠???댁긽쨌吏묎퀎 ?쒖쇅",
           node: (
             <IssueSummaryBody
               warnings={briefing.warnings}
@@ -400,12 +371,12 @@ export function ControlRoomHomeClient() {
         const rows = uploads.items.filter((it) => affected.has(it.id));
         openPanel({
           kind: "render",
-          title: "?? id ?????,
+          title: "以묐났 id ?낅줈??,
           node: (
             <div className="space-y-3 text-sm">
               {dup.length === 0 ? (
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  ?? id ???? ??????.
+                  以묐났 id ?댁뒋媛 ?놁뒿?덈떎.
                 </p>
               ) : (
                 <ul className="list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">
@@ -420,12 +391,12 @@ export function ControlRoomHomeClient() {
               {rows.length > 0 ? (
                 <div>
                   <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    ??? id? ??? ?? ??                  </p>
+                    ?대떦 id媛 遺숈? 紐⑸줉 ??                  </p>
                   <UploadPreviewList
                     items={rows.slice(0, 12)}
                     empty=""
                     actionHref="/uploads"
-                    actionLabel="??????????? ??? ???"
+                    actionLabel="?낅줈???묒뾽?먯꽌 ?쒗듃 ?뺣━"
                   />
                 </div>
               ) : null}
@@ -438,11 +409,11 @@ export function ControlRoomHomeClient() {
       if (id === "platform_stub") {
         openPanel({
           kind: "render",
-          title: "???????????? ??",
+          title: "?뚮옯?셋룹옉???쒖젙 議고쉶",
           node: (
             <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              ??? ?????????? ?? ?? ??????? ???????? ???API?? ????????
-              ?? ??? ???? ???????????????????????????.
+              ?뱀젙 ?뚮옯?셋룹옉?덈쭔 嫄몃윭 蹂대뒗 議고쉶???ㅼ쓬 ?댁뿉???쒗듃 ?는텮PI? ?곌껐?⑸땲??
+              醫뚯륫 ?좏깮 ?곸옄媛 ?쒖꽦?붾릺硫??ш린???꾩껜?뺣낫瑜??꾩썎?덈떎.
             </p>
           ),
         });
@@ -461,14 +432,14 @@ export function ControlRoomHomeClient() {
         ).length;
         openPanel({
           kind: "render",
-          title: "????????(??????????)",
+          title: "?낅줈???붿빟(紐⑸줉쨌釉뚮━??湲곗?)",
           node: (
             <ul className="list-inside list-disc space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
-              <li>??? ??? ??? ?? {uploads.items.length}??/li>
-              <li>??????? ??????): {inc}??/li>
-              <li>??? D?? {todayN}??/ ??? ??????: {weekN}??/li>
-              <li>??????? ???????: {briefing.summary.today_upload_count}??/li>
-              <li>??????????? {briefing.summary.overdue_upload_count}??/li>
+              <li>?쒗듃 ?뚯떛 ?깃났 ?? {uploads.items.length}嫄?/li>
+              <li>誘몄셿猷??곹깭 ?대━?ㅽ떛): {inc}嫄?/li>
+              <li>?ㅻ뒛 D?? {todayN}嫄?/ ?대쾲 二?????: {weekN}嫄?/li>
+              <li>釉뚮━???ㅻ뒛 ?낅줈??吏묎퀎: {briefing.summary.today_upload_count}嫄?/li>
+              <li>釉뚮━??吏?걔룻썑?? {briefing.summary.overdue_upload_count}嫄?/li>
             </ul>
           ),
         });
@@ -478,11 +449,11 @@ export function ControlRoomHomeClient() {
       if (id === "urgent_only") {
         openPanel({
           kind: "render",
-          title: "?? ???? ???)",
+          title: "湲됲븳 ??湲닿툒 ?꾨낫)",
           node:
             briefing.urgent_items.length === 0 ? (
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                ?? ???? ??????.
+                湲닿툒 ?꾨낫媛 ?놁뒿?덈떎.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -492,7 +463,7 @@ export function ControlRoomHomeClient() {
                     className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30"
                   >
                     <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">
-                      {it.source === "checklist" ? "??" : "?????}
+                      {it.source === "checklist" ? "泥댄겕" : "?낅줈??}
                     </span>
                     <p className="mt-1 font-medium">{it.title}</p>
                     {it.note ? (
@@ -511,11 +482,11 @@ export function ControlRoomHomeClient() {
       if (id === "sheet_backup") {
         openPanel({
           kind: "render",
-          title: "??? ??",
+          title: "?쒗듃 諛깆뾽",
           node: (
             <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Google ????????? ????? ??? ??????????????????? ??? ??????
-              ??? ?? API??????????
+              Google ?ㅽ봽?덈뱶?쒗듃 硫붾돱?먯꽌 ?щ낯 留뚮뱾湲걔룸쾭??湲곕줉???ъ슜?섍굅?? ?ㅼ쓬 ?④퀎?먯꽌
+              ?쒕쾭 諛깆뾽 API瑜??곌껐?⑸땲??
             </p>
           ),
         });
@@ -525,7 +496,7 @@ export function ControlRoomHomeClient() {
       if (id === "today_triage") {
         openPanel({
           kind: "render",
-          title: "??? ??????? + ??)",
+          title: "?ㅻ뒛 釉뚮━???붿빟 + 湲닿툒)",
           node: (
             <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
               <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
@@ -533,7 +504,7 @@ export function ControlRoomHomeClient() {
               </p>
               {briefing.urgent_items.length === 0 ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  ?? ??? ?????? ??????.
+                  湲닿툒 ?꾨낫 紐⑸줉??鍮꾩뼱 ?덉뒿?덈떎.
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -543,7 +514,7 @@ export function ControlRoomHomeClient() {
                       className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30"
                     >
                       <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">
-                        {it.source === "checklist" ? "??" : "?????}
+                        {it.source === "checklist" ? "泥댄겕" : "?낅줈??}
                       </span>
                       <p className="mt-1 font-medium">{it.title}</p>
                       {it.note ? (
@@ -564,7 +535,7 @@ export function ControlRoomHomeClient() {
       if (id === "memo_all") {
         openPanel({
           kind: "render",
-          title: "????(??? ???)",
+          title: "硫붾え??(?쒗듃 ?꾩껜)",
           node: (
             <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
               {hub.memosError ? (
@@ -572,16 +543,16 @@ export function ControlRoomHomeClient() {
                   className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
                   role="alert"
                 >
-                  ?????????? ??????? {hub.memosError}
+                  硫붾え瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲?? {hub.memosError}
                 </p>
               ) : null}
               <MemoPreviewList
                 items={hub.memos}
-                emptyHint="???????? ??????. ??? ????????? ?????????????????????????"
+                emptyHint="?쒖떆??硫붾え媛 ?놁뒿?덈떎. ?쇱そ ?ъ씠?쒕컮?먯꽌 硫붾え瑜?異붽??섍굅???쒗듃瑜??뺤씤?섏꽭??"
               />
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                ??????? ???????????????????, ????? ????
-                ????????
+                遺꾨쪟???쒗듃 ?뚮찓紐⑤텇瑜섅??댁뿉???낅젰?섎㈃, 吏덈Ц?섍린 寃?됱뿉
+                ?ы븿?⑸땲??
               </p>
             </div>
           ),
@@ -606,7 +577,7 @@ export function ControlRoomHomeClient() {
         });
         openPanel({
           kind: "render",
-          title: "?? ? ?? ???,
+          title: "吏덈Ц 쨌 硫붾え 寃??,
           node: (
             <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
               {hub.memosError ? (
@@ -614,19 +585,19 @@ export function ControlRoomHomeClient() {
                   className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
                   role="alert"
                 >
-                  ?? ?????????? ?? ???? ???????? {hub.memosError}
+                  硫붾え 紐⑸줉??遺덈윭?ㅼ? 紐삵빐 寃?됱씠 ?쒗븳?⑸땲?? {hub.memosError}
                 </p>
               ) : null}
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                ???? ??q}????????????????????? ??? ??????? ??
-                ??? ??? ??? ????????
+                寃?됱뼱 ??q}????硫붾え?댁슜쨌硫붾え遺꾨쪟??怨듬갚?쇰줈 ?섎늿 ?ㅼ썙?쒓? 紐⑤몢
+                ?ㅼ뼱 ?덈뒗 ?됰쭔 ?쒖떆?⑸땲??
               </p>
               <MemoPreviewList
                 items={matches}
-                emptyHint="?????? ??? ??????. ??????? ???? ?????? ??????????????????????????? ??????."
+                emptyHint="?쇱튂?섎뒗 硫붾え媛 ?놁뒿?덈떎. ?ㅼ썙?쒕? 以꾩씠嫄곕굹 ?쒗듃?먯꽌 遺꾨쪟瑜??낅젰?????곷떒?뚯쟾泥??덈줈怨좎묠?띿쓣 ?꾨Ⅴ?몄슂."
               />
               <p className="border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                ?????????????? ??? ?? ?? ????????????
+                泥댄겕쨌?낅줈?쑣룸툕由ы븨? ?곷떒 鍮좊Ⅸ 議고쉶 踰꾪듉???ъ슜?섏꽭??
               </p>
             </div>
           ),
@@ -652,7 +623,7 @@ export function ControlRoomHomeClient() {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      window.alert("?????????????. ?????? ????? ????????????");
+      window.alert("蹂듭궗???ㅽ뙣?덉뒿?덈떎. 釉뚮씪?곗? ?대┰蹂대뱶 沅뚰븳???뺤씤?섏꽭??");
     }
   }, []);
 
@@ -663,7 +634,7 @@ export function ControlRoomHomeClient() {
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `??????${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `愿?쒓껐怨?${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, []);
@@ -684,26 +655,26 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-              ???? ???
+              ?뱁댆 ?댁쁺 愿?쒖떎
             </h1>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              PC??????????? ?? ? ?????{" "}
+              PC??耳쒕몢怨?踰꾪듉?쇰줈 議고쉶 쨌 ?섏젙?{" "}
               <Link href="/checklist" className="font-medium underline">
-                ??
+                泥댄겕
               </Link>
               /
               <Link href="/uploads" className="font-medium underline">
-                ?????              </Link>
+                ?낅줈??              </Link>
             </p>
             <label htmlFor="control-query-input" className="sr-only">
-              ????? ???
+              愿??吏덈Ц ?낅젰
             </label>
             <textarea
               id="control-query-input"
               rows={2}
               value={queryDraft}
               onChange={(e) => setQueryDraft(e.target.value)}
-              placeholder="?? ??? ???????/ ??? ?? / ?? ?? ?????
+              placeholder="?? ?대쾲 二??낅줈??/ ?ㅻ뒛 留덇컧 / 硫붾え 遺꾨쪟 ?ㅼ썙??
               className="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900"
             />
           </div>
@@ -713,63 +684,76 @@ export function ControlRoomHomeClient() {
               onClick={submitQuestion}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
             >
-              ?????
+              吏덈Ц?섍린
             </button>
             <button
               type="button"
               onClick={() => void copyResultPanel()}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900"
             >
-              ?? ??
+              寃곌낵 蹂듭궗
             </button>
             <button
               type="button"
               onClick={saveResultTxt}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900"
             >
-              TXT ????            </button>
+              TXT ???            </button>
             <button
               type="button"
               onClick={saveFavoriteFromInput}
               className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100"
             >
-              ???? ????            </button>
+              利먭꺼李얘린 ???            </button>
           </div>
         </div>
 
-        <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "??? ?????)}>
-              ??? ?????            </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "??? ???????)}>
-              ??? ???????            </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "?????????)}>
-              ?????????            </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_summary", "????????")}>
-              ????????
+        <div className="mx-auto mt-3 max-w-[1600px] space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            鍮좊Ⅸ 議고쉶 (?낅줈??
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "?ㅻ뒛 ?낅줈??)}>
+              ?ㅻ뒛 ?낅줈??            </button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "?대쾲 二??낅줈??)}>
+              ?대쾲 二??낅줈??            </button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "誘몄셿猷??낅줈??)}>
+              誘몄셿猷??낅줈??            </button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_summary", "?낅줈???붿빟")}>
+              ?낅줈???붿빟
             </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "??? ????)}>
-              ??? ????            </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "??? ??")}>
-              ??? ??
+            <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "?ㅻ뒛 釉뚮━??)}>
+              ?ㅻ뒛 釉뚮━??            </button>
+          </div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            鍮좊Ⅸ 議고쉶 (?낅Т)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "?ㅻ뒛 留덇컧")}>
+              ?ㅻ뒛 留덇컧
             </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "???????")}>
-              ???????
+            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "誘몄셿猷??낅Т")}>
+              誘몄셿猷??낅Т
             </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "?? ??)}>
-              ?? ??            </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("data_bad", "?????????")}>
-              ?????????
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "湲됲븳 ??)}>
+              湲됲븳 ??            </button>
+          </div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            ?꾧뎄
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={quickBtn} onClick={() => void runPreset("data_bad", "?곗씠???먭?")}>
+              ?곗씠???먭?
             </button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("sheet_backup", "??? ??")}>
-              ??? ??
+            <button type="button" className={quickBtn} onClick={() => void runPreset("sheet_backup", "?쒗듃 諛깆뾽")}>
+              ?쒗듃 諛깆뾽
             </button>
             <button
               type="button"
               className={quickBtn}
               onClick={() => setHubRefreshKey((k) => k + 1)}
             >
-              ??? ?????
+              ?꾩껜 ?덈줈怨좎묠
             </button>
           </div>
         </div>
@@ -779,37 +763,37 @@ export function ControlRoomHomeClient() {
         <aside className="space-y-3 lg:col-span-2">
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="text-xs font-semibold uppercase text-zinc-500">
-              ?????            </h2>
+              ?뚮옯??            </h2>
             <select
               disabled
               className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-              aria-label="????????"
+              aria-label="?뚮옯???좏깮"
             >
-              <option>??? (??? ???)</option>
+              <option>?꾩껜 (?곕룞 ?덉젙)</option>
             </select>
             <h2 className="mt-3 text-xs font-semibold uppercase text-zinc-500">
-              ???
+              ?묓뭹
             </h2>
             <select
               disabled
               className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-              aria-label="??? ???"
+              aria-label="?묓뭹 ?좏깮"
             >
-              <option>??? (??? ???)</option>
+              <option>?꾩껜 (?곕룞 ?덉젙)</option>
             </select>
             <button
               type="button"
               className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800"
-              onClick={() => void runPreset("platform_stub", "?????? ??")}
+              onClick={() => void runPreset("platform_stub", "?꾩껜?뺣낫 蹂닿린")}
             >
-              ?????? ??
+              ?꾩껜?뺣낫 蹂닿린
             </button>
           </section>
 
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="font-semibold text-zinc-600 dark:text-zinc-400">?? ??</p>
+            <p className="font-semibold text-zinc-600 dark:text-zinc-400">理쒓렐 吏덈Ц</p>
             {recent.length === 0 ? (
-              <p className="mt-2 text-zinc-500">???</p>
+              <p className="mt-2 text-zinc-500">?놁쓬</p>
             ) : (
               <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
                 {recent.map((q) => (
@@ -824,16 +808,16 @@ export function ControlRoomHomeClient() {
                     >
                       {q}
                     </button>
-                    <button type="button" className="text-amber-600" title="????" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>
+                    <button type="button" className="text-amber-600" title="利먭꺼李얘린" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>
                       {favorites.includes(q) ? "?? : "??}
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="mt-3 font-semibold text-zinc-600 dark:text-zinc-400">????</p>
+            <p className="mt-3 font-semibold text-zinc-600 dark:text-zinc-400">利먭꺼李얘린</p>
             {favorites.length === 0 ? (
-              <p className="mt-2 text-zinc-500">???</p>
+              <p className="mt-2 text-zinc-500">?놁쓬</p>
             ) : (
               <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
                 {favorites.map((q) => (
@@ -857,7 +841,7 @@ export function ControlRoomHomeClient() {
           </section>
 
           <section className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/80 p-2 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
-            <p className="font-medium">??? ?? ??/p>
+            <p className="font-medium">異붽? 吏덈Ц 移?/p>
             <div className="mt-2 flex flex-wrap gap-1">
               {SUGGESTED_QUERIES.map((c) => (
                 <button
@@ -876,20 +860,20 @@ export function ControlRoomHomeClient() {
         <main className="space-y-4 lg:col-span-7">
           <section
             className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
-            aria-label="???????)"
+            aria-label="罹섎┛???먮━)"
           >
-            <ControlRoomCalendar hub={hub} openPanel={openPanel} />
+            <CalendarPlaceholder />
           </section>
 
           {hub.kind === "loading" ? (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 bg-white px-4 py-6 text-sm dark:border-zinc-700 dark:bg-zinc-900" role="status">
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" aria-hidden />
-              ??????????? ????? ???            </div>
+              釉뚮━?뫢룹뾽濡쒕뱶쨌硫붾え 遺덈윭?ㅻ뒗 以묅?            </div>
           ) : null}
 
           {hub.kind === "error" ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900/50 dark:bg-red-950/40" role="alert">
-              <p className="font-medium text-red-800 dark:text-red-200">??????? ???</p>
+              <p className="font-medium text-red-800 dark:text-red-200">?곗씠??濡쒕뱶 ?ㅽ뙣</p>
               <p className="mt-1 text-red-700 dark:text-red-300">{hub.message}</p>
             </div>
           ) : null}
@@ -897,22 +881,22 @@ export function ControlRoomHomeClient() {
           <section
             id="control-result-panel"
             className="scroll-mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
-            aria-label="?? ???"
+            aria-label="寃곌낵 ?⑤꼸"
           >
-            <h2 className="text-sm font-semibold">??</h2>
+            <h2 className="text-sm font-semibold">寃곌낵</h2>
             <div className="mt-3 min-h-[160px] text-sm">
               {panel.kind === "welcome" ? (
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  ??? ?? ?? ????????????????? ??????
+                  ?곷떒 鍮좊Ⅸ 議고쉶 踰꾪듉???꾨Ⅴ硫??ш린???듭씠 梨꾩썙吏묐땲??
                 </p>
               ) : null}
               {panel.kind === "nl_stub" ? (
                 <div className="space-y-2">
-                  <p className="font-medium">?? ??(??????? ??</p>
+                  <p className="font-medium">吏덈Ц 湲곕줉(?곗씠??濡쒕뵫 ??</p>
                   <p className="rounded bg-zinc-50 px-2 py-1 dark:bg-zinc-900">??panel.query}??/p>
                   <p className="text-xs text-zinc-500">
-                    ?????????? ???????? ???? ?? ???? ???????? ????
-                    ??? ?? ????????????
+                    愿???곗씠?곌? 以鍮꾨릺硫?媛숈? 吏덈Ц? 硫붾え 寃?됱뿉 ?ъ슜?⑸땲?? 吏湲덉?
+                    ?곷떒 鍮좊Ⅸ 議고쉶瑜??댁슜?섏꽭??
                   </p>
                 </div>
               ) : null}
@@ -933,15 +917,15 @@ export function ControlRoomHomeClient() {
         <aside className="lg:col-span-3">
           {metrics ? (
             <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-xs font-semibold uppercase text-zinc-500">??????????</h2>
+              <h2 className="text-xs font-semibold uppercase text-zinc-500">??쒕낫???붿빟</h2>
               <ul className="mt-2 grid grid-cols-2 gap-2">
-                <SidebarStat label="??? ??(??)" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
-                <SidebarStat label="????????? value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
-                <SidebarStat label="???????" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
-                <SidebarStat label="?? id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
-                <SidebarStat label="?? ???" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
-                <SidebarStat label="??? ???????)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
-                <SidebarStat label="?????????)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
+                <SidebarStat label="?ㅻ뒛 留덇컧(泥댄겕)" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
+                <SidebarStat label="誘몄셿猷??낅줈?? value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
+                <SidebarStat label="?곗씠??二쇱쓽" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
+                <SidebarStat label="以묐났 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
+                <SidebarStat label="湲닿툒 ?꾨낫" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
+                <SidebarStat label="?ㅻ뒛 ?낅줈??吏묎퀎)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
+                <SidebarStat label="吏?걔룻썑??吏묎퀎)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
               </ul>
             </section>
           ) : null}
@@ -951,223 +935,37 @@ export function ControlRoomHomeClient() {
   );
 }
 
-const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function ControlRoomCalendar(props: {
-  hub: HubLoadState;
-  openPanel: (next: PanelState) => void;
-}) {
-  const today = new Date();
-  const [view, setView] = useState(() => ({
-    year: today.getFullYear(),
-    month: today.getMonth() + 1,
-  }));
-  const viewYear = view.year;
-  const viewMonth = view.month;
-
-  const activityByYmd = useMemo(() => {
-    const map = new Map<string, { uploads: number; memos: number }>();
-    if (props.hub.kind !== "ready") return map;
-    const { uploads, memos } = props.hub;
-    for (const it of uploads.items) {
-      const t = parseUploadDayMs(it.uploaded_at);
-      if (t == null) continue;
-      const d = new Date(t);
-      const key = formatLocalYmd(d.getFullYear(), d.getMonth() + 1, d.getDate());
-      const cur = map.get(key) ?? { uploads: 0, memos: 0 };
-      cur.uploads += 1;
-      map.set(key, cur);
-    }
-    for (const memo of memos) {
-      const ymd = normalizeMemoYmd(memo.memo_date);
-      if (!ymd) continue;
-      const cur = map.get(ymd) ?? { uploads: 0, memos: 0 };
-      cur.memos += 1;
-      map.set(ymd, cur);
-    }
-    return map;
-  }, [props.hub]);
-
-  const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+function CalendarPlaceholder() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const label = `${y}??${m}??;
+  const first = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
   const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let i = 0; i < first; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
-
-  const label = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
-  const ready = props.hub.kind === "ready";
-
-  const showDay = (day: number) => {
-    const ymd = formatLocalYmd(viewYear, viewMonth, day);
-    if (!ready) {
-      props.openPanel({
-        kind: "error",
-        message:
-          props.hub.kind === "error"
-            ? props.hub.message
-            : "Data is still loading. Please try again in a moment.",
-      });
-      return;
-    }
-    const { uploads, memos, briefing } = props.hub;
-    const uploadRows = uploads.items.filter((it) =>
-      isUploadOnLocalCalendarDay(it.uploaded_at, viewYear, viewMonth, day),
-    );
-    const memoRows = memos.filter((m) => normalizeMemoYmd(m.memo_date) === ymd);
-    const urgentUpload = briefing.urgent_items.filter(
-      (it) =>
-        it.source === "upload" &&
-        it.uploaded_at != null &&
-        isUploadOnLocalCalendarDay(it.uploaded_at, viewYear, viewMonth, day),
-    );
-
-    props.openPanel({
-      kind: "render",
-      title: `Day: ${ymd}`,
-      node: (
-        <div className="space-y-4 text-sm text-zinc-800 dark:text-zinc-200">
-          <section>
-            <p className="text-xs font-semibold uppercase text-zinc-500">
-              Uploads ({uploadRows.length})
-            </p>
-            <div className="mt-2">
-              <UploadPreviewList
-                items={uploadRows}
-                empty="No upload rows for this date (by local calendar / upload time)."
-                actionHref="/uploads"
-                actionLabel="Open uploads"
-              />
-            </div>
-          </section>
-          <section>
-            <p className="text-xs font-semibold uppercase text-zinc-500">
-              Memos ({memoRows.length})
-            </p>
-            <div className="mt-2">
-              {props.hub.memosError ? (
-                <p
-                  className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
-                  role="alert"
-                >
-                  Memos could not be loaded: {props.hub.memosError}
-                </p>
-              ) : null}
-              <MemoPreviewList
-                items={memoRows}
-                emptyHint="No memos for this memo_date."
-              />
-            </div>
-          </section>
-          {urgentUpload.length > 0 ? (
-            <section>
-              <p className="text-xs font-semibold uppercase text-amber-700 dark:text-amber-300">
-                Briefing urgent (upload, this day)
-              </p>
-              <ul className="mt-2 space-y-2">
-                {urgentUpload.map((it) => (
-                  <li
-                    key={it.uid}
-                    className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30"
-                  >
-                    <p className="font-medium">{it.title}</p>
-                    {it.note ? (
-                      <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                        {it.note}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-      ),
-    });
-  };
-
-  const shiftMonth = (delta: number) => {
-    setView(({ year: y, month: m }) => {
-      let nm = m + delta;
-      let ny = y;
-      while (nm < 1) {
-        nm += 12;
-        ny -= 1;
-      }
-      while (nm > 12) {
-        nm -= 12;
-        ny += 1;
-      }
-      return { year: ny, month: nm };
-    });
-  };
-
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Previous month"
-          >
-            ?
-          </button>
-          <p className="text-sm font-semibold tabular-nums">{label}</p>
-          <button
-            type="button"
-            className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            onClick={() => shiftMonth(1)}
-            aria-label="Next month"
-          >
-            ?
-          </button>
-        </div>
-        <span className="text-[10px] text-zinc-500">
-          Click a date to load uploads & memos
-        </span>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">{label}</p>
+        <span className="text-[10px] text-zinc-500">?쒗듃 ?쇱젙 ?곕룞 ?덉젙</span>
       </div>
-      <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-zinc-500">
-        {WEEKDAY_LABELS.map((d) => (
+      <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-zinc-500">
+        {["??, "??, "??, "??, "紐?, "湲?, "??].map((d) => (
           <div key={d}>{d}</div>
         ))}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
-        {cells.map((d, i) => {
-          if (d == null) {
-            return <div key={`e-${i}`} className="min-h-[2rem]" />;
-          }
-          const ymd = formatLocalYmd(viewYear, viewMonth, d);
-          const act = activityByYmd.get(ymd);
-          const hasDot = (act?.uploads ?? 0) + (act?.memos ?? 0) > 0;
-          const isToday =
-            today.getFullYear() === viewYear &&
-            today.getMonth() + 1 === viewMonth &&
-            today.getDate() === d;
-          return (
-            <button
-              key={`${ymd}-${i}`}
-              type="button"
-              disabled={!ready}
-              title={ready ? `View ${ymd}` : "Loading?"}
-              onClick={() => showDay(d)}
-              className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                isToday
-                  ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <span>{d}</span>
-              {hasDot ? (
-                <span
-                  className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-sky-500"
-                  aria-hidden
-                />
-              ) : null}
-            </button>
-          );
-        })}
+        {cells.map((d, i) => (
+          <div
+            key={i}
+            className={`rounded py-1 ${d === now.getDate() ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 dark:text-zinc-300"}`}
+          >
+            {d ?? ""}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1187,13 +985,13 @@ function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
           className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
         >
           <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-            ??{m.sheet_row} ? {m.memo_date}
+            ??{m.sheet_row} 쨌 {m.memo_date}
             {m.category ? (
               <span className="ml-2 rounded bg-zinc-200 px-1.5 py-0.5 font-medium text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100">
                 {m.category}
               </span>
             ) : (
-              <span className="ml-2 text-zinc-400">?? ???</span>
+              <span className="ml-2 text-zinc-400">遺꾨쪟 ?놁쓬</span>
             )}
           </p>
           <p className="mt-1 whitespace-pre-wrap text-zinc-900 dark:text-zinc-50">
@@ -1270,7 +1068,7 @@ function UploadPreviewList(props: {
               {it.title}
             </p>
             <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-              {it.status ? `??? ${it.status} ? ` : ""}
+              {it.status ? `?곹깭 ${it.status} 쨌 ` : ""}
               {it.uploaded_at}
             </p>
           </li>
@@ -1292,7 +1090,7 @@ function ChecklistPreviewList(props: {
   return (
     <div className="space-y-2">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        ??? ??{props.total}????{props.items.length}??????
+        ?쒖꽦 ??{props.total}嫄?以?{props.items.length}嫄?誘몃━蹂닿린
       </p>
       <ul className="max-h-64 space-y-2 overflow-y-auto">
         {props.items.map((it) => (
@@ -1313,7 +1111,7 @@ function ChecklistPreviewList(props: {
         href="/checklist"
         className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
       >
-        ?? ?????? ??????? ??      </Link>
+        泥댄겕 ?묒뾽?먯꽌 ?섏젙쨌?꾨즺 ??      </Link>
     </div>
   );
 }
@@ -1328,7 +1126,7 @@ function IssueSummaryBody(props: {
       {props.warnings.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
-            ??????
+            釉뚮━??寃쎄퀬
           </p>
           <ul className="mt-1 list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">
             {props.warnings.map((w, i) => (
@@ -1340,7 +1138,7 @@ function IssueSummaryBody(props: {
       {props.skipped.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
-            ????? ???????          </p>
+            紐⑸줉?먯꽌 ?쒖쇅????          </p>
           <ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">
             {props.skipped.map((s, i) => (
               <li key={`s-${s.sheet_row}-${i}`}>
@@ -1353,7 +1151,7 @@ function IssueSummaryBody(props: {
       {props.dup.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">
-            ?? id
+            以묐났 id
           </p>
           <ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">
             {props.dup.map((d, i) => (
@@ -1369,23 +1167,23 @@ function IssueSummaryBody(props: {
       props.skipped.length === 0 &&
       props.dup.length === 0 ? (
         <p className="text-zinc-600 dark:text-zinc-400">
-          ???????? ??? ??????.
+          ?쒖떆???댁긽 吏뺥썑媛 ?놁뒿?덈떎.
         </p>
       ) : null}
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        ??????? ????? ?????? ??????????
+        ?쒗듃瑜?怨좎튇 ???묒뾽 ?붾㈃?먯꽌 ?덈줈怨좎묠?섏꽭??
       </p>
       <div className="flex flex-wrap gap-2">
         <Link
           href="/uploads"
           className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
         >
-          ???????? ??        </Link>
+          ?낅줈???묒뾽 ??        </Link>
         <Link
           href="/checklist"
           className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
         >
-          ?? ??? ??        </Link>
+          泥댄겕 ?묒뾽 ??        </Link>
       </div>
     </div>
   );
