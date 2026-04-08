@@ -1,0 +1,9 @@
+credentials.json
+.env
+.env.local
+backend/.env
+frontend/.env.local
+frontend/.next
+frontend/node_modules
+backend/__pycache__
+*.pyc
