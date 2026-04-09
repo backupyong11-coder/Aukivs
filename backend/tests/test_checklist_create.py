@@ -22,7 +22,7 @@ def test_create_200_mocked(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     def fake(settings, title, note):
         called["title"] = title
         called["note"] = note
-        return ChecklistItem(id="uuid-1", title=title, note=note)
+        return ChecklistItem(id="sheet-row-99", title=title, note=None, due_date=None)
 
     monkeypatch.setattr(main_module, "create_checklist_item_in_sheet", fake)
     r = client.post(
@@ -31,7 +31,12 @@ def test_create_200_mocked(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     )
     assert r.status_code == 200
     data = r.json()
-    assert data == {"id": "uuid-1", "title": "새 할 일", "note": "메모"}
+    assert data == {
+        "id": "sheet-row-99",
+        "title": "새 할 일",
+        "note": None,
+        "due_date": None,
+    }
     assert called == {"title": "새 할 일", "note": "메모"}
 
 
@@ -45,12 +50,13 @@ def test_create_200_note_null(client: TestClient, monkeypatch: pytest.MonkeyPatc
 
     def fake(settings, title, note):
         called["note"] = note
-        return ChecklistItem(id="u2", title=title, note=None)
+        return ChecklistItem(id="u2", title=title, note=None, due_date=None)
 
     monkeypatch.setattr(main_module, "create_checklist_item_in_sheet", fake)
     r = client.post("/checklist/create", json={"title": "제목만", "note": None})
     assert r.status_code == 200
     assert r.json()["note"] is None
+    assert r.json().get("due_date") is None
     assert called["note"] is None
 
 
@@ -63,7 +69,7 @@ def test_create_422_empty_title(client: TestClient, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         main_module,
         "create_checklist_item_in_sheet",
-        lambda *_a, **_k: ChecklistItem(id="x", title="x", note=None),
+        lambda *_a, **_k: ChecklistItem(id="x", title="x", note=None, due_date=None),
     )
     r = client.post("/checklist/create", json={"title": "   "})
     assert r.status_code == 422
@@ -98,7 +104,7 @@ def test_create_502_sheets_api(client: TestClient, monkeypatch: pytest.MonkeyPat
     assert "[Sheets API]" in r.json().get("detail", "")
 
 
-def test_create_response_shape_uuid_like(
+def test_create_response_shape_sheet_row_id(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,9 +116,10 @@ def test_create_response_shape_uuid_like(
 
     def fake(settings, title, note):
         return ChecklistItem(
-            id="550e8400-e29b-41d4-a716-446655440000",
+            id="sheet-row-12",
             title=title,
-            note=note,
+            note=None,
+            due_date=None,
         )
 
     monkeypatch.setattr(main_module, "create_checklist_item_in_sheet", fake)
@@ -123,6 +130,6 @@ def test_create_response_shape_uuid_like(
     assert r.status_code == 200
     j = r.json()
     assert j["title"] == "검증"
-    assert j["note"] == "n"
-    assert len(j["id"]) == 36
-    assert j["id"].count("-") == 4
+    assert j["note"] is None
+    assert j["id"] == "sheet-row-12"
+    assert j.get("due_date") is None

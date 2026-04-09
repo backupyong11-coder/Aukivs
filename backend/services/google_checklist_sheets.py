@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
+import re
 from pathlib import Path
 
 from config import Settings
@@ -23,6 +23,7 @@ from .sheets_errors import (
 )
 
 _STATUS_DONE = "완료"
+_CHECKLIST_COLS = 6  # A2:F (마감, 업무명, 플랫폼, 작품, 분류, 상태)
 
 
 def _checklist_row_all_blank(row: list[object], width: int) -> bool:
@@ -35,24 +36,56 @@ def _checklist_row_all_blank(row: list[object], width: int) -> bool:
 
 
 def _checklist_read_range(tab_name: str) -> str:
-    """A~D: id, title, note, status(선택)."""
+    """A~F: 마감일, 업무명, 관련플랫폼, 관련작품, 분류, 상태."""
     escaped = tab_name.replace("'", "''")
-    return f"'{escaped}'!A2:D"
+    return f"'{escaped}'!A2:F"
 
 
-def _row_status(cells: list) -> str:
-    if len(cells) < 4:
+def _pad_checklist_cells(row: list[object]) -> list[str]:
+    out: list[str] = []
+    for c in row:
+        out.append(str(c) if c is not None else "")
+    while len(out) < _CHECKLIST_COLS:
+        out.append("")
+    return out[:_CHECKLIST_COLS]
+
+
+def _title_cell(cells: list[str]) -> str:
+    return cells[1].strip() if len(cells) > 1 else ""
+
+
+def _due_cell(cells: list[str]) -> str | None:
+    raw = cells[0].strip() if cells else ""
+    return raw if raw else None
+
+
+def _row_status_f(cells: list[str]) -> str:
+    if len(cells) < _CHECKLIST_COLS:
         return ""
-    return str(cells[3] if cells[3] is not None else "").strip()
+    return cells[5].strip()
+
+
+def _sheet_row_id(sheet_row: int) -> str:
+    return f"sheet-row-{sheet_row}"
+
+
+def _parse_sheet_row_from_append_updated_range(updated_range: str | None) -> int:
+    if not updated_range:
+        raise SheetsParseError("[파싱] 행 추가 응답에 updatedRange가 없습니다.")
+    m = re.search(r"!([A-Za-z]+)(\d+)", updated_range)
+    if not m:
+        raise SheetsParseError(
+            f"[파싱] append 범위에서 시작 행을 해석할 수 없습니다: {updated_range!r}"
+        )
+    return int(m.group(2))
 
 
 def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem]:
     """
-    시트 탭의 A2:D를 읽습니다.
-    - A열: id (비어 있으면 `sheet-row-<행번호>`)
-    - B열: title (비어 있으면 해당 행은 건너뜀)
-    - C열: note
-    - D열: 상태 — 값이 '완료'이면 목록에서 제외
+    시트 탭의 A2:F를 읽습니다.
+    - A열: 마감일(due_date), B열: 업무명(title), F열: 상태 — '완료'이면 제외
+    - id는 항상 sheet-row-<행번호>
+    - note는 응답에서 항상 None
     1행은 헤더용, 2행부터 데이터입니다.
     """
     if not settings.google_service_account_file or not settings.google_sheet_url:
@@ -75,20 +108,20 @@ def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem
     items: list[ChecklistItem] = []
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        cells = list(row) + ["", "", "", ""]
-        id_raw = str(cells[0]).strip() if cells[0] is not None else ""
-        title = str(cells[1]).strip() if cells[1] is not None else ""
-        note_raw = str(cells[2]).strip() if cells[2] is not None else ""
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
 
         if not title:
             continue
 
-        if _row_status(cells) == _STATUS_DONE:
+        if _row_status_f(cells) == _STATUS_DONE:
             continue
 
-        item_id = id_raw if id_raw else f"sheet-row-{sheet_row}"
-        note: str | None = note_raw if note_raw else None
-        items.append(ChecklistItem(id=item_id, title=title, note=note))
+        item_id = _sheet_row_id(sheet_row)
+        due = _due_cell(cells)
+        items.append(
+            ChecklistItem(id=item_id, title=title, note=None, due_date=due),
+        )
 
     return items
 
@@ -122,23 +155,23 @@ def fetch_checklist_for_briefing(
     warnings: list[str] = []
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        if _checklist_row_all_blank(row, 4):
+        if _checklist_row_all_blank(row, _CHECKLIST_COLS):
             continue
 
-        cells = list(row) + ["", "", "", ""]
-        id_raw = str(cells[0]).strip() if cells[0] is not None else ""
-        title = str(cells[1]).strip() if cells[1] is not None else ""
-        note_raw = str(cells[2]).strip() if cells[2] is not None else ""
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
 
         if not title:
             continue
 
-        if _row_status(cells) == _STATUS_DONE:
+        if _row_status_f(cells) == _STATUS_DONE:
             continue
 
-        item_id = id_raw if id_raw else f"sheet-row-{sheet_row}"
-        note: str | None = note_raw if note_raw else None
-        out.append((ChecklistItem(id=item_id, title=title, note=note), sheet_row))
+        item_id = _sheet_row_id(sheet_row)
+        due = _due_cell(cells)
+        out.append(
+            (ChecklistItem(id=item_id, title=title, note=None, due_date=due), sheet_row),
+        )
 
     return out, warnings
 
@@ -164,19 +197,18 @@ def _build_id_to_sheet_row(settings: Settings) -> tuple[Path, str, dict[str, int
     id_to_row: dict[str, int] = {}
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        cells = list(row) + ["", "", "", ""]
-        title = str(cells[1]).strip() if cells[1] is not None else ""
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
         if not title:
             continue
-        id_raw = str(cells[0]).strip() if cells[0] is not None else ""
-        item_id = id_raw if id_raw else f"sheet-row-{sheet_row}"
+        item_id = _sheet_row_id(sheet_row)
         id_to_row[item_id] = sheet_row
 
     return cred_path, spreadsheet_id, id_to_row
 
 
 def _build_id_to_sheet_row_active(settings: Settings) -> tuple[Path, str, dict[str, int]]:
-    """GET /checklist 에 노출되는 행만 — 제목 있음, D열이 완료 아님."""
+    """GET /checklist 에 노출되는 행만 — 제목 있음, F열이 완료 아님."""
     if not settings.google_service_account_file or not settings.google_sheet_url:
         raise SheetsConfigurationError(
             "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
@@ -196,14 +228,13 @@ def _build_id_to_sheet_row_active(settings: Settings) -> tuple[Path, str, dict[s
     id_to_row: dict[str, int] = {}
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        cells = list(row) + ["", "", "", ""]
-        title = str(cells[1]).strip() if cells[1] is not None else ""
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
         if not title:
             continue
-        if _row_status(cells) == _STATUS_DONE:
+        if _row_status_f(cells) == _STATUS_DONE:
             continue
-        id_raw = str(cells[0]).strip() if cells[0] is not None else ""
-        item_id = id_raw if id_raw else f"sheet-row-{sheet_row}"
+        item_id = _sheet_row_id(sheet_row)
         id_to_row[item_id] = sheet_row
 
     return cred_path, spreadsheet_id, id_to_row
@@ -216,8 +247,8 @@ def update_checklist_item_in_sheet(
     note: str | None,
 ) -> None:
     """
-    활성 행(미완료) 중 item_id에 해당하는 B·C열만 갱신합니다.
-    note가 None이면 C열을 비웁니다.
+    활성 행(미완료) 중 item_id에 해당하는 B열(업무명)만 갱신합니다.
+    note 인자는 API 호환용이며 시트 신규 열 구조에서는 사용하지 않습니다.
     """
     oid = item_id.strip()
     if not oid:
@@ -231,18 +262,14 @@ def update_checklist_item_in_sheet(
 
     row_num = id_to_row[oid]
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    c_text = "" if note is None else str(note).strip()
-    data = [
-        {"range": f"'{tab_esc}'!B{row_num}", "values": [[title]]},
-        {"range": f"'{tab_esc}'!C{row_num}", "values": [[c_text]]},
-    ]
+    data = [{"range": f"'{tab_esc}'!B{row_num}", "values": [[title]]}]
     batch_update_sheet_values(cred_path, spreadsheet_id, data)
 
 
 def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     """
-    요청 id에 해당하는 행의 D열을 '완료'로 설정합니다.
-    id는 GET /checklist 와 동일한 규칙(빈 A열 → sheet-row-N)과 매칭됩니다.
+    요청 id에 해당하는 행의 F열(상태)을 '완료'로 설정합니다.
+    id는 GET /checklist 와 동일한 규칙(sheet-row-N)과 매칭됩니다.
     """
     if not ids:
         raise SheetsParseError("[파싱] 완료할 id가 없습니다.")
@@ -260,7 +287,7 @@ def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     tab_esc = settings.google_checklist_tab.replace("'", "''")
     data = [
         {
-            "range": f"'{tab_esc}'!D{id_to_row[lid]}",
+            "range": f"'{tab_esc}'!F{id_to_row[lid]}",
             "values": [[_STATUS_DONE]],
         }
         for lid in ids
@@ -276,8 +303,9 @@ def create_checklist_item_in_sheet(
 ) -> ChecklistItem:
     """
     체크리스트 탭 맨 아래에 행 1개를 추가합니다.
-    A=id(UUID), B=title, C=note(없으면 빈 칸), D=빈 칸(미완료).
+    A=마감(빈칸), B=업무명, C~E=빈칸, F=빈칸(미완료). id는 sheet-row-<추가된 행>.
     """
+    _ = note
     t = str(title).strip()
     if not t:
         raise SheetsParseError("[파싱] title이 비어 있습니다.")
@@ -295,20 +323,18 @@ def create_checklist_item_in_sheet(
         )
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
-    new_id = str(uuid.uuid4())
-    c_cell = "" if note is None else str(note).strip()
 
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    range_a1 = f"'{tab_esc}'!A:D"
-    append_rows_to_sheet_range(
+    range_a1 = f"'{tab_esc}'!A:F"
+    updated_range = append_rows_to_sheet_range(
         cred_path,
         spreadsheet_id,
         range_a1,
-        [[new_id, t, c_cell, ""]],
+        [["", t, "", "", "", ""]],
     )
-
-    note_out: str | None = c_cell if c_cell else None
-    return ChecklistItem(id=new_id, title=t, note=note_out)
+    sheet_row = _parse_sheet_row_from_append_updated_range(updated_range)
+    new_id = _sheet_row_id(sheet_row)
+    return ChecklistItem(id=new_id, title=t, note=None, due_date=None)
 
 
 def delete_checklist_row_by_id(settings: Settings, item_id: str) -> None:

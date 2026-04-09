@@ -19,7 +19,7 @@ SEOUL = ZoneInfo("Asia/Seoul")
 
 def _checklist_is_sensitive_overdue(item: ChecklistItem) -> bool:
     """검토·정산 등 민감 키워드가 있으면 '지연 주의'로 분류."""
-    blob = f"{item.title} {item.note or ''}"
+    blob = f"{item.title} {item.note or ''} {item.due_date or ''}"
     return any(k in blob for k in ("검토", "정산", "청구"))
 
 

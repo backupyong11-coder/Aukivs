@@ -161,15 +161,16 @@ def append_rows_to_sheet_range(
     values: list[list],
     *,
     value_input_option: str = "USER_ENTERED",
-) -> None:
+) -> str | None:
     """
     spreadsheets.values.append 로 행을 테이블 끝에 추가합니다.
     insertDataOption=INSERT_ROWS 로 기존 행을 덮어쓰지 않습니다.
+    반환값은 API updates.updatedRange(예: '시트'!A10:F10) 또는 없음.
     """
     sa_email = read_service_account_email(cred_path)
     try:
         service = build_sheets_service(cred_path)
-        (
+        result = (
             service.spreadsheets()
             .values()
             .append(
@@ -199,6 +200,8 @@ def append_rows_to_sheet_range(
         raise
     except Exception as e:
         raise SheetsFetchError(f"[Sheets API] 요청 중 오류: {e}") from e
+    updates = result.get("updates") or {}
+    return updates.get("updatedRange")
 
 
 def get_worksheet_id_by_title(

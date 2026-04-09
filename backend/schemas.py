@@ -4,9 +4,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class ChecklistItem(BaseModel):
-    id: str = Field(..., description="항목 식별자")
-    title: str = Field(..., description="제목")
-    note: str | None = Field(None, description="부가 설명")
+    id: str = Field(..., description="항목 식별자 (시트 행 기준 sheet-row-N)")
+    title: str = Field(..., description="업무명(B열)")
+    note: str | None = Field(None, description="부가 설명(레거시·생성 API 호환, 시트 신규 구조에서는 미사용)")
+    due_date: str | None = Field(
+        default=None,
+        description="마감일(A열) 문자열, 비어 있으면 null",
+    )
 
 
 class UploadItem(BaseModel):
@@ -229,7 +233,7 @@ class ChecklistCompleteResponse(BaseModel):
 
 
 class ChecklistUpdateRequest(BaseModel):
-    """B·C열만 갱신합니다. A(id)·D(상태)는 변경하지 않습니다."""
+    """B열(업무명)만 갱신합니다. A·C~F는 변경하지 않습니다. note는 호환용으로 무시될 수 있습니다."""
 
     id: str
     title: str
@@ -275,7 +279,7 @@ class ChecklistDeleteResponse(BaseModel):
 
 
 class ChecklistCreateRequest(BaseModel):
-    """새 행 추가. id는 서버에서 UUID로 부여합니다. D열(완료)은 비웁니다."""
+    """새 행을 A:F 맨 아래에 추가합니다. id는 응답에서 sheet-row-N으로 돌려줍니다."""
 
     model_config = ConfigDict(extra="forbid")
 

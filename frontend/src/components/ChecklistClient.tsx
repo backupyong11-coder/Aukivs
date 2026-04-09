@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  checklistDisplayTitle,
   completeChecklistItems,
   createChecklistItem,
   deleteChecklistItem,
@@ -21,7 +22,13 @@ import {
 } from "@/lib/draftSuggestItem";
 
 function itemMatchesToday(item: ChecklistItem): boolean {
-  const blob = `${item.title} ${item.note ?? ""}`;
+  const due = item.due_date?.trim();
+  if (due) {
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (due.slice(0, 10) === ymd) return true;
+  }
+  const blob = `${item.title} ${item.note ?? ""} ${item.due_date ?? ""}`;
   const d = new Date();
   const y = d.getFullYear();
   const m = d.getMonth() + 1;
@@ -35,7 +42,9 @@ function itemMatchesToday(item: ChecklistItem): boolean {
 }
 
 function itemLooksPriority(item: ChecklistItem): boolean {
-  return /높음|긴급|CEO|우선|\[높/i.test(`${item.title} ${item.note ?? ""}`);
+  return /높음|긴급|CEO|우선|\[높/i.test(
+    `${item.title} ${item.note ?? ""} ${item.due_date ?? ""}`,
+  );
 }
 
 type CheckFilter = "all" | "today" | "active" | "priority" | "work";
@@ -126,12 +135,16 @@ export function ChecklistClient() {
       rows = rows.filter(itemLooksPriority);
     } else if (checkFilter === "work" && wf) {
       rows = rows.filter((it) =>
-        `${it.title} ${it.note ?? ""}`.toLowerCase().includes(wf),
+        `${it.title} ${it.note ?? ""} ${it.due_date ?? ""}`
+          .toLowerCase()
+          .includes(wf),
       );
     }
     if (q) {
       rows = rows.filter((it) =>
-        `${it.title} ${it.note ?? ""}`.toLowerCase().includes(q),
+        `${it.title} ${it.note ?? ""} ${it.due_date ?? ""}`
+          .toLowerCase()
+          .includes(q),
       );
     }
     if (checkSort === "title") {
@@ -755,7 +768,7 @@ export function ChecklistClient() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
-                          {item.title}
+                          {checklistDisplayTitle(item)}
                         </p>
                         {itemLooksPriority(item) ? (
                           <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950 dark:bg-amber-950/60 dark:text-amber-100">

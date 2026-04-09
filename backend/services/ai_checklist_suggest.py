@@ -16,7 +16,10 @@ def _format_checklist_for_prompt(items: list[ChecklistItem]) -> str:
     lines: list[str] = []
     for i, it in enumerate(items, start=1):
         note = it.note or ""
-        lines.append(f'{i}. id={it.id!r} title={it.title!r} note={note!r}')
+        due = it.due_date or ""
+        lines.append(
+            f"{i}. id={it.id!r} due_date={due!r} title={it.title!r} note={note!r}",
+        )
     return "\n".join(lines) if lines else "(없음)"
 
 

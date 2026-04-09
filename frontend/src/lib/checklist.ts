@@ -4,11 +4,27 @@ export type ChecklistItem = {
   id: string;
   title: string;
   note: string | null;
+  /** 마감일(A열). 없으면 null — 클라이언트는 `checklistDisplayTitle`로 표시 통일 */
+  due_date?: string | null;
 };
+
+/** due_date가 있으면 `[마감일] 업무명`, 없으면 업무명만 */
+export function checklistDisplayTitle(item: ChecklistItem): string {
+  const d = item.due_date?.trim();
+  if (d) return `[${d}] ${item.title}`;
+  return item.title;
+}
 
 export type FetchChecklistResult =
   | { ok: true; items: ChecklistItem[] }
   | { ok: false; message: string };
+
+function parseDueDate(rec: Record<string, unknown>): string | null {
+  if (!("due_date" in rec) || rec.due_date === null || rec.due_date === undefined) {
+    return null;
+  }
+  return typeof rec.due_date === "string" ? rec.due_date : null;
+}
 
 function parseChecklistItems(raw: unknown): ChecklistItem[] | null {
   if (!Array.isArray(raw)) return null;
@@ -18,7 +34,12 @@ function parseChecklistItems(raw: unknown): ChecklistItem[] | null {
     const rec = row as Record<string, unknown>;
     if (typeof rec.id !== "string" || typeof rec.title !== "string") continue;
     const note = typeof rec.note === "string" ? rec.note : null;
-    items.push({ id: rec.id, title: rec.title, note });
+    items.push({
+      id: rec.id,
+      title: rec.title,
+      note,
+      due_date: parseDueDate(rec),
+    });
   }
   return items;
 }
@@ -86,7 +107,12 @@ export async function createChecklistItem(
       const note = typeof rec.note === "string" ? rec.note : null;
       return {
         ok: true,
-        item: { id: rec.id, title: rec.title, note },
+        item: {
+          id: rec.id,
+          title: rec.title,
+          note,
+          due_date: parseDueDate(rec),
+        },
       };
     } catch {
       return { ok: false, message: "응답이 올바른 JSON이 아닙니다." };
