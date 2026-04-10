@@ -26,60 +26,69 @@ import {
 import { fetchMemos, type MemoItem } from "@/lib/memos";
 import { userFacingListError } from "@/lib/userFacingErrors";
 
-const SUGGESTED_QUERIES: { id: string; label: string }[] = [
-  { id: "due_today", label: "?ㅻ뒛 留덇컧 萸먯빞" },
-  { id: "week_upload", label: "?대쾲 二??낅줈???쇱젙 蹂댁뿬以? },
-  { id: "incomplete_check", label: "誘몄셿猷?泥댄겕由ъ뒪?몃쭔 蹂댁뿬以? },
-  { id: "upload_gaps", label: "?낅줈???꾨씫 ?먮즺 李얠븘以? },
-  { id: "data_bad", label: "?곗씠???댁긽????ぉ 蹂댁뿬以? },
-  { id: "dup_id", label: "以묐났 id ?덈뒗 ?낅줈??蹂댁뿬以? },
-  { id: "platform_stub", label: "誘명댆 愿???먮즺留?蹂댁뿬以? },
-  { id: "today_triage", label: "?ㅻ뒛 ?먮킄????寃껊쭔 ?뺣━?댁쨾" },
-  { id: "memo_all", label: "硫붾え???꾩껜 蹂닿린" },
-];
+// 서울 시간대 기준 날짜 유틸
+function formatSeoulYmd(date: Date): string {
+  const seoul = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const y = seoul.getFullYear();
+  const m = String(seoul.getMonth() + 1).padStart(2, "0");
+  const d = String(seoul.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function seoulCalendarYearMonthNow(): { year: number; month: number } {
+  const seoul = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return { year: seoul.getFullYear(), month: seoul.getMonth() + 1 };
+}
+
+function isUploadOnSeoulDay(iso: string, ymd: string): boolean {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  return formatSeoulYmd(new Date(t)) === ymd;
+}
+
+function isUploadThisSeoulWeek(iso: string): boolean {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  const seoulNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const day = seoulNow.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(seoulNow);
+  monday.setDate(seoulNow.getDate() + mondayOffset);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 7);
+  return t >= monday.getTime() && t < sunday.getTime();
+}
+
+function isUploadToday(iso: string): boolean {
+  return isUploadOnSeoulDay(iso, formatSeoulYmd(new Date()));
+}
+
+function normalizeSheetDateYmd(raw: string): string | null {
+  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return null;
+  return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
 
 function uploadLooksIncomplete(status: string | null): boolean {
   if (!status || !status.trim()) return true;
   const s = status.trim().toLowerCase();
-  const done = ["?꾨즺", "?꾨즺??, "??, "done", "complete", "ok"];
+  const done = ["완료", "완료됨", "완", "done", "complete", "ok"];
   return !done.some((x) => s === x || s.includes(x));
 }
 
-function startOfTodayMs(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function startOfWeekMondayMs(): number {
-  const d = new Date();
-  const day = d.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + mondayOffset);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function parseUploadDayMs(iso: string): number | null {
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : null;
-}
-
-function isUploadToday(iso: string): boolean {
-  const t = parseUploadDayMs(iso);
-  if (t == null) return false;
-  const start = startOfTodayMs();
-  const end = start + 86400000;
-  return t >= start && t < end;
-}
-
-function isUploadThisWeek(iso: string): boolean {
-  const t = parseUploadDayMs(iso);
-  if (t == null) return false;
-  const start = startOfWeekMondayMs();
-  const end = start + 7 * 86400000;
-  return t >= start && t < end;
-}
+const SUGGESTED_QUERIES: { id: string; label: string }[] = [
+  { id: "due_today", label: "오늘 마감 뭐야" },
+  { id: "week_upload", label: "이번 주 업로드 일정 보여줘" },
+  { id: "incomplete_check", label: "미완료 체크리스트만 보여줘" },
+  { id: "upload_gaps", label: "업로드 누락 자료 찾아줘" },
+  { id: "data_bad", label: "데이터 이상한 항목 보여줘" },
+  { id: "dup_id", label: "중복 id 있는 업로드 보여줘" },
+  { id: "platform_stub", label: "미툰 관련 자료만 보여줘" },
+  { id: "today_triage", label: "오늘 손봐야 할 것만 정리해줘" },
+  { id: "memo_all", label: "메모장 전체 보기" },
+];
 
 type HubLoadState =
   | { kind: "loading" }
@@ -89,6 +98,8 @@ type HubLoadState =
       uploads: { items: UploadListItem[]; issues: UploadListIssue[] };
       memos: MemoItem[];
       memosError: string | null;
+      checklist: ChecklistItem[];
+      checklistError: string | null;
     }
   | { kind: "error"; message: string };
 
@@ -111,9 +122,7 @@ export function ControlRoomHomeClient() {
     setFavorites(loadFavoriteQueries());
   }, []);
 
-  useEffect(() => {
-    refreshHistory();
-  }, [refreshHistory]);
+  useEffect(() => { refreshHistory(); }, [refreshHistory]);
 
   const [hubRefreshKey, setHubRefreshKey] = useState(0);
 
@@ -122,34 +131,28 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m] = await Promise.all([
+        const [b, u, m, c] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
+          fetchChecklist().catch(() => ({ ok: false as const, message: "체크리스트 로드 실패", items: [] })),
         ]);
         if (ac.signal.aborted) return;
-        if (!b.ok) {
-          setHub({ kind: "error", message: userFacingListError("briefing", b.message) });
-          return;
-        }
-        if (!u.ok) {
-          setHub({ kind: "error", message: userFacingListError("uploads", u.message) });
-          return;
-        }
+        if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
+        if (!u.ok) { setHub({ kind: "error", message: userFacingListError("uploads", u.message) }); return; }
         setHub({
           kind: "ready",
           briefing: b.payload,
           uploads: { items: u.items, issues: u.issues },
           memos: m.ok ? m.items : [],
           memosError: m.ok ? null : userFacingListError("memos", m.message),
+          checklist: c.ok ? c.items : [],
+          checklistError: c.ok ? null : c.message,
         });
       } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
         if (ac.signal.aborted) return;
-        setHub({
-          kind: "error",
-          message: e instanceof Error ? e.message : "?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??",
-        });
+        setHub({ kind: "error", message: e instanceof Error ? e.message : "데이터를 불러오지 못했습니다." });
       }
     })();
     return () => ac.abort();
@@ -180,276 +183,224 @@ export function ControlRoomHomeClient() {
     });
   }, []);
 
-  const runPreset = useCallback(
-    async (id: string, labelForRecent?: string) => {
-      const label = labelForRecent ?? SUGGESTED_QUERIES.find((x) => x.id === id)?.label ?? id;
-      pushRecentQuery(label);
-      refreshHistory();
+  const runPreset = useCallback(async (id: string, labelForRecent?: string) => {
+    const label = labelForRecent ?? SUGGESTED_QUERIES.find((x) => x.id === id)?.label ?? id;
+    pushRecentQuery(label);
+    refreshHistory();
 
-      if (hub.kind !== "ready") {
-        openPanel({
-          kind: "error",
-          message: hub.kind === "error" ? hub.message : "?꾩쭅 愿???곗씠?곕? 遺덈윭?ㅻ뒗 以묒엯?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?섏꽭??",
-        });
-        return;
+    if (hub.kind !== "ready") {
+      openPanel({ kind: "error", message: hub.kind === "error" ? hub.message : "아직 관제 데이터를 불러오는 중입니다. 잠시 후 다시 시도하세요." });
+      return;
+    }
+
+    const { briefing, uploads } = hub;
+
+    if (id === "due_today") {
+      const checklistUrgent = briefing.urgent_items.filter((x) => x.source === "checklist");
+      openPanel({
+        kind: "render", title: "오늘 마감·오늘 처리(브리핑)",
+        node: (
+          <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
+            <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
+              오늘 집계된 체크 건수:{" "}
+              <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{briefing.summary.today_checklist_count}</span>건.
+              수정은 <Link href="/checklist" className="font-medium underline">체크 작업</Link>에서 하세요.
+            </p>
+            {checklistUrgent.length === 0 ? (
+              <p className="text-zinc-500 dark:text-zinc-400">체크 출처 긴급 후보가 없습니다.</p>
+            ) : (
+              <ul className="space-y-2">
+                {checklistUrgent.map((it) => (
+                  <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <p className="font-medium">{it.title}</p>
+                    {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
+
+    if (id === "today_upload") {
+      const rows = uploads.items.filter((it) => isUploadToday(it.uploaded_at));
+      openPanel({ kind: "render", title: "오늘 업로드 시각이 잡힌 행", node: <UploadPreviewList items={rows} empty="오늘 날짜(D열)로 잡힌 업로드 행이 없습니다." actionHref="/uploads" actionLabel="업로드 작업에서 전체 보기" /> });
+      return;
+    }
+
+    if (id === "week_upload") {
+      const rows = uploads.items.filter((it) => isUploadThisSeoulWeek(it.uploaded_at));
+      openPanel({ kind: "render", title: "이번 주 업로드 일정(목록 기준)", node: <UploadPreviewList items={rows} empty="이번 주 업로드 시각(D열)으로 잡힌 행이 없습니다." actionHref="/uploads" actionLabel="업로드 작업에서 전체·필터" /> });
+      return;
+    }
+
+    if (id === "incomplete_check") {
+      openPanel({ kind: "loading", label: "체크리스트 불러오는 중…" });
+      try {
+        const r = await fetchChecklist();
+        if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
+        openPanel({ kind: "render", title: "미완료 체크리스트(활성 행)", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
+      } catch (e: unknown) {
+        openPanel({ kind: "error", message: e instanceof Error ? e.message : "체크리스트를 불러오지 못했습니다." });
       }
+      return;
+    }
 
-      const { briefing, uploads } = hub;
+    if (id === "upload_gaps") {
+      const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
+      openPanel({ kind: "render", title: "미완료 업로드(상태 기준)", node: <UploadPreviewList items={rows.slice(0, 20)} empty="상태가 비었거나 완료로 보이지 않는 행이 없습니다." actionHref="/uploads" actionLabel="업로드 작업에서 처리" /> });
+      return;
+    }
 
-      if (id === "due_today") {
-        const checklistUrgent = briefing.urgent_items.filter((x) => x.source === "checklist");
-        openPanel({
-          kind: "render",
-          title: "?ㅻ뒛 留덇컧쨌?ㅻ뒛 泥섎━(釉뚮━??",
-          node: (
-            <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
-              <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
-                ?ㅻ뒛 吏묎퀎??泥댄겕 嫄댁닔:{" "}
-                <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{briefing.summary.today_checklist_count}</span>嫄?
-                ?섏젙? <Link href="/checklist" className="font-medium underline">泥댄겕 ?묒뾽</Link>?먯꽌 ?섏꽭??
-              </p>
-              {checklistUrgent.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">泥댄겕 異쒖쿂 湲닿툒 ?꾨낫媛 ?놁뒿?덈떎.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {checklistUrgent.map((it) => (
-                    <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
-                      <p className="font-medium">{it.title}</p>
-                      {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        });
-        return;
-      }
+    if (id === "data_bad") {
+      const skipped = uploads.issues.filter((x) => x.kind === "row_skipped");
+      const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
+      openPanel({ kind: "render", title: "데이터 이상·집계 제외", node: <IssueSummaryBody warnings={briefing.warnings} skipped={skipped} dup={dup} /> });
+      return;
+    }
 
-      if (id === "today_upload") {
-        const rows = uploads.items.filter((it) => isUploadToday(it.uploaded_at));
-        openPanel({
-          kind: "render",
-          title: "?ㅻ뒛 ?낅줈???쒓컖???≫엺 ??,
-          node: <UploadPreviewList items={rows} empty="?ㅻ뒛 ?좎쭨(D??濡??≫엺 ?낅줈???됱씠 ?놁뒿?덈떎." actionHref="/uploads" actionLabel="?낅줈???묒뾽?먯꽌 ?꾩껜 蹂닿린" />,
-        });
-        return;
-      }
+    if (id === "dup_id") {
+      const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
+      const affected = duplicateUploadIdsFromIssues(uploads.issues);
+      const rows = uploads.items.filter((it) => affected.has(it.id));
+      openPanel({
+        kind: "render", title: "중복 id 업로드",
+        node: (
+          <div className="space-y-3 text-sm">
+            {dup.length === 0 ? <p className="text-zinc-600 dark:text-zinc-400">중복 id 이슈가 없습니다.</p> : (
+              <ul className="list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">
+                {dup.map((iss, i) => <li key={`${iss.id}-${i}`}><span className="font-mono text-xs">{iss.id}</span> — 행 {iss.sheet_rows.join(", ")}: {iss.message}</li>)}
+              </ul>
+            )}
+            {rows.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">해당 id가 붙은 목록 행</p>
+                <UploadPreviewList items={rows.slice(0, 12)} empty="" actionHref="/uploads" actionLabel="업로드 작업에서 시트 정리" />
+              </div>
+            ) : null}
+          </div>
+        ),
+      });
+      return;
+    }
 
-      if (id === "week_upload") {
-        const rows = uploads.items.filter((it) => isUploadThisWeek(it.uploaded_at));
-        openPanel({
-          kind: "render",
-          title: "?대쾲 二??낅줈???쇱젙(紐⑸줉 湲곗?)",
-          node: <UploadPreviewList items={rows} empty="?대쾲 二??낅줈???쒓컖(D???쇰줈 ?≫엺 ?됱씠 ?놁뒿?덈떎." actionHref="/uploads" actionLabel="?낅줈???묒뾽?먯꽌 ?꾩껜쨌?꾪꽣" />,
-        });
-        return;
-      }
+    if (id === "platform_stub") {
+      openPanel({ kind: "render", title: "플랫폼·작품 한정 조회", node: <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">특정 플랫폼·작품만 걸러 보는 조회는 다음 턴에서 시트 열·API와 연결합니다. 좌측 선택 상자가 활성화되면 여기서 전체정보를 띄웁니다.</p> });
+      return;
+    }
 
-      if (id === "incomplete_check") {
-        openPanel({ kind: "loading", label: "泥댄겕由ъ뒪??遺덈윭?ㅻ뒗 以묅? });
-        try {
-          const r = await fetchChecklist();
-          if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
-          openPanel({
-            kind: "render",
-            title: "誘몄셿猷?泥댄겕由ъ뒪???쒖꽦 ??",
-            node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} />,
-          });
-        } catch (e: unknown) {
-          openPanel({ kind: "error", message: e instanceof Error ? e.message : "泥댄겕由ъ뒪?몃? 遺덈윭?ㅼ? 紐삵뻽?듬땲??" });
-        }
-        return;
-      }
+    if (id === "upload_summary") {
+      const inc = uploads.items.filter((it) => uploadLooksIncomplete(it.status)).length;
+      const todayN = uploads.items.filter((it) => isUploadToday(it.uploaded_at)).length;
+      const weekN = uploads.items.filter((it) => isUploadThisSeoulWeek(it.uploaded_at)).length;
+      openPanel({
+        kind: "render", title: "업로드 요약(목록·브리핑 기준)",
+        node: (
+          <ul className="list-inside list-disc space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
+            <li>시트 파싱 성공 행: {uploads.items.length}건</li>
+            <li>미완료(상태 휴리스틱): {inc}건</li>
+            <li>오늘 D열: {todayN}건 / 이번 주(월~일): {weekN}건</li>
+            <li>브리핑 오늘 업로드 집계: {briefing.summary.today_upload_count}건</li>
+            <li>브리핑 지연·후속: {briefing.summary.overdue_upload_count}건</li>
+          </ul>
+        ),
+      });
+      return;
+    }
 
-      if (id === "upload_gaps") {
-        const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
-        openPanel({
-          kind: "render",
-          title: "誘몄셿猷??낅줈???곹깭 湲곗?)",
-          node: <UploadPreviewList items={rows.slice(0, 20)} empty="?곹깭媛 鍮꾩뿀嫄곕굹 ?꾨즺濡?蹂댁씠吏 ?딅뒗 ?됱씠 ?놁뒿?덈떎." actionHref="/uploads" actionLabel="?낅줈???묒뾽?먯꽌 泥섎━" />,
-        });
-        return;
-      }
+    if (id === "urgent_only") {
+      openPanel({
+        kind: "render", title: "급한 일(긴급 후보)",
+        node: briefing.urgent_items.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">긴급 후보가 없습니다.</p>
+        ) : (
+          <ul className="space-y-2">
+            {briefing.urgent_items.map((it) => (
+              <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30">
+                <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">{it.source === "checklist" ? "체크" : "업로드"}</span>
+                <p className="mt-1 font-medium">{it.title}</p>
+                {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        ),
+      });
+      return;
+    }
 
-      if (id === "data_bad") {
-        const skipped = uploads.issues.filter((x) => x.kind === "row_skipped");
-        const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
-        openPanel({ kind: "render", title: "?곗씠???댁긽쨌吏묎퀎 ?쒖쇅", node: <IssueSummaryBody warnings={briefing.warnings} skipped={skipped} dup={dup} /> });
-        return;
-      }
+    if (id === "sheet_backup") {
+      openPanel({ kind: "render", title: "시트 백업", node: <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">Google 스프레드시트 메뉴에서 사본 만들기·버전 기록을 사용하거나, 다음 단계에서 서버 백업 API를 연결합니다.</p> });
+      return;
+    }
 
-      if (id === "dup_id") {
-        const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
-        const affected = duplicateUploadIdsFromIssues(uploads.issues);
-        const rows = uploads.items.filter((it) => affected.has(it.id));
-        openPanel({
-          kind: "render",
-          title: "以묐났 id ?낅줈??,
-          node: (
-            <div className="space-y-3 text-sm">
-              {dup.length === 0 ? (
-                <p className="text-zinc-600 dark:text-zinc-400">以묐났 id ?댁뒋媛 ?놁뒿?덈떎.</p>
-              ) : (
-                <ul className="list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">
-                  {dup.map((iss, i) => (
-                    <li key={`${iss.id}-${i}`}><span className="font-mono text-xs">{iss.id}</span> ????{iss.sheet_rows.join(", ")}: {iss.message}</li>
-                  ))}
-                </ul>
-              )}
-              {rows.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">?대떦 id媛 遺숈? 紐⑸줉 ??/p>
-                  <UploadPreviewList items={rows.slice(0, 12)} empty="" actionHref="/uploads" actionLabel="?낅줈???묒뾽?먯꽌 ?쒗듃 ?뺣━" />
-                </div>
-              ) : null}
-            </div>
-          ),
-        });
-        return;
-      }
+    if (id === "today_triage") {
+      openPanel({
+        kind: "render", title: "오늘 브리핑(요약 + 긴급)",
+        node: (
+          <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
+            <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">{briefing.briefing_text}</p>
+            {briefing.urgent_items.length === 0 ? (
+              <p className="text-zinc-500 dark:text-zinc-400">긴급 후보 목록이 비어 있습니다.</p>
+            ) : (
+              <ul className="space-y-2">
+                {briefing.urgent_items.slice(0, 10).map((it) => (
+                  <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">{it.source === "checklist" ? "체크" : "업로드"}</span>
+                    <p className="mt-1 font-medium">{it.title}</p>
+                    {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
 
-      if (id === "platform_stub") {
-        openPanel({
-          kind: "render",
-          title: "?뚮옯?셋룹옉???쒖젙 議고쉶",
-          node: <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">?뱀젙 ?뚮옯?셋룹옉?덈쭔 嫄몃윭 蹂대뒗 議고쉶???ㅼ쓬 ?댁뿉???쒗듃 ?는텮PI? ?곌껐?⑸땲?? 醫뚯륫 ?좏깮 ?곸옄媛 ?쒖꽦?붾릺硫??ш린???꾩껜?뺣낫瑜??꾩썎?덈떎.</p>,
-        });
-        return;
-      }
+    if (id === "memo_all") {
+      openPanel({
+        kind: "render", title: "메모장 (시트 전체)",
+        node: (
+          <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
+            {hub.memosError ? <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100" role="alert">메모를 불러오지 못했습니다: {hub.memosError}</p> : null}
+            <MemoPreviewList items={hub.memos} emptyHint="표시할 메모가 없습니다. 왼쪽 사이드바에서 메모를 추가하거나 시트를 확인하세요." />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">분류는 시트 「메모분류」 열에서 입력하면, 질문하기 검색에 포함됩니다.</p>
+          </div>
+        ),
+      });
+      return;
+    }
+  }, [hub, openPanel, refreshHistory]);
 
-      if (id === "upload_summary") {
-        const inc = uploads.items.filter((it) => uploadLooksIncomplete(it.status)).length;
-        const todayN = uploads.items.filter((it) => isUploadToday(it.uploaded_at)).length;
-        const weekN = uploads.items.filter((it) => isUploadThisWeek(it.uploaded_at)).length;
-        openPanel({
-          kind: "render",
-          title: "?낅줈???붿빟(紐⑸줉쨌釉뚮━??湲곗?)",
-          node: (
-            <ul className="list-inside list-disc space-y-1 text-sm text-zinc-800 dark:text-zinc-200">
-              <li>?쒗듃 ?뚯떛 ?깃났 ?? {uploads.items.length}嫄?/li>
-              <li>誘몄셿猷??곹깭 ?대━?ㅽ떛): {inc}嫄?/li>
-              <li>?ㅻ뒛 D?? {todayN}嫄?/ ?대쾲 二?????: {weekN}嫄?/li>
-              <li>釉뚮━???ㅻ뒛 ?낅줈??吏묎퀎: {briefing.summary.today_upload_count}嫄?/li>
-              <li>釉뚮━??吏?걔룻썑?? {briefing.summary.overdue_upload_count}嫄?/li>
-            </ul>
-          ),
-        });
-        return;
-      }
-
-      if (id === "urgent_only") {
-        openPanel({
-          kind: "render",
-          title: "湲됲븳 ??湲닿툒 ?꾨낫)",
-          node: briefing.urgent_items.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">湲닿툒 ?꾨낫媛 ?놁뒿?덈떎.</p>
-          ) : (
-            <ul className="space-y-2">
-              {briefing.urgent_items.map((it) => (
-                <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30">
-                  <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">{it.source === "checklist" ? "泥댄겕" : "?낅줈??}</span>
-                  <p className="mt-1 font-medium">{it.title}</p>
-                  {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
-                </li>
-              ))}
-            </ul>
-          ),
-        });
-        return;
-      }
-
-      if (id === "sheet_backup") {
-        openPanel({
-          kind: "render",
-          title: "?쒗듃 諛깆뾽",
-          node: <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">Google ?ㅽ봽?덈뱶?쒗듃 硫붾돱?먯꽌 ?щ낯 留뚮뱾湲걔룸쾭??湲곕줉???ъ슜?섍굅?? ?ㅼ쓬 ?④퀎?먯꽌 ?쒕쾭 諛깆뾽 API瑜??곌껐?⑸땲??</p>,
-        });
-        return;
-      }
-
-      if (id === "today_triage") {
-        openPanel({
-          kind: "render",
-          title: "?ㅻ뒛 釉뚮━???붿빟 + 湲닿툒)",
-          node: (
-            <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
-              <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">{briefing.briefing_text}</p>
-              {briefing.urgent_items.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">湲닿툒 ?꾨낫 紐⑸줉??鍮꾩뼱 ?덉뒿?덈떎.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {briefing.urgent_items.slice(0, 10).map((it) => (
-                    <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30">
-                      <span className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-200">{it.source === "checklist" ? "泥댄겕" : "?낅줈??}</span>
-                      <p className="mt-1 font-medium">{it.title}</p>
-                      {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        });
-        return;
-      }
-
-      if (id === "memo_all") {
-        openPanel({
-          kind: "render",
-          title: "硫붾え??(?쒗듃 ?꾩껜)",
-          node: (
-            <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
-              {hub.memosError ? (
-                <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100" role="alert">
-                  硫붾え瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲?? {hub.memosError}
-                </p>
-              ) : null}
-              <MemoPreviewList items={hub.memos} emptyHint="?쒖떆??硫붾え媛 ?놁뒿?덈떎. ?쇱そ ?ъ씠?쒕컮?먯꽌 硫붾え瑜?異붽??섍굅???쒗듃瑜??뺤씤?섏꽭??" />
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">遺꾨쪟???쒗듃 ?뚮찓紐⑤텇瑜섅??댁뿉???낅젰?섎㈃, 吏덈Ц?섍린 寃?됱뿉 ?ы븿?⑸땲??</p>
-            </div>
-          ),
-        });
-        return;
-      }
-    },
-    [hub, openPanel, refreshHistory],
-  );
-
-  const runQuestion = useCallback(
-    (qRaw: string) => {
-      const q = qRaw.trim();
-      if (!q) return;
-      pushRecentQuery(q);
-      refreshHistory();
-      if (hub.kind === "ready") {
-        const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-        const matches = hub.memos.filter((m) => {
-          const hay = `${m.content}\n${m.category ?? ""}`.toLowerCase();
-          return tokens.every((t) => hay.includes(t));
-        });
-        openPanel({
-          kind: "render",
-          title: "吏덈Ц 쨌 硫붾え 寃??,
-          node: (
-            <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
-              {hub.memosError ? (
-                <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100" role="alert">
-                  硫붾え 紐⑸줉??遺덈윭?ㅼ? 紐삵빐 寃?됱씠 ?쒗븳?⑸땲?? {hub.memosError}
-                </p>
-              ) : null}
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">寃?됱뼱 ??q}????硫붾え?댁슜쨌硫붾え遺꾨쪟??怨듬갚?쇰줈 ?섎늿 ?ㅼ썙?쒓? 紐⑤몢 ?ㅼ뼱 ?덈뒗 ?됰쭔 ?쒖떆?⑸땲??</p>
-              <MemoPreviewList items={matches} emptyHint="?쇱튂?섎뒗 硫붾え媛 ?놁뒿?덈떎. ?ㅼ썙?쒕? 以꾩씠嫄곕굹 ?쒗듃?먯꽌 遺꾨쪟瑜??낅젰?????곷떒?뚯쟾泥??덈줈怨좎묠?띿쓣 ?꾨Ⅴ?몄슂." />
-              <p className="border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">泥댄겕쨌?낅줈?쑣룸툕由ы븨? ?곷떒 鍮좊Ⅸ 議고쉶 踰꾪듉???ъ슜?섏꽭??</p>
-            </div>
-          ),
-        });
-        return;
-      }
-      openPanel({ kind: "nl_stub", query: q });
-    },
-    [hub, openPanel, refreshHistory],
-  );
+  const runQuestion = useCallback((qRaw: string) => {
+    const q = qRaw.trim();
+    if (!q) return;
+    pushRecentQuery(q);
+    refreshHistory();
+    if (hub.kind === "ready") {
+      const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const matches = hub.memos.filter((m) => {
+        const hay = `${m.content}\n${m.category ?? ""}`.toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      });
+      openPanel({
+        kind: "render", title: "질문 · 메모 검색",
+        node: (
+          <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
+            {hub.memosError ? <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900" role="alert">메모 목록을 불러오지 못해 검색이 제한됩니다: {hub.memosError}</p> : null}
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">검색어 「{q}」 — 메모내용·메모분류에 공백으로 나눈 키워드가 모두 들어 있는 행만 표시합니다.</p>
+            <MemoPreviewList items={matches} emptyHint="일치하는 메모가 없습니다." />
+            <p className="border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">체크·업로드·브리핑은 상단 빠른 조회 버튼을 사용하세요.</p>
+          </div>
+        ),
+      });
+      return;
+    }
+    openPanel({ kind: "nl_stub", query: q });
+  }, [hub, openPanel, refreshHistory]);
 
   const submitQuestion = () => { runQuestion(queryDraft); };
 
@@ -458,7 +409,7 @@ export function ControlRoomHomeClient() {
     const text = el?.innerText?.trim() ?? "";
     if (!text) return;
     try { await navigator.clipboard.writeText(text); }
-    catch { window.alert("蹂듭궗???ㅽ뙣?덉뒿?덈떎. 釉뚮씪?곗? ?대┰蹂대뱶 沅뚰븳???뺤씤?섏꽭??"); }
+    catch { window.alert("복사에 실패했습니다."); }
   }, []);
 
   const saveResultTxt = useCallback(() => {
@@ -468,7 +419,7 @@ export function ControlRoomHomeClient() {
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `愿?쒓껐怨?${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `관제결과-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, []);
@@ -487,42 +438,34 @@ export function ControlRoomHomeClient() {
       <header className="border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold tracking-tight md:text-xl">?ㅽ궎釉뚯뒪 愿?쒖떎</h1>
+            <h1 className="text-lg font-semibold tracking-tight md:text-xl">오키브스 관제실</h1>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              PC??耳쒕몢怨?踰꾪듉?쇰줈 議고쉶 쨌 ?섏젙?{" "}
-              <Link href="/checklist" className="font-medium underline">泥댄겕</Link>/<Link href="/uploads" className="font-medium underline">?낅줈??/Link>
+              PC에 켜두고 버튼으로 조회 · 수정은{" "}
+              <Link href="/checklist" className="font-medium underline">체크</Link>/<Link href="/uploads" className="font-medium underline">업로드</Link>
             </p>
-            <label htmlFor="control-query-input" className="sr-only">愿??吏덈Ц ?낅젰</label>
-            <textarea
-              id="control-query-input"
-              rows={2}
-              value={queryDraft}
-              onChange={(e) => setQueryDraft(e.target.value)}
-              placeholder="?? ?대쾲 二??낅줈??/ ?ㅻ뒛 留덇컧 / 硫붾え 遺꾨쪟 ?ㅼ썙??
-              className="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900"
-            />
+            <label htmlFor="control-query-input" className="sr-only">관제 질문 입력</label>
+            <textarea id="control-query-input" rows={2} value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)} placeholder="예: 이번 주 업로드 / 오늘 마감 / 메모 분류 키워드" className="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={submitQuestion} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">吏덈Ц?섍린</button>
-            <button type="button" onClick={() => void copyResultPanel()} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">寃곌낵 蹂듭궗</button>
-            <button type="button" onClick={saveResultTxt} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">TXT ???/button>
-            <button type="button" onClick={saveFavoriteFromInput} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">利먭꺼李얘린 ???/button>
+            <button type="button" onClick={submitQuestion} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">질문하기</button>
+            <button type="button" onClick={() => void copyResultPanel()} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">결과 복사</button>
+            <button type="button" onClick={saveResultTxt} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">TXT 저장</button>
+            <button type="button" onClick={saveFavoriteFromInput} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">즐겨찾기 저장</button>
           </div>
         </div>
-
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "?ㅻ뒛 ?낅줈??)}>?ㅻ뒛 ?낅줈??/button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "?대쾲 二??낅줈??)}>?대쾲 二??낅줈??/button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "誘몄셿猷??낅줈??)}>誘몄셿猷??낅줈??/button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_summary", "?낅줈???붿빟")}>?낅줈???붿빟</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "?ㅻ뒛 釉뚮━??)}>?ㅻ뒛 釉뚮━??/button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "?ㅻ뒛 留덇컧")}>?ㅻ뒛 留덇컧</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "誘몄셿猷??낅Т")}>誘몄셿猷??낅Т</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "湲됲븳 ??)}>湲됲븳 ??/button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("data_bad", "?곗씠???먭?")}>?곗씠???먭?</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("sheet_backup", "?쒗듃 諛깆뾽")}>?쒗듃 諛깆뾽</button>
-            <button type="button" className={quickBtn} onClick={() => setHubRefreshKey((k) => k + 1)}>?꾩껜 ?덈줈怨좎묠</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "오늘 업로드")}>오늘 업로드</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "이번 주 업로드")}>이번 주 업로드</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "미완료 업로드")}>미완료 업로드</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_summary", "업로드 요약")}>업로드 요약</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "오늘 브리핑")}>오늘 브리핑</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 마감")}>오늘 마감</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "미완료 업무")}>미완료 업무</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("data_bad", "데이터 점검")}>데이터 점검</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("sheet_backup", "시트 백업")}>시트 백업</button>
+            <button type="button" className={quickBtn} onClick={() => setHubRefreshKey((k) => k + 1)}>전체 새로고침</button>
           </div>
         </div>
       </header>
@@ -530,43 +473,37 @@ export function ControlRoomHomeClient() {
       <div className="mx-auto grid max-w-[1600px] gap-4 px-4 py-4 lg:grid-cols-12">
         <aside className="space-y-3 lg:col-span-2">
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-xs font-semibold uppercase text-zinc-500">?뚮옯??/h2>
-            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="?뚮옯???좏깮">
-              <option>?꾩껜 (?곕룞 ?덉젙)</option>
-            </select>
-            <h2 className="mt-3 text-xs font-semibold uppercase text-zinc-500">?묓뭹</h2>
-            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="?묓뭹 ?좏깮">
-              <option>?꾩껜 (?곕룞 ?덉젙)</option>
-            </select>
-            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800" onClick={() => void runPreset("platform_stub", "?꾩껜?뺣낫 蹂닿린")}>?꾩껜?뺣낫 蹂닿린</button>
+            <h2 className="text-xs font-semibold uppercase text-zinc-500">플랫폼</h2>
+            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="플랫폼 선택"><option>전체 (연동 예정)</option></select>
+            <h2 className="mt-3 text-xs font-semibold uppercase text-zinc-500">작품</h2>
+            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="작품 선택"><option>전체 (연동 예정)</option></select>
+            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800" onClick={() => void runPreset("platform_stub", "전체정보 보기")}>전체정보 보기</button>
           </section>
-
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="font-semibold text-zinc-600 dark:text-zinc-400">理쒓렐 吏덈Ц</p>
-            {recent.length === 0 ? <p className="mt-2 text-zinc-500">?놁쓬</p> : (
+            <p className="font-semibold text-zinc-600 dark:text-zinc-400">최근 질문</p>
+            {recent.length === 0 ? <p className="mt-2 text-zinc-500">없음</p> : (
               <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
                 {recent.map((q) => (
                   <li key={q} className="flex gap-1">
                     <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => { setQueryDraft(q); runQuestion(q); }}>{q}</button>
-                    <button type="button" className="text-amber-600" title="利먭꺼李얘린" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>{favorites.includes(q) ? "?? : "??}</button>
+                    <button type="button" className="text-amber-600" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>{favorites.includes(q) ? "★" : "☆"}</button>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="mt-3 font-semibold text-zinc-600 dark:text-zinc-400">利먭꺼李얘린</p>
-            {favorites.length === 0 ? <p className="mt-2 text-zinc-500">?놁쓬</p> : (
+            <p className="mt-3 font-semibold text-zinc-600 dark:text-zinc-400">즐겨찾기</p>
+            {favorites.length === 0 ? <p className="mt-2 text-zinc-500">없음</p> : (
               <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
                 {favorites.map((q) => (
                   <li key={q}>
-                    <button type="button" className="w-full truncate text-left hover:underline" onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else runQuestion(q); }}>??{q}</button>
+                    <button type="button" className="w-full truncate text-left hover:underline" onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else runQuestion(q); }}>★ {q}</button>
                   </li>
                 ))}
               </ul>
             )}
           </section>
-
           <section className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/80 p-2 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
-            <p className="font-medium">異붽? 吏덈Ц 移?/p>
+            <p className="font-medium">추가 질문 칩</p>
             <div className="mt-2 flex flex-wrap gap-1">
               {SUGGESTED_QUERIES.map((c) => (
                 <button key={c.id} type="button" onClick={() => void runPreset(c.id, c.label)} className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-left hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700">{c.label}</button>
@@ -576,42 +513,31 @@ export function ControlRoomHomeClient() {
         </aside>
 
         <main className="space-y-4 lg:col-span-7">
-          <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950" aria-label="罹섎┛??>
-            <CalendarSection hub={hub} onDayClick={(d, y, m) => {
+          <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+            <CalendarSection hub={hub} onDayClick={(ymd) => {
               if (hub.kind !== "ready") return;
-              const ymd = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-              const uploads = hub.uploads.items.filter((it) => {
-                const t = Date.parse(it.uploaded_at);
-                if (!Number.isFinite(t)) return false;
-                const dt = new Date(t);
-                return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
-              });
-              const memos = hub.memos.filter((memo) => {
-                const s = memo.memo_date?.trim().replace(/\./g, "-").replace(/\//g, "-");
-                const match = s?.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-                if (!match) return false;
-                return `${match[1]}-${match[2].padStart(2,"0")}-${match[3].padStart(2,"0")}` === ymd;
+              const [y, m, d] = ymd.split("-").map(Number);
+              const uploads = hub.uploads.items.filter((it) => isUploadOnSeoulDay(it.uploaded_at, ymd));
+              const memos = hub.memos.filter((memo) => normalizeSheetDateYmd(memo.memo_date ?? "") === ymd);
+              const checklist = hub.checklist.filter((it) => {
+                const due = it.due_date ?? it.id ?? "";
+                return normalizeSheetDateYmd(due) === ymd;
               });
               openPanel({
-                kind: "render",
-                title: `${ymd} ?쇱젙`,
+                kind: "render", title: `${y}년 ${m}월 ${d}일 일정`,
                 node: (
                   <div className="space-y-4 text-sm">
                     <div>
-                      <p className="text-xs font-semibold text-zinc-500">?낅줈??({uploads.length}嫄?</p>
-                      {uploads.length === 0 ? <p className="text-zinc-500">?놁쓬</p> : (
-                        <ul className="mt-1 space-y-1">
-                          {uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.title} {it.status ? `[${it.status}]` : ""}</li>)}
-                        </ul>
-                      )}
+                      <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
+                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.title}{it.status ? ` [${it.status}]` : ""}</li>)}</ul>}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-zinc-500">硫붾え ({memos.length}嫄?</p>
-                      {memos.length === 0 ? <p className="text-zinc-500">?놁쓬</p> : (
-                        <ul className="mt-1 space-y-1">
-                          {memos.map((memo) => <li key={memo.sheet_row} className="rounded border border-zinc-200 px-2 py-1 text-xs">{memo.content}</li>)}
-                        </ul>
-                      )}
+                      <p className="text-xs font-semibold text-zinc-500">체크리스트 마감 ({checklist.length}건)</p>
+                      {checklist.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{checklist.map((it) => <li key={it.id} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs">{it.title}</li>)}</ul>}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-500">메모 ({memos.length}건)</p>
+                      {memos.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{memos.map((memo) => <li key={memo.sheet_row} className="rounded border border-zinc-200 px-2 py-1 text-xs">{memo.content}</li>)}</ul>}
                     </div>
                   </div>
                 ),
@@ -622,35 +548,25 @@ export function ControlRoomHomeClient() {
           {hub.kind === "loading" ? (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 bg-white px-4 py-6 text-sm dark:border-zinc-700 dark:bg-zinc-900" role="status">
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" aria-hidden />
-              釉뚮━?뫢룹뾽濡쒕뱶쨌硫붾え 遺덈윭?ㅻ뒗 以묅?            </div>
-          ) : null}
-
-          {hub.kind === "error" ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900/50 dark:bg-red-950/40" role="alert">
-              <p className="font-medium text-red-800 dark:text-red-200">?곗씠??濡쒕뱶 ?ㅽ뙣</p>
-              <p className="mt-1 text-red-700 dark:text-red-300">{hub.message}</p>
+              브리핑·업로드·메모·체크리스트 불러오는 중…
             </div>
           ) : null}
 
-          <section id="control-result-panel" className="scroll-mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950" aria-label="寃곌낵 ?⑤꼸">
-            <h2 className="text-sm font-semibold">寃곌낵</h2>
+          {hub.kind === "error" ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm" role="alert">
+              <p className="font-medium text-red-800">데이터 로드 실패</p>
+              <p className="mt-1 text-red-700">{hub.message}</p>
+            </div>
+          ) : null}
+
+          <section id="control-result-panel" className="scroll-mt-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <h2 className="text-sm font-semibold">결과</h2>
             <div className="mt-3 min-h-[160px] text-sm">
-              {panel.kind === "welcome" ? <p className="text-zinc-600 dark:text-zinc-400">?곷떒 鍮좊Ⅸ 議고쉶 踰꾪듉???꾨Ⅴ硫??ш린???듭씠 梨꾩썙吏묐땲??</p> : null}
-              {panel.kind === "nl_stub" ? (
-                <div className="space-y-2">
-                  <p className="font-medium">吏덈Ц 湲곕줉(?곗씠??濡쒕뵫 ??</p>
-                  <p className="rounded bg-zinc-50 px-2 py-1 dark:bg-zinc-900">??panel.query}??/p>
-                  <p className="text-xs text-zinc-500">愿???곗씠?곌? 以鍮꾨릺硫?媛숈? 吏덈Ц? 硫붾え 寃?됱뿉 ?ъ슜?⑸땲??</p>
-                </div>
-              ) : null}
+              {panel.kind === "welcome" ? <p className="text-zinc-600 dark:text-zinc-400">상단 빠른 조회 버튼을 누르면 여기에 답이 채워집니다.</p> : null}
+              {panel.kind === "nl_stub" ? <div className="space-y-2"><p className="font-medium">질문 기록</p><p className="rounded bg-zinc-50 px-2 py-1 dark:bg-zinc-900">「{panel.query}」</p></div> : null}
               {panel.kind === "loading" ? <p className="text-zinc-500">{panel.label}</p> : null}
               {panel.kind === "error" ? <p className="text-red-800 dark:text-red-200" role="alert">{panel.message}</p> : null}
-              {panel.kind === "render" ? (
-                <div>
-                  <p className="text-xs font-medium uppercase text-zinc-500">{panel.title}</p>
-                  <div className="mt-3">{panel.node}</div>
-                </div>
-              ) : null}
+              {panel.kind === "render" ? <div><p className="text-xs font-medium uppercase text-zinc-500">{panel.title}</p><div className="mt-3">{panel.node}</div></div> : null}
             </div>
           </section>
         </main>
@@ -658,15 +574,15 @@ export function ControlRoomHomeClient() {
         <aside className="lg:col-span-3">
           {metrics ? (
             <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-xs font-semibold uppercase text-zinc-500">??쒕낫???붿빟</h2>
+              <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드 요약</h2>
               <ul className="mt-2 grid grid-cols-2 gap-2">
-                <SidebarStat label="?ㅻ뒛 留덇컧(泥댄겕)" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
-                <SidebarStat label="誘몄셿猷??낅줈?? value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
-                <SidebarStat label="?곗씠??二쇱쓽" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
-                <SidebarStat label="以묐났 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
-                <SidebarStat label="湲닿툒 ?꾨낫" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
-                <SidebarStat label="?ㅻ뒛 ?낅줈??吏묎퀎)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
-                <SidebarStat label="吏?걔룻썑??吏묎퀎)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
+                <SidebarStat label="오늘 마감(체크)" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
+                <SidebarStat label="미완료 업로드" value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
+                <SidebarStat label="데이터 주의" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
+                <SidebarStat label="중복 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
+                <SidebarStat label="긴급 후보" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
+                <SidebarStat label="오늘 업로드(집계)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
+                <SidebarStat label="지연·후속(집계)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
               </ul>
             </section>
           ) : null}
@@ -676,30 +592,34 @@ export function ControlRoomHomeClient() {
   );
 }
 
-function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (d: number, y: number, m: number) => void }) {
-  const now = new Date();
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
+function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (ymd: string) => void }) {
+  const { year: initYear, month: initMonth } = seoulCalendarYearMonthNow();
+  const [viewYear, setViewYear] = useState(initYear);
+  const [viewMonth, setViewMonth] = useState(initMonth);
   const ready = hub.kind === "ready";
+  const todayYmd = formatSeoulYmd(new Date());
 
   const activityMap = useMemo(() => {
-    if (hub.kind !== "ready") return new Map<string, { uploads: number; memos: number }>();
-    const map = new Map<string, { uploads: number; memos: number }>();
+    if (hub.kind !== "ready") return new Map<string, { uploads: number; memos: number; checklist: number }>();
+    const map = new Map<string, { uploads: number; memos: number; checklist: number }>();
     for (const it of hub.uploads.items) {
-      const t = Date.parse(it.uploaded_at);
-      if (!Number.isFinite(t)) continue;
-      const dt = new Date(t);
-      const key = `${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()}`;
-      const cur = map.get(key) ?? { uploads: 0, memos: 0 };
-      map.set(key, { ...cur, uploads: cur.uploads + 1 });
+      const ymd = formatSeoulYmd(new Date(Date.parse(it.uploaded_at)));
+      if (!ymd) continue;
+      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
+      map.set(ymd, { ...cur, uploads: cur.uploads + 1 });
     }
     for (const memo of hub.memos) {
-      const s = memo.memo_date?.trim().replace(/\./g, "-").replace(/\//g, "-");
-      const match = s?.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-      if (!match) continue;
-      const key = `${match[1]}-${Number(match[2])}-${Number(match[3])}`;
-      const cur = map.get(key) ?? { uploads: 0, memos: 0 };
-      map.set(key, { ...cur, memos: cur.memos + 1 });
+      const ymd = normalizeSheetDateYmd(memo.memo_date ?? "");
+      if (!ymd) continue;
+      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
+      map.set(ymd, { ...cur, memos: cur.memos + 1 });
+    }
+    for (const it of hub.checklist) {
+      const due = it.due_date ?? it.id ?? "";
+      const ymd = normalizeSheetDateYmd(due);
+      if (!ymd) continue;
+      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
+      map.set(ymd, { ...cur, checklist: cur.checklist + 1 });
     }
     return map;
   }, [hub]);
@@ -711,34 +631,25 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const today = new Date();
-
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth - 2, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{"<"}</button>
-          <p className="text-sm font-semibold">{viewYear}??{viewMonth}??/p>
-          <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{">"}</button>
-        </div>
-        <span className="text-[10px] text-zinc-500">?쒗듃 ?쇱젙 ?곕룞 ?덉젙</span>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth - 2, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{"<"}</button>
+        <p className="text-sm font-semibold">{viewYear}년 {viewMonth}월</p>
+        <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{">"}</button>
       </div>
       <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-zinc-500">
-        {["??, "??, "??, "??, "紐?, "湲?, "??].map((d) => <div key={d}>{d}</div>)}
+        {["일", "월", "화", "수", "목", "금", "토"].map((d) => <div key={d}>{d}</div>)}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
-          const key = `${viewYear}-${viewMonth}-${d}`;
-          const act = activityMap.get(key);
-          const hasDot = (act?.uploads ?? 0) + (act?.memos ?? 0) > 0;
-          const isToday = today.getFullYear() === viewYear && today.getMonth() + 1 === viewMonth && today.getDate() === d;
+          const ymd = `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const act = activityMap.get(ymd);
+          const hasDot = (act?.uploads ?? 0) + (act?.memos ?? 0) + (act?.checklist ?? 0) > 0;
+          const isToday = ymd === todayYmd;
           return (
-            <button
-              key={`${key}-${i}`}
-              type="button"
-              disabled={!ready}
-              onClick={() => onDayClick(d, viewYear, viewMonth)}
+            <button key={`${ymd}-${i}`} type="button" disabled={!ready} onClick={() => onDayClick(ymd)}
               className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isToday ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}
             >
               <span>{d}</span>
@@ -758,8 +669,8 @@ function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
       {props.items.map((m) => (
         <li key={m.sheet_row} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
           <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-            ??{m.sheet_row} 쨌 {m.memo_date}
-            {m.category ? <span className="ml-2 rounded bg-zinc-200 px-1.5 py-0.5 font-medium text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100">{m.category}</span> : <span className="ml-2 text-zinc-400">遺꾨쪟 ?놁쓬</span>}
+            행 {m.sheet_row} · {m.memo_date}
+            {m.category ? <span className="ml-2 rounded bg-zinc-200 px-1.5 py-0.5 font-medium text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100">{m.category}</span> : <span className="ml-2 text-zinc-400">분류 없음</span>}
           </p>
           <p className="mt-1 whitespace-pre-wrap text-zinc-900 dark:text-zinc-50">{m.content}</p>
         </li>
@@ -769,42 +680,24 @@ function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
 }
 
 function SidebarStat(props: { label: string; value: number; onClick?: () => void }) {
-  const body = (
-    <>
-      <span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span>
-      <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span>
-    </>
-  );
-  if (props.onClick) {
-    return (
-      <li>
-        <button type="button" onClick={props.onClick} className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800">{body}</button>
-      </li>
-    );
-  }
+  const body = (<><span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span><span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span></>);
+  if (props.onClick) return <li><button type="button" onClick={props.onClick} className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800">{body}</button></li>;
   return <li className="rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">{body}</li>;
 }
 
 function UploadPreviewList(props: { items: UploadListItem[]; empty: string; actionHref: string; actionLabel: string }) {
-  if (props.items.length === 0 && props.empty) {
-    return (
-      <div className="space-y-2">
-        <p className="text-zinc-600 dark:text-zinc-400">{props.empty}</p>
-        <Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} ??/Link>
-      </div>
-    );
-  }
+  if (props.items.length === 0 && props.empty) return <div className="space-y-2"><p className="text-zinc-600 dark:text-zinc-400">{props.empty}</p><Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} →</Link></div>;
   return (
     <div className="space-y-2">
       <ul className="max-h-64 space-y-2 overflow-y-auto">
         {props.items.map((it) => (
           <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
-            <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{it.status ? `?곹깭 ${it.status} 쨌 ` : ""}{it.uploaded_at}</p>
+            <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{it.status ? `상태 ${it.status} · ` : ""}{it.uploaded_at}</p>
           </li>
         ))}
       </ul>
-      <Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} ??/Link>
+      <Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} →</Link>
     </div>
   );
 }
@@ -812,7 +705,7 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
 function ChecklistPreviewList(props: { items: ChecklistItem[]; total: number }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">?쒖꽦 ??{props.total}嫄?以?{props.items.length}嫄?誘몃━蹂닿린</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">활성 행 {props.total}건 중 {props.items.length}건 미리보기</p>
       <ul className="max-h-64 space-y-2 overflow-y-auto">
         {props.items.map((it) => (
           <li key={it.id} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
@@ -821,7 +714,7 @@ function ChecklistPreviewList(props: { items: ChecklistItem[]; total: number }) 
           </li>
         ))}
       </ul>
-      <Link href="/checklist" className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">泥댄겕 ?묒뾽?먯꽌 ?섏젙쨌?꾨즺 ??/Link>
+      <Link href="/checklist" className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">체크 작업에서 수정·완료 →</Link>
     </div>
   );
 }
@@ -833,31 +726,14 @@ function IssueSummaryBody(props: {
 }) {
   return (
     <div className="space-y-4 text-sm">
-      {props.warnings.length > 0 ? (
-        <div>
-          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">釉뚮━??寃쎄퀬</p>
-          <ul className="mt-1 list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">{props.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}</ul>
-        </div>
-      ) : null}
-      {props.skipped.length > 0 ? (
-        <div>
-          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">紐⑸줉?먯꽌 ?쒖쇅????/p>
-          <ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">{props.skipped.map((s, i) => <li key={`s-${s.sheet_row}-${i}`}>??{s.sheet_row}: {s.message}</li>)}</ul>
-        </div>
-      ) : null}
-      {props.dup.length > 0 ? (
-        <div>
-          <p className="text-xs font-semibold text-rose-900 dark:text-rose-100">以묐났 id</p>
-          <ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">{props.dup.map((d, i) => <li key={`d-${d.id}-${i}`}><span className="font-mono text-xs">{d.id}</span> ????{d.sheet_rows.join(", ")}</li>)}</ul>
-        </div>
-      ) : null}
-      {props.warnings.length === 0 && props.skipped.length === 0 && props.dup.length === 0 ? (
-        <p className="text-zinc-600 dark:text-zinc-400">?쒖떆???댁긽 吏뺥썑媛 ?놁뒿?덈떎.</p>
-      ) : null}
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">?쒗듃瑜?怨좎튇 ???묒뾽 ?붾㈃?먯꽌 ?덈줈怨좎묠?섏꽭??</p>
+      {props.warnings.length > 0 ? <div><p className="text-xs font-semibold text-amber-900 dark:text-amber-100">브리핑 경고</p><ul className="mt-1 list-inside list-disc space-y-1 text-zinc-800 dark:text-zinc-200">{props.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}</ul></div> : null}
+      {props.skipped.length > 0 ? <div><p className="text-xs font-semibold text-amber-900 dark:text-amber-100">목록에서 제외된 행</p><ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">{props.skipped.map((s, i) => <li key={`s-${s.sheet_row}-${i}`}>행 {s.sheet_row}: {s.message}</li>)}</ul></div> : null}
+      {props.dup.length > 0 ? <div><p className="text-xs font-semibold text-rose-900 dark:text-rose-100">중복 id</p><ul className="mt-1 space-y-1 text-zinc-800 dark:text-zinc-200">{props.dup.map((d, i) => <li key={`d-${d.id}-${i}`}><span className="font-mono text-xs">{d.id}</span> — 행 {d.sheet_rows.join(", ")}</li>)}</ul></div> : null}
+      {props.warnings.length === 0 && props.skipped.length === 0 && props.dup.length === 0 ? <p className="text-zinc-600 dark:text-zinc-400">표시할 이상 징후가 없습니다.</p> : null}
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">시트를 고친 뒤 작업 화면에서 새로고침하세요.</p>
       <div className="flex flex-wrap gap-2">
-        <Link href="/uploads" className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100">?낅줈???묒뾽 ??/Link>
-        <Link href="/checklist" className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100">泥댄겕 ?묒뾽 ??/Link>
+        <Link href="/uploads" className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100">업로드 작업 →</Link>
+        <Link href="/checklist" className="text-sm font-medium text-zinc-900 underline dark:text-zinc-100">체크 작업 →</Link>
       </div>
     </div>
   );
