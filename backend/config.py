@@ -60,6 +60,8 @@ class Settings:
     google_checklist_tab: str
     google_uploads_tab: str
     google_memo_tab: str
+    google_platform_tab: str
+    google_works_tab: str
     openai_api_key: str | None
     openai_model: str
     openai_timeout_sec: float
@@ -71,6 +73,8 @@ def load_settings() -> Settings:
     checklist_tab = os.getenv("GOOGLE_CHECKLIST_TAB", "체크리스트").strip() or "체크리스트"
     uploads_tab = os.getenv("GOOGLE_UPLOADS_TAB", "업로드운영").strip() or "업로드운영"
     memo_tab = os.getenv("GOOGLE_MEMO_TAB", "메모장").strip() or "메모장"
+    platform_tab = os.getenv("GOOGLE_PLATFORM_TAB", "플랫폼마스터").strip() or "플랫폼마스터"
+    works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품마스터").strip() or "작품마스터"
     raw_key = os.getenv("OPENAI_API_KEY")
     openai_key = raw_key.strip() if raw_key and str(raw_key).strip() else None
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
@@ -86,6 +90,8 @@ def load_settings() -> Settings:
         google_checklist_tab=checklist_tab,
         google_uploads_tab=uploads_tab,
         google_memo_tab=memo_tab,
+        google_platform_tab=platform_tab,
+        google_works_tab=works_tab,
         openai_api_key=openai_key,
         openai_model=openai_model,
         openai_timeout_sec=openai_timeout,

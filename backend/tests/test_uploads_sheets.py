@@ -242,6 +242,8 @@ def test_fetch_upload_list_tolerates_missing_file_name_no_raise(
         google_checklist_tab="체크리스트",
         google_uploads_tab="업로드운영",
         google_memo_tab="메모장",
+        google_platform_tab="플랫폼마스터",
+        google_works_tab="작품마스터",
         openai_api_key=None,
         openai_model="gpt-4o-mini",
         openai_timeout_sec=45.0,

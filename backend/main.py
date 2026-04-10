@@ -28,6 +28,7 @@ from schemas import (
     ChecklistSuggestResponse,
     ChecklistUpdateRequest,
     ChecklistUpdateResponse,
+    MasterTabItemsResponse,
     UploadCreateRequest,
     UploadDeleteRequest,
     UploadDeleteResponse,
@@ -53,6 +54,7 @@ from services.google_checklist_sheets import (
     fetch_checklist_from_google_sheets,
     update_checklist_item_in_sheet,
 )
+from services.google_master_sheets import fetch_master_tab_keyed_rows
 from services.google_memo_sheets import (
     append_memo_row_to_google_sheets,
     fetch_memos_from_google_sheets,
@@ -95,6 +97,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/platform-master", response_model=MasterTabItemsResponse)
+def get_platform_master() -> MasterTabItemsResponse:
+    """플랫폼마스터 탭 전체(헤더 1행 = 키)."""
+    settings = load_settings()
+    try:
+        items = fetch_master_tab_keyed_rows(settings, settings.google_platform_tab)
+        return MasterTabItemsResponse(items=items)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get("/works-master", response_model=MasterTabItemsResponse)
+def get_works_master() -> MasterTabItemsResponse:
+    """작품마스터 탭 전체(헤더 1행 = 키)."""
+    settings = load_settings()
+    try:
+        items = fetch_master_tab_keyed_rows(settings, settings.google_works_tab)
+        return MasterTabItemsResponse(items=items)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.get("/health")

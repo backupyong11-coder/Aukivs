@@ -1,6 +1,14 @@
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class MasterTabItemsResponse(BaseModel):
+    """GET /platform-master, GET /works-master: 1행 헤더 기준 행 단위 dict 목록."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChecklistItem(BaseModel):
