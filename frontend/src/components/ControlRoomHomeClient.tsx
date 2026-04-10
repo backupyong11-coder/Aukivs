@@ -24,6 +24,8 @@ import {
   type UploadListItem,
 } from "@/lib/uploads";
 import { fetchMemos, type MemoItem } from "@/lib/memos";
+import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMaster";
+import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
 import { userFacingListError } from "@/lib/userFacingErrors";
 
 // 서울 시간대 기준 날짜 유틸
@@ -100,6 +102,8 @@ type HubLoadState =
       memosError: string | null;
       checklist: ChecklistItem[];
       checklistError: string | null;
+      platformMaster: PlatformMasterItem[];
+      worksMaster: WorksMasterItem[];
     }
   | { kind: "error"; message: string };
 
@@ -131,11 +135,13 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m, c] = await Promise.all([
+        const [b, u, m, c, pm, wm] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
           fetchChecklist().catch(() => ({ ok: false as const, message: "체크리스트 로드 실패", items: [] })),
+          fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
+          fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
         ]);
         if (ac.signal.aborted) return;
         if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
@@ -148,6 +154,8 @@ export function ControlRoomHomeClient() {
           memosError: m.ok ? null : userFacingListError("memos", m.message),
           checklist: c.ok ? c.items : [],
           checklistError: c.ok ? null : c.message,
+          platformMaster: pm.ok ? pm.items : [],
+          worksMaster: wm.ok ? wm.items : [],
         });
       } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
@@ -382,18 +390,73 @@ export function ControlRoomHomeClient() {
     refreshHistory();
     if (hub.kind === "ready") {
       const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-      const matches = hub.memos.filter((m) => {
+
+      // 메모 검색
+      const memoMatches = hub.memos.filter((m) => {
         const hay = `${m.content}\n${m.category ?? ""}`.toLowerCase();
         return tokens.every((t) => hay.includes(t));
       });
+
+      // 플랫폼마스터 검색 (모든 필드)
+      const platformMatches = hub.platformMaster.filter((row) => {
+        const hay = Object.values(row).join(" ").toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      });
+
+      // 작품마스터 검색 (모든 필드)
+      const worksMatches = hub.worksMaster.filter((row) => {
+        const hay = Object.values(row).join(" ").toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      });
+
+      const hasAny = memoMatches.length > 0 || platformMatches.length > 0 || worksMatches.length > 0;
+
       openPanel({
-        kind: "render", title: "질문 · 메모 검색",
+        kind: "render", title: "통합 검색 결과",
         node: (
-          <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
-            {hub.memosError ? <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900" role="alert">메모 목록을 불러오지 못해 검색이 제한됩니다: {hub.memosError}</p> : null}
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">검색어 「{q}」 — 메모내용·메모분류에 공백으로 나눈 키워드가 모두 들어 있는 행만 표시합니다.</p>
-            <MemoPreviewList items={matches} emptyHint="일치하는 메모가 없습니다." />
-            <p className="border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">체크·업로드·브리핑은 상단 빠른 조회 버튼을 사용하세요.</p>
+          <div className="space-y-5 text-sm text-zinc-800 dark:text-zinc-200">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">검색어 「{q}」</p>
+            {!hasAny ? <p className="text-zinc-500 dark:text-zinc-400">일치하는 항목이 없습니다.</p> : null}
+
+            {/* 플랫폼마스터 결과 */}
+            {platformMatches.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">플랫폼마스터 ({platformMatches.length}건)</p>
+                <div className="space-y-2">
+                  {platformMatches.map((row, i) => (
+                    <div key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                      {Object.entries(row).filter(([, v]) => v && String(v).trim()).map(([k, v]) => (
+                        <p key={k} className="mt-0.5"><span className="font-medium text-zinc-600 dark:text-zinc-400">{k}:</span> <span className="text-zinc-900 dark:text-zinc-100">{String(v)}</span></p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* 작품마스터 결과 */}
+            {worksMatches.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">작품마스터 ({worksMatches.length}건)</p>
+                <div className="space-y-2">
+                  {worksMatches.map((row, i) => (
+                    <div key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                      {Object.entries(row).filter(([, v]) => v && String(v).trim()).map(([k, v]) => (
+                        <p key={k} className="mt-0.5"><span className="font-medium text-zinc-600 dark:text-zinc-400">{k}:</span> <span className="text-zinc-900 dark:text-zinc-100">{String(v)}</span></p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* 메모 결과 */}
+            {memoMatches.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">메모장 ({memoMatches.length}건)</p>
+                <MemoPreviewList items={memoMatches} emptyHint="" />
+              </div>
+            ) : null}
           </div>
         ),
       });
