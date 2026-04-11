@@ -95,16 +95,16 @@ const SUGGESTED_QUERIES: { id: string; label: string }[] = [
 type HubLoadState =
   | { kind: "loading" }
   | {
-      kind: "ready";
-      briefing: BriefingTodayPayload;
-      uploads: { items: UploadListItem[]; issues: UploadListIssue[] };
-      memos: MemoItem[];
-      memosError: string | null;
-      checklist: ChecklistItem[];
-      checklistError: string | null;
-      platformMaster: PlatformMasterItem[];
-      worksMaster: WorksMasterItem[];
-    }
+    kind: "ready";
+    briefing: BriefingTodayPayload;
+    uploads: { items: UploadListItem[]; issues: UploadListIssue[] };
+    memos: MemoItem[];
+    memosError: string | null;
+    checklist: ChecklistItem[];
+    checklistError: string | null;
+    platformMaster: PlatformMasterItem[];
+    worksMaster: WorksMasterItem[];
+  }
   | { kind: "error"; message: string };
 
 type PanelState =
@@ -383,89 +383,48 @@ export function ControlRoomHomeClient() {
     }
   }, [hub, openPanel, refreshHistory]);
 
-  const runQuestion = useCallback((qRaw: string) => {
+  const runQuestion = useCallback(async (qRaw: string) => {
     const q = qRaw.trim();
     if (!q) return;
     pushRecentQuery(q);
     refreshHistory();
-    if (hub.kind === "ready") {
-      const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
 
-      // 메모 검색
-      const memoMatches = hub.memos.filter((m) => {
-        const hay = `${m.content}\n${m.category ?? ""}`.toLowerCase();
-        return tokens.every((t) => hay.includes(t));
+    if (hub.kind !== "ready") {
+      openPanel({ kind: "error", message: "데이터 로딩 중입니다. 잠시 후 다시 시도하세요." });
+      return;
+    }
+
+    openPanel({ kind: "loading", label: "AI가 분석 중입니다…" });
+
+    try {
+      const res = await fetch("/api/ops/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: q,
+          platformMaster: hub.platformMaster,
+          worksMaster: hub.worksMaster,
+          memos: hub.memos,
+        }),
       });
-
-      // 플랫폼마스터 검색 (모든 필드)
-      const platformMatches = hub.platformMaster.filter((row) => {
-        const hay = Object.values(row).join(" ").toLowerCase();
-        return tokens.every((t) => hay.includes(t));
-      });
-
-      // 작품마스터 검색 (모든 필드)
-      const worksMatches = hub.worksMaster.filter((row) => {
-        const hay = Object.values(row).join(" ").toLowerCase();
-        return tokens.every((t) => hay.includes(t));
-      });
-
-      const hasAny = memoMatches.length > 0 || platformMatches.length > 0 || worksMatches.length > 0;
-
+      const data = await res.json();
+      if (data.error) {
+        openPanel({ kind: "error", message: data.error });
+        return;
+      }
       openPanel({
-        kind: "render", title: "통합 검색 결과",
+        kind: "render", title: "AI 답변",
         node: (
-          <div className="space-y-5 text-sm text-zinc-800 dark:text-zinc-200">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">검색어 「{q}」</p>
-            {!hasAny ? <p className="text-zinc-500 dark:text-zinc-400">일치하는 항목이 없습니다.</p> : null}
-
-            {/* 플랫폼마스터 결과 */}
-            {platformMatches.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">플랫폼마스터 ({platformMatches.length}건)</p>
-                <div className="space-y-2">
-                  {platformMatches.map((row, i) => (
-                    <div key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-                      {Object.entries(row).filter(([, v]) => v && String(v).trim()).map(([k, v]) => (
-                        <p key={k} className="mt-0.5"><span className="font-medium text-zinc-600 dark:text-zinc-400">{k}:</span> <span className="text-zinc-900 dark:text-zinc-100">{String(v)}</span></p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {/* 작품마스터 결과 */}
-            {worksMatches.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">작품마스터 ({worksMatches.length}건)</p>
-                <div className="space-y-2">
-                  {worksMatches.map((row, i) => (
-                    <div key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-                      {Object.entries(row).filter(([, v]) => v && String(v).trim()).map(([k, v]) => (
-                        <p key={k} className="mt-0.5"><span className="font-medium text-zinc-600 dark:text-zinc-400">{k}:</span> <span className="text-zinc-900 dark:text-zinc-100">{String(v)}</span></p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {/* 메모 결과 */}
-            {memoMatches.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">메모장 ({memoMatches.length}건)</p>
-                <MemoPreviewList items={memoMatches} emptyHint="" />
-              </div>
-            ) : null}
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+            {data.answer}
           </div>
         ),
       });
-      return;
+    } catch (e) {
+      openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류가 발생했습니다." });
     }
-    openPanel({ kind: "nl_stub", query: q });
   }, [hub, openPanel, refreshHistory]);
-
-  const submitQuestion = () => { runQuestion(queryDraft); };
+  const submitQuestion = () => { void runQuestion(queryDraft); };
 
   const copyResultPanel = useCallback(async () => {
     const el = document.getElementById("control-result-panel");
