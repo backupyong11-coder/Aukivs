@@ -496,10 +496,42 @@ export function ControlRoomHomeClient() {
         <aside className="space-y-3 lg:col-span-2">
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="text-xs font-semibold uppercase text-zinc-500">플랫폼</h2>
-            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="플랫폼 선택"><option>전체 (연동 예정)</option></select>
+            <select
+              className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+              aria-label="플랫폼 선택"
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                const q = `${v} 전체정보`;
+                setQueryDraft(q);
+                void runQuestion(q);
+              }}
+            >
+              <option value="">플랫폼 선택…</option>
+              {hub.kind === "ready" && Array.from(new Set(hub.platformMaster.map((r) => r["플랫폼명"] ?? r["회사명"] ?? "").filter(Boolean))).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
             <h2 className="mt-3 text-xs font-semibold uppercase text-zinc-500">작품</h2>
-            <select disabled className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="작품 선택"><option>전체 (연동 예정)</option></select>
-            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800" onClick={() => void runPreset("platform_stub", "전체정보 보기")}>전체정보 보기</button>
+            <select
+              className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
+              aria-label="작품 선택"
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                const q = `${v} 전체정보`;
+                setQueryDraft(q);
+                void runQuestion(q);
+              }}
+            >
+              <option value="">작품 선택…</option>
+              {hub.kind === "ready" && Array.from(new Set(hub.worksMaster.map((r) => r["작품명"] ?? "").filter(Boolean))).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800" onClick={() => { const q = "전체 플랫폼 목록과 담당자 요약"; setQueryDraft(q); void runQuestion(q); }}>전체정보 보기</button>
           </section>
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950">
             <p className="font-semibold text-zinc-600 dark:text-zinc-400">최근 질문</p>
@@ -507,7 +539,7 @@ export function ControlRoomHomeClient() {
               <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
                 {recent.map((q) => (
                   <li key={q} className="flex gap-1">
-                    <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => { setQueryDraft(q); runQuestion(q); }}>{q}</button>
+                    <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => { setQueryDraft(q); void runQuestion(q); }}>{q}</button>
                     <button type="button" className="text-amber-600" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>{favorites.includes(q) ? "★" : "☆"}</button>
                   </li>
                 ))}
@@ -518,7 +550,7 @@ export function ControlRoomHomeClient() {
               <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
                 {favorites.map((q) => (
                   <li key={q}>
-                    <button type="button" className="w-full truncate text-left hover:underline" onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else runQuestion(q); }}>★ {q}</button>
+                    <button type="button" className="w-full truncate text-left hover:underline" onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else void runQuestion(q); }}>★ {q}</button>
                   </li>
                 ))}
               </ul>
