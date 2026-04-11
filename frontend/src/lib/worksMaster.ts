@@ -1,14 +1,14 @@
-import { getApiBaseUrl } from "@/lib/apiBase";
+﻿import { getApiBaseUrl } from "@/lib/apiBase";
 
 export type WorksMasterItem = Record<string, string>;
 
 type FetchResult =
-  const res = await fetch(`${getApiBaseUrl()}/works-master`);
+  | { ok: true; items: WorksMasterItem[] }
   | { ok: false; items: WorksMasterItem[] };
 
 export async function fetchWorksMaster(): Promise<FetchResult> {
   try {
-    const res = await fetch(`${apiBase()}/works-master`);
+    const res = await fetch(`${getApiBaseUrl()}/works-master`);
     if (!res.ok) return { ok: false, items: [] };
     const data = await res.json();
     const items: WorksMasterItem[] = Array.isArray(data?.items) ? data.items : [];
