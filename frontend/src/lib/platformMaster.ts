@@ -1,9 +1,9 @@
-import { apiBase } from "@/lib/apiBase";
+import { getApiBaseUrl } from "@/lib/apiBase";
 
 export type PlatformMasterItem = Record<string, string>;
 
 type FetchResult =
-  | { ok: true; items: PlatformMasterItem[] }
+  const res = await fetch(`${getApiBaseUrl()}/platform-master`);
   | { ok: false; items: PlatformMasterItem[] };
 
 export async function fetchPlatformMaster(): Promise<FetchResult> {

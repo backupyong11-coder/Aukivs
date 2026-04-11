@@ -1,9 +1,9 @@
-import { apiBase } from "@/lib/apiBase";
+import { getApiBaseUrl } from "@/lib/apiBase";
 
 export type WorksMasterItem = Record<string, string>;
 
 type FetchResult =
-  | { ok: true; items: WorksMasterItem[] }
+  const res = await fetch(`${getApiBaseUrl()}/works-master`);
   | { ok: false; items: WorksMasterItem[] };
 
 export async function fetchWorksMaster(): Promise<FetchResult> {
