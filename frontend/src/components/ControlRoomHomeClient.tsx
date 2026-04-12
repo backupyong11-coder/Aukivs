@@ -689,8 +689,8 @@ export function ControlRoomHomeClient() {
                           const cat = it["분류"] ? `[${it["분류"]}]` : "";
                           const plat = it["관련플랫폼"] ? `[${it["관련플랫폼"]}]` : "";
                           return (
-                            <li key={i} className={`rounded border px-2 py-1 text-xs ${isDoneTask ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
-                              {cat ? <span className={`mr-1 font-medium ${isDoneTask ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>{cat}</span> : null}
+                            <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+                              {cat ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">{cat}</span> : null}
                               {plat ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{plat}</span> : null}
                               <span className="text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>
                             </li>
@@ -849,7 +849,7 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
               <span>{d}</span>
               {(hasUpload || hasTask || hasLaunch) ? (
                 <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
-                  {hasTask    ? <span className="h-1 w-1 rounded-full bg-amber-400" /> : null}
+                  {hasTask    ? <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" /> : null}
                   {hasUpload  ? <span className="h-1 w-1 rounded-full bg-sky-500" /> : null}
                   {hasLaunch  ? <span className="h-1 w-1 rounded-full bg-red-500" /> : null}
                 </span>
