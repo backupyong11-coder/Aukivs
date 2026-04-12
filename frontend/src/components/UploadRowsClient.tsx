@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 type UploadRow = {
@@ -24,12 +24,15 @@ type UploadRow = {
   비고: string;
 };
 
+type SortKey = "업로드일" | "플랫폼명" | "작품명" | "업로드완료여부" | "업로드방식" | "다음업로드일" | "비고";
+type SortDir = "asc" | "desc";
+type TabType = "미완료" | "완료" | "전체";
+
 type ViewState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: UploadRow[] };
 
-// 수정 폼에 포함할 필드
 const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
   { key: "작품명", label: "작품명", required: true },
   { key: "업로드일", label: "업로드일" },
@@ -48,7 +51,14 @@ const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[]
   { key: "비고", label: "비고" },
 ];
 
-const EMPTY_FORM: Partial<Record<keyof UploadRow, string>> = {};
+type FormType = Partial<Record<keyof UploadRow, string>>;
+
+function isDone(item: UploadRow) {
+  return (
+    item.완료 === "TRUE" || item.완료 === "true" || item.완료 === "1" ||
+    item.업로드완료여부 === "업로드 완료"
+  );
+}
 
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
@@ -59,28 +69,31 @@ async function apiFetch(path: string, body?: object) {
   });
   const text = await res.text();
   if (!res.ok) {
-    try { const j = JSON.parse(text); throw new Error(j.detail ?? text); }
+    try { const j = JSON.parse(text) as { detail?: string }; throw new Error(j.detail ?? text); }
     catch { throw new Error(text); }
   }
-  return JSON.parse(text);
+  return JSON.parse(text) as unknown;
 }
 
 export function UploadRowsClient() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [editItem, setEditItem] = useState<UploadRow | null>(null);
-  const [form, setForm] = useState<Partial<Record<keyof UploadRow, string>>>(EMPTY_FORM);
+  const [form, setForm] = useState<FormType>({});
   const [createOpen, setCreateOpen] = useState(false);
-  const [newForm, setNewForm] = useState<Partial<Record<keyof UploadRow, string>>>(EMPTY_FORM);
+  const [newForm, setNewForm] = useState<FormType>({});
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
+  const [tab, setTab] = useState<TabType>("미완료");
+  const [sortKey, setSortKey] = useState<SortKey>("업로드일");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
       const items = await apiFetch("/upload-rows");
-      setState({ kind: "ready", items });
+      setState({ kind: "ready", items: items as UploadRow[] });
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
@@ -88,16 +101,39 @@ export function UploadRowsClient() {
 
   useEffect(() => { void load(); }, [refreshKey, load]);
 
-  const visible = state.kind === "ready"
-    ? state.items.filter(it =>
-        !filterText || it.작품명.includes(filterText) || it.플랫폼명.includes(filterText)
-      )
-    : [];
+  const counts = useMemo(() => {
+    if (state.kind !== "ready") return { 미완료: 0, 완료: 0, 전체: 0 };
+    const done = state.items.filter(isDone).length;
+    return { 미완료: state.items.length - done, 완료: done, 전체: state.items.length };
+  }, [state]);
+
+  const visible = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    let items = state.items;
+    if (tab === "미완료") items = items.filter(it => !isDone(it));
+    else if (tab === "완료") items = items.filter(isDone);
+    if (filterText) {
+      items = items.filter(it =>
+        it.작품명.includes(filterText) || it.플랫폼명.includes(filterText) ||
+        it.비고.includes(filterText)
+      );
+    }
+    return [...items].sort((a, b) => {
+      const va = a[sortKey] ?? "";
+      const vb = b[sortKey] ?? "";
+      return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
+    });
+  }, [state, tab, filterText, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
 
   const openEdit = (item: UploadRow) => {
     setActionError(null);
     setEditItem(item);
-    const f: Partial<Record<keyof UploadRow, string>> = {};
+    const f: FormType = {};
     EDIT_FIELDS.forEach(({ key }) => { f[key] = item[key] ?? ""; });
     setForm(f);
   };
@@ -119,7 +155,7 @@ export function UploadRowsClient() {
     try {
       await apiFetch("/upload-rows/create", newForm);
       setCreateOpen(false);
-      setNewForm(EMPTY_FORM);
+      setNewForm({});
       setRefreshKey(k => k + 1);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "추가 실패");
@@ -136,10 +172,18 @@ export function UploadRowsClient() {
     }
   };
 
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
+  const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
+
   const Modal = ({ title, fields, setFields, onSave, onClose }: {
     title: string;
-    fields: Partial<Record<keyof UploadRow, string>>;
-    setFields: (f: Partial<Record<keyof UploadRow, string>>) => void;
+    fields: FormType;
+    setFields: (f: FormType) => void;
     onSave: () => void;
     onClose: () => void;
   }) => (
@@ -154,8 +198,7 @@ export function UploadRowsClient() {
               </span>
               <input type="text" value={fields[key] ?? ""}
                 onChange={e => setFields({ ...fields, [key]: e.target.value })}
-                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-              />
+                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
             </label>
           ))}
         </div>
@@ -178,9 +221,9 @@ export function UploadRowsClient() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="작품명·플랫폼명 검색"
+          placeholder="작품명·플랫폼명·비고 검색"
           className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
-        <button onClick={() => { setActionError(null); setNewForm(EMPTY_FORM); setCreateOpen(true); }}
+        <button onClick={() => { setActionError(null); setNewForm({}); setCreateOpen(true); }}
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           새 업로드 추가
         </button>
@@ -190,12 +233,32 @@ export function UploadRowsClient() {
         </button>
       </div>
 
+      {/* 탭 */}
+      <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+        {(["미완료", "완료", "전체"] as TabType[]).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              tab === t
+                ? "border-b-2 border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}>
+            {t}
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs ${
+              tab === t
+                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+            }`}>{counts[t]}</span>
+          </button>
+        ))}
+      </div>
+
       {actionError && !editItem && !createOpen &&
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
 
       {state.kind === "loading" && (
         <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />불러오는 중…
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+          불러오는 중…
         </div>
       )}
       {state.kind === "error" && (
@@ -209,38 +272,53 @@ export function UploadRowsClient() {
           <table className="w-full min-w-[800px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-                {["완료","업로드일","플랫폼명","작품명","업로드완료여부","업로드방식","다음업로드일","비고",""].map(h => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400">{h}</th>
-                ))}
+                <th className={thCls}>완료</th>
+                <th className={thSort} onClick={() => handleSort("업로드일")}>업로드일<SortIcon col="업로드일"/></th>
+                <th className={thSort} onClick={() => handleSort("플랫폼명")}>플랫폼<SortIcon col="플랫폼명"/></th>
+                <th className={thSort} onClick={() => handleSort("작품명")}>작품명<SortIcon col="작품명"/></th>
+                <th className={thSort} onClick={() => handleSort("업로드완료여부")}>완료여부<SortIcon col="업로드완료여부"/></th>
+                <th className={thSort} onClick={() => handleSort("업로드방식")}>업로드방식<SortIcon col="업로드방식"/></th>
+                <th className={thSort} onClick={() => handleSort("다음업로드일")}>다음업로드일<SortIcon col="다음업로드일"/></th>
+                <th className={thSort} onClick={() => handleSort("비고")}>비고<SortIcon col="비고"/></th>
+                <th className={thCls}></th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={9} className="px-3 py-8 text-center text-zinc-500">항목이 없습니다</td></tr>
+                <tr><td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText ? "검색 결과가 없습니다" : `${tab} 업로드가 없습니다`}
+                </td></tr>
               ) : visible.map(item => (
-                <tr key={item.id} className="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50">
-                  <td className="px-3 py-2">{item.완료 === "TRUE" ? "✓" : ""}</td>
-                  <td className="px-3 py-2 tabular-nums text-zinc-500">{item.업로드일}</td>
-                  <td className="px-3 py-2 font-medium">{item.플랫폼명}</td>
-                  <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">{item.작품명}</td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                <tr key={item.id}
+                  className={`border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 ${isDone(item) ? "opacity-50" : ""}`}>
+                  <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
+                    {isDone(item) ? "✓" : ""}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.업로드일}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-medium">{item.플랫폼명}</td>
+                  <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
+                    <span className="block max-w-[200px] truncate">{item.작품명}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
                       item.업로드완료여부 === "업로드 완료"
                         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
                         : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
                     }`}>{item.업로드완료여부 || "업로드 예정"}</span>
                   </td>
-                  <td className="px-3 py-2">{item.업로드방식}</td>
-                  <td className="px-3 py-2 tabular-nums text-zinc-500">{item.다음업로드일}</td>
-                  <td className="max-w-[160px] truncate px-3 py-2 text-zinc-500">{item.비고}</td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.업로드방식}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.다음업로드일}</td>
+                  <td className="px-3 py-1.5">
+                    <span className="block w-28 truncate text-zinc-400">{item.비고}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
                     <div className="flex gap-1">
                       <button onClick={() => openEdit(item)}
-                        className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                        className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
                         수정
                       </button>
                       <button onClick={() => void handleDelete(item)}
-                        className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                        className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
                         삭제
                       </button>
                     </div>
