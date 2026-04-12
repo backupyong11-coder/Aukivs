@@ -483,17 +483,13 @@ export function ControlRoomHomeClient() {
         </div>
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "오늘 업로드")}>오늘 업로드</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "이번 주 업로드")}>이번 주 업로드</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "미완료 업로드")}>미완료 업로드</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_summary", "업로드 요약")}>업로드 요약</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "오늘 브리핑")}>오늘 브리핑</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 마감")}>오늘 마감</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "미완료 업무")}>미완료 업무</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("data_bad", "데이터 점검")}>데이터 점검</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("sheet_backup", "시트 백업")}>시트 백업</button>
-            <button type="button" className={quickBtn} onClick={() => setHubRefreshKey((k) => k + 1)}>전체 새로고침</button>
           </div>
         </div>
       </header>
