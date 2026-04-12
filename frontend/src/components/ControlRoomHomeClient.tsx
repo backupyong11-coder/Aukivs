@@ -592,7 +592,18 @@ export function ControlRoomHomeClient() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
-                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.status ? <span className="mr-1 text-zinc-500">[{it.status}]</span> : null}{it.file_name && it.file_name !== "(파일명 미입력)" ? <span className="mr-1 text-zinc-400">[{it.file_name}]</span> : null}{it.title}</li>)}</ul>}
+                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => {
+                          const isComplete = it.status && ["업로드 완료", "완료", "완료됨", "완", "done", "complete", "ok"].some((x) => it.status!.trim().toLowerCase() === x || it.status!.trim().toLowerCase().includes(x));
+                          const statusLabel = isComplete ? "업로드 완료" : "업로드 예정";
+                          const platformLabel = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
+                          return (
+                            <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+                              <span className={`mr-1 font-medium ${isComplete ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
+                              {platformLabel ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">[{platformLabel}]</span> : null}
+                              <span className="text-zinc-800 dark:text-zinc-200">{it.title}</span>
+                            </li>
+                          );
+                        })}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">메모 ({memos.length}건)</p>
