@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { fetchBriefingToday, type BriefingTodayPayload } from "@/lib/briefing";
+import { getApiBaseUrl } from "@/lib/apiBase";
 import {
   loadFavoriteQueries,
   loadRecentQueries,
@@ -104,6 +105,7 @@ type HubLoadState =
     checklistError: string | null;
     platformMaster: PlatformMasterItem[];
     worksMaster: WorksMasterItem[];
+    allTasks: Record<string, string>[];
   }
   | { kind: "error"; message: string };
 
@@ -135,13 +137,14 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m, c, pm, wm] = await Promise.all([
+        const [b, u, m, c, pm, wm, tasksRaw] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
           fetchChecklist().catch(() => ({ ok: false as const, message: "체크리스트 로드 실패", items: [] })),
           fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
           fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
+          fetch(`${getApiBaseUrl()}/tasks`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
         ]);
         if (ac.signal.aborted) return;
         if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
@@ -156,6 +159,7 @@ export function ControlRoomHomeClient() {
           checklistError: c.ok ? null : c.message,
           platformMaster: pm.ok ? pm.items : [],
           worksMaster: wm.ok ? wm.items : [],
+          allTasks: Array.isArray(tasksRaw) ? tasksRaw : [],
         });
       } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
@@ -665,13 +669,18 @@ export function ControlRoomHomeClient() {
                 const due = it.due_date ?? it.id ?? "";
                 return normalizeSheetDateYmd(due) === ymd;
               });
+              // 업무정리 탭 전체(완료 포함) 마감일 기준
+              const allTasksOnDay = hub.allTasks.filter((it) => {
+                const due = it["마감일"] ?? "";
+                return normalizeSheetDateYmd(due) === ymd;
+              });
               openPanel({
                 kind: "render", title: `${y}년 ${m}월 ${d}일 일정`,
                 node: (
                   <div className="space-y-4 text-sm">
                     <div>
-                      <p className="text-xs font-semibold text-zinc-500">업무 내용 ({checklist.length}건)</p>
-                      {checklist.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{checklist.map((it) => <li key={it.id} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs">{(it.category || it.platform) ? <span className="text-zinc-500">{[it.category, it.platform].filter(Boolean).join(" / ")} · </span> : null}<span className="font-medium">{it.title}</span></li>)}</ul>}
+                      <p className="text-xs font-semibold text-zinc-500">업무 내용 ({allTasksOnDay.length}건)</p>
+                      {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => <li key={i} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs dark:border-amber-900/40 dark:bg-amber-950/30"><span className="text-zinc-500">{[it["분류"], it["관련플랫폼"]].filter(Boolean).join(" / ")}{(it["분류"] || it["관련플랫폼"]) ? " · " : ""}</span><span className="font-medium text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>{it["완료"] === "TRUE" ? <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓</span> : null}</li>)}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
