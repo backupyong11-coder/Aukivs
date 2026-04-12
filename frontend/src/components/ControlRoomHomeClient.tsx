@@ -582,12 +582,12 @@ export function ControlRoomHomeClient() {
                 node: (
                   <div className="space-y-4 text-sm">
                     <div>
-                      <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
-                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.title}{it.status ? ` [${it.status}]` : ""}</li>)}</ul>}
-                    </div>
-                    <div>
                       <p className="text-xs font-semibold text-zinc-500">업무 내용 ({checklist.length}건)</p>
                       {checklist.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{checklist.map((it) => <li key={it.id} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs">{(it.category || it.platform) ? <span className="text-zinc-500">{[it.category, it.platform].filter(Boolean).join(" / ")} · </span> : null}<span className="font-medium">{it.title}</span></li>)}</ul>}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
+                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.title}{it.status ? ` [${it.status}]` : ""}</li>)}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">메모 ({memos.length}건)</p>
