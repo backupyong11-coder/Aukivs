@@ -10,7 +10,6 @@ const links = [
   { href: "/tasks", label: "업무정리", title: "업무정리 시트 작업" },
   { href: "/upload-rows", label: "업로드정리", title: "업로드정리 시트 작업" },
   { href: "/platforms", label: "플랫폼정리", title: "플랫폼정리 시트 작업" },
-  { href: "/settings", label: "설정", title: "연결·환경" },
 ] as const;
 
 type AppNavProps = {
