@@ -4,9 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
-
-type SortKey = "회사명" | "현재단계" | "마지막업데이트날짜" | "마지막상황" | "대기사유" | "다음액션" | "우선순위";
+type SortKey = "마지막업데이트날짜" | "현재단계" | "우선순위" | "회사명" | "마지막상황" | "대기사유" | "다음액션" | "비고";
 type SortDir = "asc" | "desc";
+
+const COLS: { key: SortKey; label: string }[] = [
+  { key: "마지막업데이트날짜", label: "마지막업데이트" },
+  { key: "현재단계", label: "현재단계" },
+  { key: "우선순위", label: "우선순위" },
+  { key: "회사명", label: "회사명" },
+  { key: "마지막상황", label: "마지막상황" },
+  { key: "대기사유", label: "대기사유" },
+  { key: "다음액션", label: "다음액션" },
+  { key: "비고", label: "비고" },
+];
 
 const EDIT_FIELDS: { key: string; label: string }[] = [
   { key: "현재단계", label: "현재단계" },
@@ -33,7 +43,9 @@ async function apiFetch(path: string, body?: object) {
 }
 
 export function PlatformRowsClient() {
-  const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: PlatformRow[] }>({ kind: "loading" });
+  const [state, setState] = useState<
+    { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: PlatformRow[] }
+  >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [editItem, setEditItem] = useState<PlatformRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -63,7 +75,8 @@ export function PlatformRowsClient() {
         (it["회사명"] ?? "").includes(filterText) ||
         (it["현재단계"] ?? "").includes(filterText) ||
         (it["플랫폼명"] ?? "").includes(filterText) ||
-        (it["다음액션"] ?? "").includes(filterText)
+        (it["다음액션"] ?? "").includes(filterText) ||
+        (it["마지막상황"] ?? "").includes(filterText)
       );
     }
     return [...items].sort((a, b) => {
@@ -103,14 +116,14 @@ export function PlatformRowsClient() {
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
+  const thSort = "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
   const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
-  const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="회사명·플랫폼명·단계·다음액션 검색"
+          placeholder="회사명·단계·상황·다음액션 검색"
           className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
@@ -139,14 +152,11 @@ export function PlatformRowsClient() {
           <table className="w-full min-w-[900px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-                <th className={thSort} onClick={() => handleSort("회사명")}>회사명<SortIcon col="회사명"/></th>
-                <th className={thSort} onClick={() => handleSort("현재단계")}>현재단계<SortIcon col="현재단계"/></th>
-                <th className={thSort} onClick={() => handleSort("마지막업데이트날짜")}>마지막업데이트<SortIcon col="마지막업데이트날짜"/></th>
-                <th className={thSort} onClick={() => handleSort("마지막상황")}>마지막상황<SortIcon col="마지막상황"/></th>
-                <th className={thSort} onClick={() => handleSort("대기사유")}>대기사유<SortIcon col="대기사유"/></th>
-                <th className={thSort} onClick={() => handleSort("다음액션")}>다음액션<SortIcon col="다음액션"/></th>
-                <th className={thSort} onClick={() => handleSort("우선순위")}>우선순위<SortIcon col="우선순위"/></th>
-                <th className={thCls}>비고</th>
+                {COLS.map(col => (
+                  <th key={col.key} className={thSort} onClick={() => handleSort(col.key)}>
+                    {col.label}<SortIcon col={col.key} />
+                  </th>
+                ))}
                 <th className={thCls}></th>
               </tr>
             </thead>
@@ -157,9 +167,11 @@ export function PlatformRowsClient() {
                 </td></tr>
               ) : visible.map(item => (
                 <tr key={item.id} className="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50">
-                  <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-zinc-900 dark:text-zinc-50">
-                    {item["회사명"] ?? ""}
+                  {/* 마지막업데이트날짜 */}
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">
+                    {item["마지막업데이트날짜"] ?? ""}
                   </td>
+                  {/* 현재단계 */}
                   <td className="px-3 py-1.5">
                     {item["현재단계"] ? (
                       <span className="whitespace-nowrap rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950/60 dark:text-sky-200">
@@ -167,18 +179,7 @@ export function PlatformRowsClient() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">
-                    {item["마지막업데이트날짜"] ?? ""}
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className="block max-w-[180px] truncate">{item["마지막상황"] ?? ""}</span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className="block max-w-[140px] truncate text-zinc-500">{item["대기사유"] ?? ""}</span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className="block max-w-[180px] truncate font-medium text-zinc-800 dark:text-zinc-200">{item["다음액션"] ?? ""}</span>
-                  </td>
+                  {/* 우선순위 */}
                   <td className="px-3 py-1.5">
                     {item["우선순위"] ? (
                       <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
@@ -186,6 +187,23 @@ export function PlatformRowsClient() {
                       </span>
                     ) : null}
                   </td>
+                  {/* 회사명 */}
+                  <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-zinc-900 dark:text-zinc-50">
+                    {item["회사명"] ?? ""}
+                  </td>
+                  {/* 마지막상황 */}
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[180px] truncate">{item["마지막상황"] ?? ""}</span>
+                  </td>
+                  {/* 대기사유 */}
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[140px] truncate text-zinc-500">{item["대기사유"] ?? ""}</span>
+                  </td>
+                  {/* 다음액션 */}
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[180px] truncate font-medium text-zinc-800 dark:text-zinc-200">{item["다음액션"] ?? ""}</span>
+                  </td>
+                  {/* 비고 */}
                   <td className="px-3 py-1.5">
                     <span className="block w-28 truncate text-zinc-400">{item["비고"] ?? ""}</span>
                   </td>
@@ -202,7 +220,6 @@ export function PlatformRowsClient() {
         </div>
       )}
 
-      {/* 수정 모달 */}
       {editItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
