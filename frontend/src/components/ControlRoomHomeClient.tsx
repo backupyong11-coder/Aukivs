@@ -761,12 +761,20 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
   return (
     <div className="space-y-2">
       <ul className="max-h-64 space-y-2 overflow-y-auto">
-        {props.items.map((it) => (
-          <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-            <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
-            <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{it.status ? `상태 ${it.status} · ` : ""}{it.uploaded_at}</p>
-          </li>
-        ))}
+        {props.items.map((it) => {
+          const statusLabel = it.status ?? "업로드 예정";
+          const isComplete = statusLabel === "업로드 완료";
+          const platform = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
+          return (
+            <li key={it.uid} className={`rounded-lg border px-3 py-2 text-xs ${isComplete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+              <p className="font-medium text-zinc-900 dark:text-zinc-50">
+                <span className={`mr-1 ${isComplete ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
+                {platform ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">[{platform}]</span> : null}
+                {it.title}
+              </p>
+            </li>
+          );
+        })}
       </ul>
       <Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} →</Link>
     </div>
