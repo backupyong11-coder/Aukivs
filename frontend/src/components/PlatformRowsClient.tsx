@@ -56,7 +56,14 @@ export function PlatformRowsClient() {
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [filterText, setFilterText] = useState("");
-  const [hiddenCompanies, setHiddenCompanies] = useState<Set<string>>(new Set());
+  const [hiddenCompanies, setHiddenCompanies] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("platform.hiddenCompanies");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
   const [companyFilterOpen, setCompanyFilterOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("마지막업데이트날짜");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -144,8 +151,15 @@ export function PlatformRowsClient() {
     setHiddenCompanies(prev => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name); else next.add(name);
+      try { window.localStorage.setItem("platform.hiddenCompanies", JSON.stringify([...next])); } catch { /* ignore */ }
       return next;
     });
+  };
+
+  // 전체보기/전체숨김도 저장
+  const setHiddenAndSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("platform.hiddenCompanies", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenCompanies(next);
   };
 
   const startInline = (rowId: string, key: string, currentVal: string) => {
@@ -229,8 +243,8 @@ export function PlatformRowsClient() {
               <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
                 <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 업체</span>
                 <div className="flex gap-2">
-                  <button onClick={() => setHiddenCompanies(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button onClick={() => setHiddenCompanies(new Set(allCompanies))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                  <button onClick={() => setHiddenAndSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button onClick={() => setHiddenAndSave(new Set(allCompanies))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
                 </div>
               </div>
               <ul className="max-h-60 overflow-y-auto py-1">
