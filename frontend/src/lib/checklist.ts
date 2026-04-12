@@ -4,8 +4,9 @@ export type ChecklistItem = {
   id: string;
   title: string;
   note: string | null;
-  /** 마감일(A열). 없으면 null — 클라이언트는 `checklistDisplayTitle`로 표시 통일 */
   due_date?: string | null;
+  platform?: string | null;
+  category?: string | null;
 };
 
 /** due_date가 있으면 `[마감일] 업무명`, 없으면 업무명만 */
@@ -39,6 +40,8 @@ function parseChecklistItems(raw: unknown): ChecklistItem[] | null {
       title: rec.title,
       note,
       due_date: parseDueDate(rec),
+      platform: typeof rec.platform === "string" ? rec.platform : null,
+      category: typeof rec.category === "string" ? rec.category : null,
     });
   }
   return items;
