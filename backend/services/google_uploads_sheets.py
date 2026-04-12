@@ -52,14 +52,20 @@ def _upload_checkbox_done(cell: str) -> bool:
     return s in ("TRUE", "1", "YES", "Y")
 
 
-def _upload_row_complete(cells: list[str]) -> bool:
-    """A=TRUE 이거나 E='업로드 완료'이면 완료로 보고 목록에서 제외."""
+def _upload_item_status(cells: list[str]) -> str | None:
+    """
+    API status: A=TRUE 이거나 E='업로드 완료'이면 '업로드 완료',
+    그 외에는 E열 값 그대로(비어 있으면 None).
+    """
     if not cells:
-        return False
+        return None
     if _upload_checkbox_done(cells[0]):
-        return True
+        return _UPLOAD_STATUS_COMPLETE
     e = cells[4] if len(cells) > 4 else ""
-    return e.strip() == _UPLOAD_STATUS_COMPLETE
+    e_stripped = e.strip()
+    if e_stripped == _UPLOAD_STATUS_COMPLETE:
+        return _UPLOAD_STATUS_COMPLETE
+    return e_stripped if e_stripped else None
 
 
 def _row_all_blank(row: list[object], width: int) -> bool:
@@ -111,7 +117,7 @@ def _parse_upload_data_rows(
     """
     A2:K 행 배열을 파싱합니다.
     - 완전 빈 행: 조용히 건너뜀.
-    - 완료 행(A=TRUE 또는 E='업로드 완료'): 목록에서 제외.
+    - 완료 여부와 관계없이 파싱 가능한 행은 모두 포함. status는 A·E 기준으로 정규화.
     - title(D열 작품명) 없음: 조용히 건너뜀.
     - uploaded_at(B열) 없음: 조용히 건너뜀.
     - id는 항상 sheet-row-<행번호>.
@@ -125,13 +131,10 @@ def _parse_upload_data_rows(
             continue
 
         c = padded_row_cells(row if isinstance(row, list) else [], _UPLOADS_COLS)
-        if _upload_row_complete(c):
-            continue
 
         uploaded_at = c[1]
         file_name = c[2]
         title = c[3]
-        status_raw = c[4] if len(c) > 4 else ""
 
         if not title:
             continue
@@ -143,7 +146,7 @@ def _parse_upload_data_rows(
 
         item_id = f"sheet-row-{sheet_row}"
         note: str | None = None
-        status: str | None = status_raw if status_raw else None
+        status: str | None = _upload_item_status(c)
         items.append(
             (
                 UploadItem(
