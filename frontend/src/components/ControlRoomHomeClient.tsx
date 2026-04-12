@@ -470,10 +470,7 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">오키브스 관제실</h1>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              PC에 켜두고 버튼으로 조회 · 수정은{" "}
-              <Link href="/checklist" className="font-medium underline">체크</Link>/<Link href="/uploads" className="font-medium underline">업로드</Link>
-            </p>
+
             <label htmlFor="control-query-input" className="sr-only">관제 질문 입력</label>
             <textarea id="control-query-input" rows={2} value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)} placeholder="예: 이번 주 업로드 / 오늘 마감 / 메모 분류 키워드" className="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900" />
           </div>
