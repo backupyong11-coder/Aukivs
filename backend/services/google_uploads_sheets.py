@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
+import re
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -37,12 +37,29 @@ from .sheets_errors import (
 _SEOUL = ZoneInfo("Asia/Seoul")
 _TERMINAL_UPLOAD_STATUSES = frozenset({"완료", "보관", "중단"})
 _NEXT_EPISODE_ALLOWED = frozenset({"대기", "검수중", "작업중"})
+_UPLOADS_COLS = 11
+_UPLOAD_STATUS_COMPLETE = "업로드 완료"
 
 
 def _uploads_a1_range(tab_name: str) -> str:
-    """A~F: id, title, file_name, uploaded_at, note, status."""
+    """A~K: 완료, 업로드일, 플랫폼명, 작품명, 업로드완료여부, …"""
     escaped = tab_name.replace("'", "''")
-    return f"'{escaped}'!A2:F"
+    return f"'{escaped}'!A2:K"
+
+
+def _upload_checkbox_done(cell: str) -> bool:
+    s = (cell or "").strip().upper()
+    return s in ("TRUE", "1", "YES", "Y")
+
+
+def _upload_row_complete(cells: list[str]) -> bool:
+    """A=TRUE 이거나 E='업로드 완료'이면 완료로 보고 목록에서 제외."""
+    if not cells:
+        return False
+    if _upload_checkbox_done(cells[0]):
+        return True
+    e = cells[4] if len(cells) > 4 else ""
+    return e.strip() == _UPLOAD_STATUS_COMPLETE
 
 
 def _row_all_blank(row: list[object], width: int) -> bool:
@@ -77,37 +94,55 @@ def upload_list_uid(item_id: str, uploaded_at: str, sheet_row: int) -> str:
     return f"upload-{item_id}-{uploaded_at}-{sheet_row}"
 
 
+def _parse_sheet_row_from_append_updated_range(updated_range: str | None) -> int:
+    if not updated_range:
+        raise SheetsParseError("[파싱] 행 추가 응답에 updatedRange가 없습니다.")
+    m = re.search(r"!([A-Za-z]+)(\d+)", updated_range)
+    if not m:
+        raise SheetsParseError(
+            f"[파싱] append 범위에서 시작 행을 해석할 수 없습니다: {updated_range!r}"
+        )
+    return int(m.group(2))
+
+
 def _parse_upload_data_rows(
     rows: list[list[object]], tab: str
 ) -> tuple[list[tuple[UploadItem, int]], list[UploadDuplicateIdIssue | UploadRowSkippedIssue]]:
     """
-    A2:F 행 배열을 파싱합니다.
+    A2:K 행 배열을 파싱합니다.
     - 완전 빈 행: 조용히 건너뜀.
-    - title(열 B) 없음: 조용히 건너뜀(빈 칸은 시스템 오류 아님).
-    - uploaded_at(열 D) 없음: 조용히 건너뜀.
+    - 완료 행(A=TRUE 또는 E='업로드 완료'): 목록에서 제외.
+    - title(D열 작품명) 없음: 조용히 건너뜀.
+    - uploaded_at(B열) 없음: 조용히 건너뜀.
+    - id는 항상 sheet-row-<행번호>.
     유효 행 기준 동일 id 가 2행 이상이면 duplicate_id 이슈만 추가합니다.
     """
     items: list[tuple[UploadItem, int]] = []
     issues: list[UploadDuplicateIdIssue | UploadRowSkippedIssue] = []
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        if _row_all_blank(row, 6):
+        if _row_all_blank(row, _UPLOADS_COLS):
             continue
 
-        c = padded_row_cells(row if isinstance(row, list) else [], 6)
-        id_raw, title, file_name, uploaded_at, note_raw, status_raw = c
+        c = padded_row_cells(row if isinstance(row, list) else [], _UPLOADS_COLS)
+        if _upload_row_complete(c):
+            continue
+
+        uploaded_at = c[1]
+        file_name = c[2]
+        title = c[3]
+        status_raw = c[4] if len(c) > 4 else ""
 
         if not title:
             continue
         if not file_name:
             file_name = _DEFAULT_FILE_NAME_PLACEHOLDER
-        # D열(uploaded_at) 비어 있으면 목록·브리핑에서만 제외하고 이슈/경고는 내지 않음
-        # (빈 칸으로 전체 조회가 실패하지 않게 함)
+        # B열(uploaded_at) 비어 있으면 목록·브리핑에서만 제외하고 이슈/경고는 내지 않음
         if not uploaded_at:
             continue
 
-        item_id = id_raw if id_raw else f"sheet-row-{sheet_row}"
-        note: str | None = note_raw if note_raw else None
+        item_id = f"sheet-row-{sheet_row}"
+        note: str | None = None
         status: str | None = status_raw if status_raw else None
         items.append(
             (
@@ -195,9 +230,9 @@ def update_upload_item_in_sheet(
 ) -> None:
     """
     요청에 포함된 키만 갱신합니다.
-    - note: None 또는 빈 문자열이면 E열을 비움
-    - status: None 또는 빈 문자열이면 F열을 비움
-    - uploaded_at: 반드시 비지 않는 문자열(D열). 필드가 없으면 D열은 건드리지 않음
+    - note: 시트에 해당 열이 없어 반영하지 않습니다(API 호환용).
+    - status: None 또는 빈 문자열이면 E열(업로드완료여부)을 비움
+    - uploaded_at: 반드시 비지 않는 문자열(B열 업로드일). 필드가 없으면 B열은 건드리지 않음
     """
     oid = item_id.strip()
     if not oid:
@@ -225,21 +260,20 @@ def update_upload_item_in_sheet(
             f"[찾을수없음] 업로드 목록에 없는 id입니다: {oid}"
         )
 
+    if "status" not in fields and "uploaded_at" not in fields:
+        return
+
     row_num = id_to_row[oid]
     tab_esc = settings.google_uploads_tab.replace("'", "''")
     data: list[dict] = []
-    if "note" in fields:
-        n = fields["note"]
-        text = "" if n is None else str(n).strip()
-        data.append({"range": f"'{tab_esc}'!E{row_num}", "values": [[text]]})
     if "status" in fields:
         s = fields["status"]
         text = "" if s is None else str(s).strip()
-        data.append({"range": f"'{tab_esc}'!F{row_num}", "values": [[text]]})
+        data.append({"range": f"'{tab_esc}'!E{row_num}", "values": [[text]]})
     if "uploaded_at" in fields:
         data.append(
             {
-                "range": f"'{tab_esc}'!D{row_num}",
+                "range": f"'{tab_esc}'!B{row_num}",
                 "values": [[str(fields["uploaded_at"]).strip()]],
             }
         )
@@ -307,8 +341,8 @@ def create_upload_item_in_sheet(
 ) -> UploadItem:
     """
     업로드 탭 맨 아래에 행 1개를 추가합니다.
-    A=id(UUID), B=title, C=file_name(비우면 기본 플레이스홀더), D=uploaded_at(비우면 서버 시각),
-    E=note, F=status.
+    A=완료 FALSE, B=업로드일(비우면 서버 시각), C=플랫폼명(비우면 기본 플레이스홀더),
+    D=작품명, E=업로드완료여부, F~K 빈칸.
     """
     t = str(title).strip()
     if not t:
@@ -327,33 +361,48 @@ def create_upload_item_in_sheet(
         )
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
-    new_id = str(uuid.uuid4())
 
     c_raw = (file_name or "").strip()
     c_cell = c_raw if c_raw else _DEFAULT_FILE_NAME_PLACEHOLDER
 
-    d_raw = (uploaded_at or "").strip()
-    d_cell = d_raw if d_raw else _now_uploaded_at_iso_seoul()
+    b_raw = (uploaded_at or "").strip()
+    b_cell = b_raw if b_raw else _now_uploaded_at_iso_seoul()
 
-    e_cell = "" if note is None else str(note).strip()
-    f_cell = "" if status is None else str(status).strip()
+    e_cell = "" if status is None else str(status).strip()
+    _ = note
 
     tab_esc = settings.google_uploads_tab.replace("'", "''")
-    range_a1 = f"'{tab_esc}'!A:F"
-    append_rows_to_sheet_range(
+    range_a1 = f"'{tab_esc}'!A:K"
+    updated_range = append_rows_to_sheet_range(
         cred_path,
         spreadsheet_id,
         range_a1,
-        [[new_id, t, c_cell, d_cell, e_cell, f_cell]],
+        [
+            [
+                False,
+                b_cell,
+                c_cell,
+                t,
+                e_cell,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        ],
     )
+    sheet_row = _parse_sheet_row_from_append_updated_range(updated_range)
+    new_id = f"sheet-row-{sheet_row}"
 
-    note_out: str | None = e_cell if e_cell else None
-    status_out: str | None = f_cell if f_cell else None
+    note_out: str | None = None
+    status_out: str | None = e_cell if e_cell else None
     return UploadItem(
         id=new_id,
         title=t,
         file_name=c_cell,
-        uploaded_at=d_cell,
+        uploaded_at=b_cell,
         note=note_out,
         status=status_out,
     )
@@ -390,7 +439,7 @@ def _find_upload_row_for_next_episode(
     settings: Settings,
     item_id: str,
 ) -> tuple[Path, str, int, str | None]:
-    """id에 해당하는 첫 파싱 성공 행의 행 번호와 status(F열)."""
+    """id에 해당하는 첫 파싱 성공 행의 행 번호와 status(E열)."""
     cred_path, spreadsheet_id, rows = _upload_sheet_rows(settings)
     oid = item_id.strip()
     if not oid:
@@ -409,7 +458,7 @@ def _find_upload_row_for_next_episode(
 
 def advance_upload_next_episode(settings: Settings, item_id: str) -> None:
     """
-    다음 회차(1차 최소): F열 status를 한 단계 진행하고, D열 uploaded_at을
+    다음 회차(1차 최소): E열 status를 한 단계 진행하고, B열 uploaded_at을
     서버 시각(Asia/Seoul ISO)으로 갱신합니다. 다른 열은 변경하지 않습니다.
     """
     cred_path, spreadsheet_id, sheet_row, current_status = (
@@ -424,7 +473,7 @@ def advance_upload_next_episode(settings: Settings, item_id: str) -> None:
         cred_path,
         spreadsheet_id,
         [
-            {"range": f"'{tab_esc}'!F{sheet_row}", "values": [[new_status]]},
-            {"range": f"'{tab_esc}'!D{sheet_row}", "values": [[new_iso]]},
+            {"range": f"'{tab_esc}'!E{sheet_row}", "values": [[new_status]]},
+            {"range": f"'{tab_esc}'!B{sheet_row}", "values": [[new_iso]]},
         ],
     )
