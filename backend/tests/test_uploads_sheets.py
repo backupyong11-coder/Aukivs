@@ -74,15 +74,18 @@ def test_uploads_200_partial_rows_not_502(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["a", "정상", "x.png", "2026-04-01T10:00:00+09:00", "", ""],
-            ["b", "D열없음", "y.png", "", "", ""],
+            ["FALSE", "2026-04-06", "x.png", "정상", "", "", "", "", "", "", ""],
+            ["FALSE", "", "y.png", "D열없음", "", "", "", "", "", "", ""],
         ],
     )
     r = client.get("/uploads")
     assert r.status_code == 200
     data = r.json()
-    assert len(data["items"]) == 1
-    assert data["items"][0]["id"] == "a"
+    assert len(data["items"]) == 2
+    assert data["items"][0]["id"] == "sheet-row-2"
+    assert data["items"][0]["uploaded_at"] == "2026-04-06T00:00:00+09:00"
+    assert data["items"][1]["id"] == "sheet-row-3"
+    assert data["items"][1]["uploaded_at"] == ""
     assert data["issues"] == []
 
 
@@ -99,8 +102,8 @@ def test_uploads_200_same_id_two_rows_distinct_uid(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["dup", "첫", "a.png", "2026-04-01T10:00:00+09:00", "", ""],
-            ["dup", "둘", "b.png", "2026-04-02T10:00:00+09:00", "", ""],
+            ["FALSE", "2026-04-01T10:00:00+09:00", "a.png", "첫", "", "", "", "", "", "", ""],
+            ["FALSE", "2026-04-02T10:00:00+09:00", "b.png", "둘", "", "", "", "", "", "", ""],
         ],
     )
     r = client.get("/uploads")
@@ -109,11 +112,9 @@ def test_uploads_200_same_id_two_rows_distinct_uid(
     assert len(data["items"]) == 2
     uids = {data["items"][0]["uid"], data["items"][1]["uid"]}
     assert len(uids) == 2
-    dup_issues = [x for x in data["issues"] if x.get("kind") == "duplicate_id"]
-    assert len(dup_issues) == 1
-    assert dup_issues[0]["id"] == "dup"
-    assert dup_issues[0]["sheet_rows"] == [2, 3]
-    assert "중복" in dup_issues[0]["message"]
+    ids = {data["items"][0]["id"], data["items"][1]["id"]}
+    assert ids == {"sheet-row-2", "sheet-row-3"}
+    assert data["issues"] == []
 
 
 def test_uploads_200_same_id_three_rows_all_in_duplicate_issue(
@@ -129,17 +130,16 @@ def test_uploads_200_same_id_three_rows_all_in_duplicate_issue(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["x", "a", "1.png", "2026-04-01T10:00:00+09:00", "", ""],
-            ["x", "b", "2.png", "2026-04-02T10:00:00+09:00", "", ""],
-            ["x", "c", "3.png", "2026-04-03T10:00:00+09:00", "", ""],
+            ["FALSE", "2026-04-01T10:00:00+09:00", "1.png", "a", "", "", "", "", "", "", ""],
+            ["FALSE", "2026-04-02T10:00:00+09:00", "2.png", "b", "", "", "", "", "", "", ""],
+            ["FALSE", "2026-04-03T10:00:00+09:00", "3.png", "c", "", "", "", "", "", "", ""],
         ],
     )
     r = client.get("/uploads")
     assert r.status_code == 200
     data = r.json()
-    dup_issues = [x for x in data["issues"] if x.get("kind") == "duplicate_id"]
-    assert len(dup_issues) == 1
-    assert dup_issues[0]["sheet_rows"] == [2, 3, 4]
+    assert len(data["items"]) == 3
+    assert data["issues"] == []
 
 
 def test_uploads_200_row_skip_and_duplicate_together(
@@ -155,17 +155,18 @@ def test_uploads_200_row_skip_and_duplicate_together(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["d", "정상1", "a.png", "2026-04-01T10:00:00+09:00", "", ""],
-            ["d", "정상2", "b.png", "2026-04-02T10:00:00+09:00", "", ""],
-            ["e", "누락", "c.png", "", "", ""],
+            ["FALSE", "2026-04-01T10:00:00+09:00", "a.png", "정상1", "", "", "", "", "", "", ""],
+            ["FALSE", "2026-04-02T10:00:00+09:00", "b.png", "정상2", "", "", "", "", "", "", ""],
+            ["FALSE", "", "c.png", "누락", "", "", "", "", "", "", ""],
         ],
     )
     r = client.get("/uploads")
     assert r.status_code == 200
     data = r.json()
-    kinds = {x["kind"] for x in data["issues"]}
-    assert kinds == {"duplicate_id"}
-    assert len(data["items"]) == 2
+    assert data["issues"] == []
+    assert len(data["items"]) == 3
+    assert data["items"][2]["title"] == "누락"
+    assert data["items"][2]["uploaded_at"] == ""
 
 
 def test_uploads_200_all_rows_unusable(
@@ -181,8 +182,8 @@ def test_uploads_200_all_rows_unusable(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["", "", "", "", "", ""],
-            ["x", "", "a.png", "2026-04-01T10:00:00+09:00", "", ""],
+            ["", "", "", "", "", "", "", "", "", "", ""],
+            ["FALSE", "2026-04-01T10:00:00+09:00", "a.png", "", "", "", "", "", "", "", ""],
         ],
     )
     r = client.get("/uploads")
@@ -233,7 +234,7 @@ def test_fetch_upload_list_tolerates_missing_file_name_no_raise(
     monkeypatch.setattr(
         "services.google_uploads_sheets.read_sheet_tab_values",
         lambda *_a, **_k: [
-            ["", "제목만", "", "2026-01-01T00:00:00+09:00", ""],
+            ["FALSE", "2026-01-01T00:00:00+09:00", "", "제목만", "", "", "", "", "", "", ""],
         ],
     )
     settings = Settings(

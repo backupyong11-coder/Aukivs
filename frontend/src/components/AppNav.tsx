@@ -7,6 +7,9 @@ import { SidebarMemoPad } from "@/components/SidebarMemoPad";
 
 const links = [
   { href: "/", label: "관제실", title: "PC 관제판(첫 화면)" },
+  { href: "/tasks", label: "업무정리", title: "업무정리 시트 작업" },
+  { href: "/upload-rows", label: "업로드정리", title: "업로드정리 시트 작업" },
+  { href: "/platforms", label: "플랫폼정리", title: "플랫폼정리 시트 작업" },
   { href: "/checklist", label: "체크 편집", title: "체크리스트 시트 작업" },
   { href: "/uploads", label: "업로드 편집", title: "업로드 시트 작업" },
   { href: "/settings", label: "설정", title: "연결·환경" },

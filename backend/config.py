@@ -62,6 +62,7 @@ class Settings:
     google_memo_tab: str
     google_platform_tab: str
     google_works_tab: str
+    google_tasks_tab: str
     openai_api_key: str | None
     openai_model: str
     openai_timeout_sec: float
@@ -75,6 +76,7 @@ def load_settings() -> Settings:
     memo_tab = os.getenv("GOOGLE_MEMO_TAB", "메모장").strip() or "메모장"
     platform_tab = os.getenv("GOOGLE_PLATFORM_TAB", "플랫폼마스터").strip() or "플랫폼마스터"
     works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품마스터").strip() or "작품마스터"
+    tasks_tab = os.getenv("GOOGLE_TASKS_TAB", "업무정리").strip() or "업무정리"
     raw_key = os.getenv("OPENAI_API_KEY")
     openai_key = raw_key.strip() if raw_key and str(raw_key).strip() else None
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
@@ -92,6 +94,7 @@ def load_settings() -> Settings:
         google_memo_tab=memo_tab,
         google_platform_tab=platform_tab,
         google_works_tab=works_tab,
+        google_tasks_tab=tasks_tab,
         openai_api_key=openai_key,
         openai_model=openai_model,
         openai_timeout_sec=openai_timeout,

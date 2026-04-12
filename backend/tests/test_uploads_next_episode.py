@@ -35,12 +35,17 @@ def test_next_episode_200_mocked_sheet(
             "spreadsid",
             [
                 [
-                    "u1",
-                    "제목",
-                    "a.png",
+                    "FALSE",
                     "2026-04-01T10:00:00+09:00",
-                    "",
+                    "a.png",
+                    "제목",
                     "대기",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
                 ],
             ],
         )
@@ -58,16 +63,17 @@ def test_next_episode_200_mocked_sheet(
         "services.google_uploads_sheets.batch_update_sheet_values",
         fake_batch,
     )
-    r = client.post("/uploads/next-episode", json={"id": "u1"})
+    r = client.post("/uploads/next-episode", json={"id": "sheet-row-2"})
     assert r.status_code == 200
     assert r.json() == {"advanced": True}
     assert len(batches) == 1
     _, _, data = batches[0]
     assert len(data) == 2
     assert data[0]["values"] == [["검수중"]]
-    assert "'업로드운영'!F2" in data[0]["range"] or "!F2" in data[0]["range"]
+    assert "'업로드운영'!E2" in data[0]["range"] or "!E2" in data[0]["range"]
     d_val = data[1]["values"][0][0]
     assert "+09:00" in d_val or d_val.endswith("+09:00")
+    assert "'업로드운영'!B2" in data[1]["range"] or "!B2" in data[1]["range"]
 
 
 def test_next_episode_400_invalid_terminal_status(
@@ -81,12 +87,17 @@ def test_next_episode_400_invalid_terminal_status(
             "spreadsid",
             [
                 [
-                    "u1",
-                    "제목",
-                    "a.png",
+                    "FALSE",
                     "2026-04-01T10:00:00+09:00",
-                    "",
+                    "a.png",
+                    "제목",
                     "완료",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
                 ],
             ],
         )
@@ -99,7 +110,7 @@ def test_next_episode_400_invalid_terminal_status(
         "services.google_uploads_sheets.batch_update_sheet_values",
         lambda *_a, **_k: None,
     )
-    r = client.post("/uploads/next-episode", json={"id": "u1"})
+    r = client.post("/uploads/next-episode", json={"id": "sheet-row-2"})
     assert r.status_code == 400
     assert "[유효하지않은상태]" in r.json().get("detail", "")
 
@@ -115,12 +126,17 @@ def test_next_episode_400_unknown_status(
             "spreadsid",
             [
                 [
-                    "u1",
-                    "제목",
-                    "a.png",
+                    "FALSE",
                     "2026-04-01T10:00:00+09:00",
-                    "",
+                    "a.png",
+                    "제목",
                     "임의상태",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
                 ],
             ],
         )
@@ -129,7 +145,7 @@ def test_next_episode_400_unknown_status(
         "services.google_uploads_sheets._upload_sheet_rows",
         fake_rows,
     )
-    r = client.post("/uploads/next-episode", json={"id": "u1"})
+    r = client.post("/uploads/next-episode", json={"id": "sheet-row-2"})
     assert r.status_code == 400
     assert "[유효하지않은상태]" in r.json().get("detail", "")
 
@@ -141,12 +157,17 @@ def test_next_episode_404(client: TestClient, monkeypatch: pytest.MonkeyPatch, e
             "spreadsid",
             [
                 [
-                    "other",
-                    "제목",
-                    "a.png",
+                    "FALSE",
                     "2026-04-01T10:00:00+09:00",
-                    "",
+                    "a.png",
+                    "제목",
                     "대기",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
                 ],
             ],
         )

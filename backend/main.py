@@ -68,6 +68,22 @@ from services.google_uploads_sheets import (
     fetch_uploads_from_google_sheets,
     update_upload_item_in_sheet,
 )
+from services.google_tasks_sheets import (
+    fetch_tasks,
+    create_task,
+    update_task,
+    delete_task,
+)
+from services.google_upload_rows_sheets import (
+    fetch_upload_rows,
+    create_upload_row,
+    update_upload_row,
+    delete_upload_row,
+)
+from services.google_platform_rows_sheets import (
+    fetch_platforms,
+    update_platform,
+)
 from services.sheets_errors import (
     SheetsConfigurationError,
     SheetsFetchError,
@@ -411,3 +427,156 @@ def get_briefing_today() -> BriefingTodayResponse:
         upload_rows,
         warnings=merged_warnings,
     )
+
+
+# ── 업무정리 탭 ─────────────────────────────────────────────────────
+@app.get("/tasks")
+def get_tasks():
+    settings = load_settings()
+    try:
+        return fetch_tasks(settings)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception:
+        return []
+
+
+@app.post("/tasks/create")
+def post_tasks_create(body: dict):
+    settings = load_settings()
+    try:
+        return create_task(settings, body)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/tasks/update")
+def post_tasks_update(body: dict):
+    settings = load_settings()
+    task_id = str(body.pop("id", "")).strip()
+    if not task_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        update_task(settings, task_id, body)
+        return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/tasks/delete")
+def post_tasks_delete(body: dict):
+    settings = load_settings()
+    task_id = str(body.get("id", "")).strip()
+    if not task_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        delete_task(settings, task_id)
+        return {"deleted": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ── 업로드정리 탭 ────────────────────────────────────────────────────
+@app.get("/upload-rows")
+def get_upload_rows():
+    settings = load_settings()
+    try:
+        return fetch_upload_rows(settings)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception:
+        return []
+
+
+@app.post("/upload-rows/create")
+def post_upload_rows_create(body: dict):
+    settings = load_settings()
+    try:
+        return create_upload_row(settings, body)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/upload-rows/update")
+def post_upload_rows_update(body: dict):
+    settings = load_settings()
+    row_id = str(body.pop("id", "")).strip()
+    if not row_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        update_upload_row(settings, row_id, body)
+        return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/upload-rows/delete")
+def post_upload_rows_delete(body: dict):
+    settings = load_settings()
+    row_id = str(body.get("id", "")).strip()
+    if not row_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        delete_upload_row(settings, row_id)
+        return {"deleted": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ── 플랫폼정리 탭 ────────────────────────────────────────────────────
+@app.get("/platform-rows")
+def get_platform_rows():
+    settings = load_settings()
+    try:
+        return fetch_platforms(settings)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception:
+        return []
+
+
+@app.post("/platform-rows/update")
+def post_platform_rows_update(body: dict):
+    settings = load_settings()
+    platform_id = str(body.pop("id", "")).strip()
+    if not platform_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        update_platform(settings, platform_id, body)
+        return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e

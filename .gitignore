@@ -35,3 +35,4 @@ coverage/
 
 # --- IDE / 로컬 도구 (저장소에 불필요) ---
 .codebuddy/
+.codebuddy
