@@ -587,7 +587,7 @@ export function ControlRoomHomeClient() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
-                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.status ? <span className="mr-1 text-zinc-500">[{it.status}]</span> : null}{it.title}</li>)}</ul>}
+                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => <li key={it.uid} className="rounded border border-zinc-200 px-2 py-1 text-xs">{it.status ? <span className="mr-1 text-zinc-500">[{it.status}]</span> : null}{it.file_name && it.file_name !== "(파일명 미입력)" ? <span className="mr-1 text-zinc-400">[{it.file_name}]</span> : null}{it.title}</li>)}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">메모 ({memos.length}건)</p>
