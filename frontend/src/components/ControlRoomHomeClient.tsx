@@ -173,8 +173,13 @@ export function ControlRoomHomeClient() {
     const skipped = uploads.issues.filter((x) => x.kind === "row_skipped");
     const incompleteUploads = uploads.items.filter((it) => uploadLooksIncomplete(it.status)).length;
     const dataOdd = skipped.length + briefing.warnings.length + dupIssues.length;
+    const todayYmd = formatSeoulYmd(new Date());
+    const dueTodayCheck = hub.checklist.filter((it) => {
+      const due = normalizeSheetDateYmd(it.due_date ?? "");
+      return due === todayYmd;
+    }).length;
     return {
-      dueTodayCheck: briefing.summary.today_checklist_count,
+      dueTodayCheck,
       incompleteUploads,
       todayUploadBriefing: briefing.summary.today_upload_count,
       dataOdd,
@@ -630,7 +635,7 @@ export function ControlRoomHomeClient() {
             <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
               <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드 요약</h2>
               <ul className="mt-2 grid grid-cols-2 gap-2">
-                <SidebarStat label="오늘 마감(체크)" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
+                <SidebarStat label="오늘 마감" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
                 <SidebarStat label="미완료 업로드" value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
                 <SidebarStat label="데이터 주의" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
                 <SidebarStat label="중복 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
