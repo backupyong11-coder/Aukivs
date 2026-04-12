@@ -80,15 +80,15 @@ export type UploadSuggestReviewItem = {
 
 export type UploadSuggestResponse =
   | {
-      mode: "prioritize";
-      summary: string;
-      items: UploadSuggestPrioritizeItem[];
-    }
+    mode: "prioritize";
+    summary: string;
+    items: UploadSuggestPrioritizeItem[];
+  }
   | {
-      mode: "review";
-      summary: string;
-      items: UploadSuggestReviewItem[];
-    };
+    mode: "review";
+    summary: string;
+    items: UploadSuggestReviewItem[];
+  };
 
 export type SuggestUploadsAiResult =
   | { ok: true; data: UploadSuggestResponse }
@@ -174,7 +174,7 @@ function parseUploadItem(raw: unknown): UploadItem | null {
   const rec = raw as Record<string, unknown>;
   if (typeof rec.id !== "string" || !rec.id.trim()) return null;
   if (typeof rec.title !== "string" || !rec.title.trim()) return null;
-  if (typeof rec.uploaded_at !== "string" || !rec.uploaded_at.trim()) {
+  if (typeof rec.uploaded_at !== "string") {
     return null;
   }
   const fn =
