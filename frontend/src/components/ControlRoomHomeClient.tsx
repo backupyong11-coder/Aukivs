@@ -106,6 +106,7 @@ type HubLoadState =
     platformMaster: PlatformMasterItem[];
     worksMaster: WorksMasterItem[];
     allTasks: Record<string, string>[];
+    uploadRows: Record<string, string>[];
   }
   | { kind: "error"; message: string };
 
@@ -137,7 +138,7 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m, c, pm, wm, tasksRaw] = await Promise.all([
+        const [b, u, m, c, pm, wm, tasksRaw, uploadRowsRaw] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
@@ -145,6 +146,7 @@ export function ControlRoomHomeClient() {
           fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
           fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
           fetch(`${getApiBaseUrl()}/tasks`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
+          fetch(`${getApiBaseUrl()}/upload-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
         ]);
         if (ac.signal.aborted) return;
         if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
@@ -160,6 +162,7 @@ export function ControlRoomHomeClient() {
           platformMaster: pm.ok ? pm.items : [],
           worksMaster: wm.ok ? wm.items : [],
           allTasks: Array.isArray(tasksRaw) ? tasksRaw : [],
+          uploadRows: Array.isArray(uploadRowsRaw) ? uploadRowsRaw : [],
         });
       } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
@@ -674,13 +677,25 @@ export function ControlRoomHomeClient() {
                 const due = it["마감일"] ?? "";
                 return normalizeSheetDateYmd(due) === ymd;
               });
+              const launchesOnDay = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
               openPanel({
                 kind: "render", title: `${y}년 ${m}월 ${d}일 일정`,
                 node: (
                   <div className="space-y-4 text-sm">
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업무 내용 ({allTasksOnDay.length}건)</p>
-                      {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => <li key={i} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs dark:border-amber-900/40 dark:bg-amber-950/30"><span className="text-zinc-500">{[it["분류"], it["관련플랫폼"]].filter(Boolean).join(" / ")}{(it["분류"] || it["관련플랫폼"]) ? " · " : ""}</span><span className="font-medium text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>{it["완료"] === "TRUE" ? <span className="ml-1 text-emerald-600 dark:text-emerald-400">✓</span> : null}</li>)}</ul>}
+                      {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => {
+                          const isDoneTask = it["완료"] === "TRUE";
+                          const cat = it["분류"] ? `[${it["분류"]}]` : "";
+                          const plat = it["관련플랫폼"] ? `[${it["관련플랫폼"]}]` : "";
+                          return (
+                            <li key={i} className={`rounded border px-2 py-1 text-xs ${isDoneTask ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+                              {cat ? <span className={`mr-1 font-medium ${isDoneTask ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>{cat}</span> : null}
+                              {plat ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{plat}</span> : null}
+                              <span className="text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>
+                            </li>
+                          );
+                        })}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
@@ -697,6 +712,17 @@ export function ControlRoomHomeClient() {
                           );
                         })}</ul>}
                     </div>
+                    {launchesOnDay.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-semibold text-red-500">🚀 런칭일 ({launchesOnDay.length}건)</p>
+                        <ul className="mt-1 space-y-1">{launchesOnDay.map((it, i) => (
+                          <li key={i} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs dark:border-red-900/40 dark:bg-red-950/30">
+                            {it["플랫폼명"] ? <span className="mr-1 font-medium text-red-700 dark:text-red-300">[{it["플랫폼명"]}]</span> : null}
+                            <span className="text-zinc-900 dark:text-zinc-50">{it["작품명"] ?? ""}</span>
+                          </li>
+                        ))}</ul>
+                      </div>
+                    ) : null}
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">메모 ({memos.length}건)</p>
                       {memos.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{memos.map((memo) => <li key={memo.sheet_row} className="rounded border border-zinc-200 px-2 py-1 text-xs">{memo.content}</li>)}</ul>}
@@ -762,26 +788,29 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
   const todayYmd = formatSeoulYmd(new Date());
 
   const activityMap = useMemo(() => {
-    if (hub.kind !== "ready") return new Map<string, { uploads: number; memos: number; checklist: number }>();
-    const map = new Map<string, { uploads: number; memos: number; checklist: number }>();
+    if (hub.kind !== "ready") return new Map<string, { uploads: number; tasks: number; launches: number }>();
+    const map = new Map<string, { uploads: number; tasks: number; launches: number }>();
+    const def = () => ({ uploads: 0, tasks: 0, launches: 0 });
+    // 업로드 점 (파란색)
     for (const it of hub.uploads.items) {
       const ymd = formatSeoulYmd(new Date(Date.parse(it.uploaded_at)));
       if (!ymd) continue;
-      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
+      const cur = map.get(ymd) ?? def();
       map.set(ymd, { ...cur, uploads: cur.uploads + 1 });
     }
-    for (const memo of hub.memos) {
-      const ymd = normalizeSheetDateYmd(memo.memo_date ?? "");
+    // 업무 점 (노란색) - 업무정리 전체 마감일 기준
+    for (const it of hub.allTasks) {
+      const ymd = normalizeSheetDateYmd(it["마감일"] ?? "");
       if (!ymd) continue;
-      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
-      map.set(ymd, { ...cur, memos: cur.memos + 1 });
+      const cur = map.get(ymd) ?? def();
+      map.set(ymd, { ...cur, tasks: cur.tasks + 1 });
     }
-    for (const it of hub.checklist) {
-      const due = it.due_date ?? it.id ?? "";
-      const ymd = normalizeSheetDateYmd(due);
+    // 런칭일 점 (빨간색) - 업로드정리 런칭일 기준
+    for (const it of hub.uploadRows) {
+      const ymd = normalizeSheetDateYmd(it["런칭일"] ?? "");
       if (!ymd) continue;
-      const cur = map.get(ymd) ?? { uploads: 0, memos: 0, checklist: 0 };
-      map.set(ymd, { ...cur, checklist: cur.checklist + 1 });
+      const cur = map.get(ymd) ?? def();
+      map.set(ymd, { ...cur, launches: cur.launches + 1 });
     }
     return map;
   }, [hub]);
@@ -809,14 +838,22 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
           if (!d) return <div key={i} />;
           const ymd = `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const act = activityMap.get(ymd);
-          const hasDot = (act?.uploads ?? 0) + (act?.memos ?? 0) + (act?.checklist ?? 0) > 0;
+          const hasUpload = (act?.uploads ?? 0) > 0;
+          const hasTask = (act?.tasks ?? 0) > 0;
+          const hasLaunch = (act?.launches ?? 0) > 0;
           const isToday = ymd === todayYmd;
           return (
             <button key={`${ymd}-${i}`} type="button" disabled={!ready} onClick={() => onDayClick(ymd)}
               className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isToday ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}
             >
               <span>{d}</span>
-              {hasDot ? <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-sky-500" aria-hidden /> : null}
+              {(hasUpload || hasTask || hasLaunch) ? (
+                <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
+                  {hasTask    ? <span className="h-1 w-1 rounded-full bg-amber-400" /> : null}
+                  {hasUpload  ? <span className="h-1 w-1 rounded-full bg-sky-500" /> : null}
+                  {hasLaunch  ? <span className="h-1 w-1 rounded-full bg-red-500" /> : null}
+                </span>
+              ) : null}
             </button>
           );
         })}
