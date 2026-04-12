@@ -59,6 +59,16 @@ def _due_cell(cells: list[str]) -> str | None:
     return raw if raw else None
 
 
+def _platform_cell(cells: list[str]) -> str | None:
+    raw = cells[2].strip() if len(cells) > 2 else ""
+    return raw if raw else None
+
+
+def _category_cell(cells: list[str]) -> str | None:
+    raw = cells[3].strip() if len(cells) > 3 else ""
+    return raw if raw else None
+
+
 def _row_status_f(cells: list[str]) -> str:
     if len(cells) < _CHECKLIST_COLS:
         return ""
@@ -83,7 +93,8 @@ def _parse_sheet_row_from_append_updated_range(updated_range: str | None) -> int
 def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem]:
     """
     시트 탭의 A2:K를 읽습니다.
-    - B열: 마감일(due_date), E열: 업무명(title), H열: 상태 — '완료'이면 제외
+    - B열: 마감일(due_date), C열: 관련플랫폼(platform), D열: 분류(category),
+      E열: 업무명(title), H열: 상태 — '완료'이면 제외
     - id는 항상 sheet-row-<행번호>
     - note는 응답에서 항상 None
     1행은 헤더용, 2행부터 데이터입니다.
@@ -119,8 +130,17 @@ def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem
 
         item_id = _sheet_row_id(sheet_row)
         due = _due_cell(cells)
+        platform = _platform_cell(cells)
+        category = _category_cell(cells)
         items.append(
-            ChecklistItem(id=item_id, title=title, note=None, due_date=due),
+            ChecklistItem(
+                id=item_id,
+                title=title,
+                note=None,
+                due_date=due,
+                platform=platform,
+                category=category,
+            ),
         )
 
     return items
@@ -169,8 +189,20 @@ def fetch_checklist_for_briefing(
 
         item_id = _sheet_row_id(sheet_row)
         due = _due_cell(cells)
+        platform = _platform_cell(cells)
+        category = _category_cell(cells)
         out.append(
-            (ChecklistItem(id=item_id, title=title, note=None, due_date=due), sheet_row),
+            (
+                ChecklistItem(
+                    id=item_id,
+                    title=title,
+                    note=None,
+                    due_date=due,
+                    platform=platform,
+                    category=category,
+                ),
+                sheet_row,
+            ),
         )
 
     return out, warnings

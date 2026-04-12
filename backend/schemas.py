@@ -13,11 +13,19 @@ class MasterTabItemsResponse(BaseModel):
 
 class ChecklistItem(BaseModel):
     id: str = Field(..., description="항목 식별자 (시트 행 기준 sheet-row-N)")
-    title: str = Field(..., description="업무명(B열)")
+    title: str = Field(..., description="업무명(E열)")
     note: str | None = Field(None, description="부가 설명(레거시·생성 API 호환, 시트 신규 구조에서는 미사용)")
     due_date: str | None = Field(
         default=None,
-        description="마감일(A열) 문자열, 비어 있으면 null",
+        description="마감일(B열) 문자열, 비어 있으면 null",
+    )
+    platform: str | None = Field(
+        default=None,
+        description="관련플랫폼(C열), 비어 있으면 null",
+    )
+    category: str | None = Field(
+        default=None,
+        description="분류(D열), 비어 있으면 null",
     )
 
 
