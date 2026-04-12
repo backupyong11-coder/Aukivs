@@ -377,6 +377,90 @@ export function ControlRoomHomeClient() {
       return;
     }
 
+    if (id === "platform_stage") {
+      openPanel({
+        kind: "render", title: "플랫폼 현재단계",
+        node: (
+          <div className="space-y-2 text-sm">
+            {hub.platformMaster.length === 0 ? <p className="text-zinc-500">플랫폼 데이터 없음</p> : (
+              <ul className="max-h-80 space-y-1.5 overflow-y-auto">
+                {hub.platformMaster.map((p, i) => (
+                  <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-50">{p["회사명"] ?? ""}</span>
+                    {p["현재단계"] ? <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800 dark:bg-sky-950/60 dark:text-sky-200">{p["현재단계"]}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
+
+    if (id === "platform_status") {
+      openPanel({
+        kind: "render", title: "플랫폼 마지막상황",
+        node: (
+          <div className="space-y-2 text-sm">
+            {hub.platformMaster.length === 0 ? <p className="text-zinc-500">플랫폼 데이터 없음</p> : (
+              <ul className="max-h-80 space-y-1.5 overflow-y-auto">
+                {hub.platformMaster.filter(p => p["마지막상황"] || p["마지막 상황"]).map((p, i) => (
+                  <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-50">{p["회사명"] ?? ""}</span>
+                    <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">{p["마지막상황"] || p["마지막 상황"] || ""}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
+
+    if (id === "platform_waiting") {
+      openPanel({
+        kind: "render", title: "플랫폼 대기사유",
+        node: (
+          <div className="space-y-2 text-sm">
+            {hub.platformMaster.length === 0 ? <p className="text-zinc-500">플랫폼 데이터 없음</p> : (
+              <ul className="max-h-80 space-y-1.5 overflow-y-auto">
+                {hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
+                  <li key={i} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-50">{p["회사명"] ?? ""}</span>
+                    <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">{p["대기사유"]}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
+
+    if (id === "platform_action") {
+      openPanel({
+        kind: "render", title: "플랫폼 다음액션",
+        node: (
+          <div className="space-y-2 text-sm">
+            {hub.platformMaster.length === 0 ? <p className="text-zinc-500">플랫폼 데이터 없음</p> : (
+              <ul className="max-h-80 space-y-1.5 overflow-y-auto">
+                {hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음").map((p, i) => (
+                  <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-50">{p["회사명"] ?? ""}</span>
+                    <p className="mt-0.5 font-medium text-zinc-800 dark:text-zinc-200">{p["다음액션"]}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ),
+      });
+      return;
+    }
+
     if (id === "memo_all") {
       openPanel({
         kind: "render", title: "메모장 (시트 전체)",
@@ -485,11 +569,13 @@ export function ControlRoomHomeClient() {
           <div className="flex flex-wrap gap-2">
             <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "오늘 업로드")}>오늘 업로드</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("week_upload", "이번 주 업로드")}>이번 주 업로드</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "미완료 업로드")}>미완료 업로드</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_triage", "오늘 브리핑")}>오늘 브리핑</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 마감")}>오늘 마감</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "미완료 업무")}>미완료 업무</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재단계")}>현재단계</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_status", "마지막상황")}>마지막상황</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_waiting", "대기사유")}>대기사유</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_action", "다음액션")}>다음액션</button>
           </div>
         </div>
       </header>
