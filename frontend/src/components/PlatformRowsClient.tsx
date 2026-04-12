@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 
-// 수정 가능 필드
+type SortKey = "회사명" | "현재단계" | "마지막업데이트날짜" | "마지막상황" | "대기사유" | "다음액션" | "우선순위";
+type SortDir = "asc" | "desc";
+
 const EDIT_FIELDS: { key: string; label: string }[] = [
   { key: "현재단계", label: "현재단계" },
   { key: "마지막상황", label: "마지막상황" },
@@ -14,9 +16,6 @@ const EDIT_FIELDS: { key: string; label: string }[] = [
   { key: "우선순위", label: "우선순위" },
   { key: "비고", label: "비고" },
 ];
-
-// 목록에서 보여줄 조회 필드
-const VIEW_FIELDS = ["현재단계", "마지막업데이트날짜", "마지막상황", "대기사유", "다음액션", "우선순위"];
 
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
@@ -27,10 +26,10 @@ async function apiFetch(path: string, body?: object) {
   });
   const text = await res.text();
   if (!res.ok) {
-    try { const j = JSON.parse(text); throw new Error(j.detail ?? text); }
+    try { const j = JSON.parse(text) as { detail?: string }; throw new Error(j.detail ?? text); }
     catch { throw new Error(text); }
   }
-  return JSON.parse(text);
+  return JSON.parse(text) as unknown;
 }
 
 export function PlatformRowsClient() {
@@ -41,13 +40,14 @@ export function PlatformRowsClient() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("마지막업데이트날짜");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
       const items = await apiFetch("/platform-rows");
-      setState({ kind: "ready", items });
+      setState({ kind: "ready", items: items as PlatformRow[] });
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
@@ -55,14 +55,28 @@ export function PlatformRowsClient() {
 
   useEffect(() => { void load(); }, [refreshKey, load]);
 
-  const visible = state.kind === "ready"
-    ? state.items.filter(it =>
-        !filterText ||
+  const visible = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    let items = state.items;
+    if (filterText) {
+      items = items.filter(it =>
         (it["회사명"] ?? "").includes(filterText) ||
         (it["현재단계"] ?? "").includes(filterText) ||
-        (it["플랫폼명"] ?? "").includes(filterText)
-      )
-    : [];
+        (it["플랫폼명"] ?? "").includes(filterText) ||
+        (it["다음액션"] ?? "").includes(filterText)
+      );
+    }
+    return [...items].sort((a, b) => {
+      const va = a[sortKey] ?? "";
+      const vb = b[sortKey] ?? "";
+      return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
+    });
+  }, [state, filterText, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
 
   const openEdit = (item: PlatformRow) => {
     setActionError(null);
@@ -84,11 +98,19 @@ export function PlatformRowsClient() {
     } finally { setSaving(false); }
   };
 
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
+  const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="회사명·플랫폼명·단계 검색"
+          placeholder="회사명·플랫폼명·단계·다음액션 검색"
           className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
@@ -102,7 +124,8 @@ export function PlatformRowsClient() {
 
       {state.kind === "loading" && (
         <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />불러오는 중…
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+          불러오는 중…
         </div>
       )}
       {state.kind === "error" && (
@@ -112,67 +135,70 @@ export function PlatformRowsClient() {
       )}
 
       {state.kind === "ready" && (
-        <div className="space-y-2">
-          {visible.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-500">항목이 없습니다</p>
-          )}
-          {visible.map(item => {
-            const company = item["회사명"] ?? `행 ${item.sheet_row}`;
-            const platform = item["플랫폼명"] ?? "";
-            const stage = item["현재단계"] ?? "";
-            const priority = item["우선순위"] ?? "";
-            const updated = item["마지막업데이트날짜"] ?? "";
-            const isExpanded = expandedId === item.id;
-
-            return (
-              <div key={item.id} className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-                {/* 헤더 행 */}
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <button onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    className="min-w-0 flex-1 text-left">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-50">{company}</span>
-                      {platform && platform !== company && (
-                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">{platform}</span>
-                      )}
-                      {priority && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">우선: {priority}</span>
-                      )}
-                      {stage && (
-                        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-950/60 dark:text-sky-200">{stage}</span>
-                      )}
-                      {updated && (
-                        <span className="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">갱신 {updated}</span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                      {item["다음액션"] ? `→ ${item["다음액션"]}` : ""}
-                    </p>
-                  </button>
-                  <button onClick={() => openEdit(item)}
-                    className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800">
-                    수정
-                  </button>
-                </div>
-
-                {/* 펼치면 전체 조회 */}
-                {isExpanded && (
-                  <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-                      {Object.entries(item)
-                        .filter(([k]) => !["id","sheet_row"].includes(k) && item[k])
-                        .map(([k, v]) => (
-                          <div key={k}>
-                            <span className="font-medium text-zinc-500 dark:text-zinc-400">{k}: </span>
-                            <span className="text-zinc-800 dark:text-zinc-200">{v}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full min-w-[900px] text-xs">
+            <thead>
+              <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+                <th className={thSort} onClick={() => handleSort("회사명")}>회사명<SortIcon col="회사명"/></th>
+                <th className={thSort} onClick={() => handleSort("현재단계")}>현재단계<SortIcon col="현재단계"/></th>
+                <th className={thSort} onClick={() => handleSort("마지막업데이트날짜")}>마지막업데이트<SortIcon col="마지막업데이트날짜"/></th>
+                <th className={thSort} onClick={() => handleSort("마지막상황")}>마지막상황<SortIcon col="마지막상황"/></th>
+                <th className={thSort} onClick={() => handleSort("대기사유")}>대기사유<SortIcon col="대기사유"/></th>
+                <th className={thSort} onClick={() => handleSort("다음액션")}>다음액션<SortIcon col="다음액션"/></th>
+                <th className={thSort} onClick={() => handleSort("우선순위")}>우선순위<SortIcon col="우선순위"/></th>
+                <th className={thCls}>비고</th>
+                <th className={thCls}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.length === 0 ? (
+                <tr><td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText ? "검색 결과가 없습니다" : "항목이 없습니다"}
+                </td></tr>
+              ) : visible.map(item => (
+                <tr key={item.id} className="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-zinc-900 dark:text-zinc-50">
+                    {item["회사명"] ?? ""}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {item["현재단계"] ? (
+                      <span className="whitespace-nowrap rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950/60 dark:text-sky-200">
+                        {item["현재단계"]}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">
+                    {item["마지막업데이트날짜"] ?? ""}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[180px] truncate">{item["마지막상황"] ?? ""}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[140px] truncate text-zinc-500">{item["대기사유"] ?? ""}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className="block max-w-[180px] truncate font-medium text-zinc-800 dark:text-zinc-200">{item["다음액션"] ?? ""}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {item["우선순위"] ? (
+                      <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
+                        {item["우선순위"]}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <span className="block w-28 truncate text-zinc-400">{item["비고"] ?? ""}</span>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <button onClick={() => openEdit(item)}
+                      className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                      수정
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -192,8 +218,7 @@ export function PlatformRowsClient() {
                   <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
                   <input type="text" value={form[key] ?? ""}
                     onChange={e => setForm({ ...form, [key]: e.target.value })}
-                    className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                  />
+                    className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
                 </label>
               ))}
             </div>
