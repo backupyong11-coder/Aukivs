@@ -5,7 +5,7 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 
 type UploadRow = {
   id: string;
-  sheet_row: number;
+  sheet_row: string;
   완료: string;
   업로드일: string;
   플랫폼명: string;

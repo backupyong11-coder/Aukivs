@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
-type PlatformRow = Record<string, string> & { id: string; sheet_row: number };
+type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 
 // 수정 가능 필드
 const EDIT_FIELDS: { key: string; label: string }[] = [

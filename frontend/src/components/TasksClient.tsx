@@ -5,7 +5,7 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 
 type TaskRow = {
   id: string;
-  sheet_row: number;
+  sheet_row: string;
   완료: string;
   마감일: string;
   관련플랫폼: string;
