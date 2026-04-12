@@ -209,24 +209,28 @@ export function ControlRoomHomeClient() {
     const { briefing, uploads } = hub;
 
     if (id === "due_today") {
-      const checklistUrgent = briefing.urgent_items.filter((x) => x.source === "checklist");
+      const todayYmd = formatSeoulYmd(new Date());
+      const dueTodayItems = hub.checklist.filter((it) => {
+        const due = normalizeSheetDateYmd(it.due_date ?? "");
+        return due === todayYmd;
+      });
       openPanel({
-        kind: "render", title: "오늘 마감·오늘 처리(브리핑)",
+        kind: "render", title: "오늘 마감 업무",
         node: (
           <div className="space-y-3 text-sm text-zinc-800 dark:text-zinc-200">
             <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
-              오늘 집계된 체크 건수:{" "}
-              <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{briefing.summary.today_checklist_count}</span>건.
+              오늘({todayYmd}) 마감인 업무:{" "}
+              <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{dueTodayItems.length}</span>건.
               수정은 <Link href="/checklist" className="font-medium underline">체크 작업</Link>에서 하세요.
             </p>
-            {checklistUrgent.length === 0 ? (
-              <p className="text-zinc-500 dark:text-zinc-400">체크 출처 긴급 후보가 없습니다.</p>
+            {dueTodayItems.length === 0 ? (
+              <p className="text-zinc-500 dark:text-zinc-400">오늘 마감인 업무가 없습니다.</p>
             ) : (
               <ul className="space-y-2">
-                {checklistUrgent.map((it) => (
-                  <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
-                    <p className="font-medium">{it.title}</p>
-                    {it.note ? <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
+                {dueTodayItems.map((it) => (
+                  <li key={it.id} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
+                    {it.platform ? <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{it.platform}{it.category ? ` · ${it.category}` : ""}</p> : null}
                   </li>
                 ))}
               </ul>
