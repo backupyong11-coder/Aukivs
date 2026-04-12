@@ -23,7 +23,7 @@ from .sheets_errors import (
 )
 
 _STATUS_DONE = "완료"
-_CHECKLIST_COLS = 6  # A2:F (마감, 업무명, 플랫폼, 작품, 분류, 상태)
+_CHECKLIST_COLS = 11  # A2:K (완료, 마감, 플랫폼, 분류, 업무명, 작품, 빈칸, 상태, …)
 
 
 def _checklist_row_all_blank(row: list[object], width: int) -> bool:
@@ -36,9 +36,9 @@ def _checklist_row_all_blank(row: list[object], width: int) -> bool:
 
 
 def _checklist_read_range(tab_name: str) -> str:
-    """A~F: 마감일, 업무명, 관련플랫폼, 관련작품, 분류, 상태."""
+    """A~K: 완료, 마감일, 관련플랫폼, 분류, 업무명, 관련작품, 빈칸, 상태, …"""
     escaped = tab_name.replace("'", "''")
-    return f"'{escaped}'!A2:F"
+    return f"'{escaped}'!A2:K"
 
 
 def _pad_checklist_cells(row: list[object]) -> list[str]:
@@ -51,18 +51,18 @@ def _pad_checklist_cells(row: list[object]) -> list[str]:
 
 
 def _title_cell(cells: list[str]) -> str:
-    return cells[1].strip() if len(cells) > 1 else ""
+    return cells[4].strip() if len(cells) > 4 else ""
 
 
 def _due_cell(cells: list[str]) -> str | None:
-    raw = cells[0].strip() if cells else ""
+    raw = cells[1].strip() if len(cells) > 1 else ""
     return raw if raw else None
 
 
 def _row_status_f(cells: list[str]) -> str:
     if len(cells) < _CHECKLIST_COLS:
         return ""
-    return cells[5].strip()
+    return cells[7].strip()
 
 
 def _sheet_row_id(sheet_row: int) -> str:
@@ -82,8 +82,8 @@ def _parse_sheet_row_from_append_updated_range(updated_range: str | None) -> int
 
 def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem]:
     """
-    시트 탭의 A2:F를 읽습니다.
-    - A열: 마감일(due_date), B열: 업무명(title), F열: 상태 — '완료'이면 제외
+    시트 탭의 A2:K를 읽습니다.
+    - B열: 마감일(due_date), E열: 업무명(title), H열: 상태 — '완료'이면 제외
     - id는 항상 sheet-row-<행번호>
     - note는 응답에서 항상 None
     1행은 헤더용, 2행부터 데이터입니다.
@@ -208,7 +208,7 @@ def _build_id_to_sheet_row(settings: Settings) -> tuple[Path, str, dict[str, int
 
 
 def _build_id_to_sheet_row_active(settings: Settings) -> tuple[Path, str, dict[str, int]]:
-    """GET /checklist 에 노출되는 행만 — 제목 있음, F열이 완료 아님."""
+    """GET /checklist 에 노출되는 행만 — 제목 있음, H열이 완료 아님."""
     if not settings.google_service_account_file or not settings.google_sheet_url:
         raise SheetsConfigurationError(
             "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
@@ -247,7 +247,7 @@ def update_checklist_item_in_sheet(
     note: str | None,
 ) -> None:
     """
-    활성 행(미완료) 중 item_id에 해당하는 B열(업무명)만 갱신합니다.
+    활성 행(미완료) 중 item_id에 해당하는 E열(업무명)만 갱신합니다.
     note 인자는 API 호환용이며 시트 신규 열 구조에서는 사용하지 않습니다.
     """
     oid = item_id.strip()
@@ -262,13 +262,13 @@ def update_checklist_item_in_sheet(
 
     row_num = id_to_row[oid]
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    data = [{"range": f"'{tab_esc}'!B{row_num}", "values": [[title]]}]
+    data = [{"range": f"'{tab_esc}'!E{row_num}", "values": [[title]]}]
     batch_update_sheet_values(cred_path, spreadsheet_id, data)
 
 
 def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     """
-    요청 id에 해당하는 행의 F열(상태)을 '완료'로 설정합니다.
+    요청 id에 해당하는 행의 H열(상태)을 '완료'로 설정합니다.
     id는 GET /checklist 와 동일한 규칙(sheet-row-N)과 매칭됩니다.
     """
     if not ids:
@@ -287,7 +287,7 @@ def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     tab_esc = settings.google_checklist_tab.replace("'", "''")
     data = [
         {
-            "range": f"'{tab_esc}'!F{id_to_row[lid]}",
+            "range": f"'{tab_esc}'!H{id_to_row[lid]}",
             "values": [[_STATUS_DONE]],
         }
         for lid in ids
@@ -303,7 +303,7 @@ def create_checklist_item_in_sheet(
 ) -> ChecklistItem:
     """
     체크리스트 탭 맨 아래에 행 1개를 추가합니다.
-    A=마감(빈칸), B=업무명, C~E=빈칸, F=빈칸(미완료). id는 sheet-row-<추가된 행>.
+    A=완료(빈), B~D 빈칸, E=업무명, F~K 빈칸(미완료). id는 sheet-row-<추가된 행>.
     """
     _ = note
     t = str(title).strip()
@@ -325,12 +325,12 @@ def create_checklist_item_in_sheet(
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
 
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    range_a1 = f"'{tab_esc}'!A:F"
+    range_a1 = f"'{tab_esc}'!A:K"
     updated_range = append_rows_to_sheet_range(
         cred_path,
         spreadsheet_id,
         range_a1,
-        [["", t, "", "", "", ""]],
+        [["", "", "", "", t, "", "", "", "", "", ""]],
     )
     sheet_row = _parse_sheet_row_from_append_updated_range(updated_range)
     new_id = _sheet_row_id(sheet_row)
