@@ -691,6 +691,7 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
         <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth - 2, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{"<"}</button>
         <p className="text-sm font-semibold">{viewYear}년 {viewMonth}월</p>
         <button type="button" onClick={() => { const d = new Date(viewYear, viewMonth, 1); setViewYear(d.getFullYear()); setViewMonth(d.getMonth() + 1); }} className="rounded px-2 py-1 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">{">"}</button>
+        <button type="button" onClick={() => { const seoul = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" })); setViewYear(seoul.getFullYear()); setViewMonth(seoul.getMonth() + 1); }} className="ml-1 rounded border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800">오늘</button>
       </div>
       <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-zinc-500">
         {["일", "월", "화", "수", "목", "금", "토"].map((d) => <div key={d}>{d}</div>)}
