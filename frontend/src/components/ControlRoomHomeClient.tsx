@@ -704,8 +704,8 @@ export function ControlRoomHomeClient() {
                           const isComplete = statusLabel === "업로드 완료";
                           const platform = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
                           return (
-                            <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
-                              <span className={`font-medium ${isComplete ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
+                            <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-sky-200 bg-sky-50 dark:border-sky-900/40 dark:bg-sky-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+                              <span className={`font-medium ${isComplete ? "text-sky-700 dark:text-sky-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
                               {platform ? <span className="mx-1 text-zinc-500 dark:text-zinc-400">[{platform}]</span> : " "}
                               <span className="text-zinc-800 dark:text-zinc-200">{it.title}</span>
                             </li>
