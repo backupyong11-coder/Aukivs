@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -95,6 +95,32 @@ def _upload_sheet_rows(settings: Settings) -> tuple[Path, str, list[list[object]
 _DEFAULT_FILE_NAME_PLACEHOLDER = "(파일명 미입력)"
 
 
+def _normalize_uploaded_at_b_cell(raw: str) -> str:
+    """
+    B열 업로드일을 프론트·달력용 ISO로 맞춥니다.
+    YYYY-MM-DD → 해당일 00:00 Asia/Seoul. 이미 ISO 형태면 서울 기준으로 정규화.
+    파싱 불가 시 원문(앞뒤 공백 제거) 그대로.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        try:
+            d = date.fromisoformat(s)
+            dt = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=_SEOUL)
+            return dt.isoformat()
+        except ValueError:
+            return s
+    try:
+        s2 = s[:-1] + "+00:00" if s.endswith("Z") else s
+        dt = datetime.fromisoformat(s2)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_SEOUL)
+        return dt.astimezone(_SEOUL).replace(microsecond=0).isoformat()
+    except ValueError:
+        return s
+
+
 def upload_list_uid(item_id: str, uploaded_at: str, sheet_row: int) -> str:
     """GET /uploads 목록·React key용. 동일 id가 여러 행이어도 행·시각으로 구분."""
     return f"upload-{item_id}-{uploaded_at}-{sheet_row}"
@@ -119,7 +145,7 @@ def _parse_upload_data_rows(
     - 완전 빈 행: 조용히 건너뜀.
     - 완료 여부와 관계없이 파싱 가능한 행은 모두 포함. status는 A·E 기준으로 정규화.
     - title(D열 작품명) 없음: 조용히 건너뜀.
-    - uploaded_at(B열) 없음: 조용히 건너뜀.
+    - B열이 비어 있어도 D열만 있으면 포함. uploaded_at은 "" 또는 ISO 정규화 값.
     - id는 항상 sheet-row-<행번호>.
     유효 행 기준 동일 id 가 2행 이상이면 duplicate_id 이슈만 추가합니다.
     """
@@ -132,7 +158,7 @@ def _parse_upload_data_rows(
 
         c = padded_row_cells(row if isinstance(row, list) else [], _UPLOADS_COLS)
 
-        uploaded_at = c[1]
+        uploaded_at_raw = c[1]
         file_name = c[2]
         title = c[3]
 
@@ -140,9 +166,8 @@ def _parse_upload_data_rows(
             continue
         if not file_name:
             file_name = _DEFAULT_FILE_NAME_PLACEHOLDER
-        # B열(uploaded_at) 비어 있으면 목록·브리핑에서만 제외하고 이슈/경고는 내지 않음
-        if not uploaded_at:
-            continue
+
+        uploaded_at = _normalize_uploaded_at_b_cell(uploaded_at_raw)
 
         item_id = f"sheet-row-{sheet_row}"
         note: str | None = None
