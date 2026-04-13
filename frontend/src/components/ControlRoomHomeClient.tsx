@@ -29,7 +29,6 @@ import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMast
 import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
 import { userFacingListError } from "@/lib/userFacingErrors";
 
-// 서울 시간대 기준 날짜 유틸
 function formatSeoulYmd(date: Date): string {
   const seoul = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
   const y = seoul.getFullYear();
@@ -81,6 +80,18 @@ function uploadLooksIncomplete(status: string | null): boolean {
   return !done.some((x) => s === x || s.includes(x));
 }
 
+function isTrue(v: unknown): boolean {
+  return v === true || String(v).trim().toUpperCase() === "TRUE";
+}
+
+function safeInt(v: unknown): number {
+  try {
+    const s = String(v ?? "").trim();
+    if (!s || s === "-") return 0;
+    return Math.floor(parseFloat(s)) || 0;
+  } catch { return 0; }
+}
+
 const SUGGESTED_QUERIES: { id: string; label: string }[] = [
   { id: "due_today", label: "오늘 마감 뭐야" },
   { id: "week_upload", label: "이번 주 업로드 일정 보여줘" },
@@ -107,6 +118,7 @@ type HubLoadState =
     worksMaster: WorksMasterItem[];
     allTasks: Record<string, string>[];
     uploadRows: Record<string, string>[];
+    platformRows: Record<string, string>[];
   }
   | { kind: "error"; message: string };
 
@@ -117,29 +129,12 @@ type PanelState =
   | { kind: "error"; message: string }
   | { kind: "render"; title: string; node: ReactNode };
 
-// 대시보드 통계 타입
-type DashStats = {
-  today_done: number;
-  today_todo: number;
-  total_done_tasks: number;
-  uploaded_episodes: number;
-  remaining_episodes: number;
-  contracts_done: number;
-  sign_pending: number;
-  meetings: number;
-  subsidy_total: number;
-  subsidy_planned: number;
-  subsidy_waiting: number;
-  subsidy_done: number;
-};
-
 export function ControlRoomHomeClient() {
   const [hub, setHub] = useState<HubLoadState>({ kind: "loading" });
   const [panel, setPanel] = useState<PanelState>({ kind: "welcome" });
   const [queryDraft, setQueryDraft] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [dashStats, setDashStats] = useState<DashStats | null>(null);
 
   const refreshHistory = useCallback(() => {
     setRecent(loadRecentQueries());
@@ -155,7 +150,7 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m, c, pm, wm, tasksRaw, uploadRowsRaw] = await Promise.all([
+        const [b, u, m, c, pm, wm, tasksRaw, uploadRowsRaw, platformRowsRaw] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
@@ -164,6 +159,7 @@ export function ControlRoomHomeClient() {
           fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
           fetch(`${getApiBaseUrl()}/tasks`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
           fetch(`${getApiBaseUrl()}/upload-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
+          fetch(`${getApiBaseUrl()}/platform-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
         ]);
         if (ac.signal.aborted) return;
         if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
@@ -180,6 +176,7 @@ export function ControlRoomHomeClient() {
           worksMaster: wm.ok ? wm.items : [],
           allTasks: Array.isArray(tasksRaw) ? tasksRaw : [],
           uploadRows: Array.isArray(uploadRowsRaw) ? uploadRowsRaw : [],
+          platformRows: Array.isArray(platformRowsRaw) ? platformRowsRaw : [],
         });
       } catch (e: unknown) {
         if (e instanceof Error && e.name === "AbortError") return;
@@ -190,14 +187,6 @@ export function ControlRoomHomeClient() {
     return () => ac.abort();
   }, [hubRefreshKey]);
 
-  // 대시보드 통계 fetch
-  useEffect(() => {
-    fetch(`${getApiBaseUrl()}/stats`)
-      .then(r => r.json())
-      .then(setDashStats)
-      .catch(console.error);
-  }, []);
-
   const metrics = useMemo(() => {
     if (hub.kind !== "ready") return null;
     const { briefing, uploads } = hub;
@@ -206,10 +195,7 @@ export function ControlRoomHomeClient() {
     const incompleteUploads = uploads.items.filter((it) => uploadLooksIncomplete(it.status)).length;
     const dataOdd = skipped.length + briefing.warnings.length + dupIssues.length;
     const todayYmd = formatSeoulYmd(new Date());
-    const dueTodayCheck = hub.checklist.filter((it) => {
-      const due = normalizeSheetDateYmd(it.due_date ?? "");
-      return due === todayYmd;
-    }).length;
+    const dueTodayCheck = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd).length;
     return {
       dueTodayCheck,
       incompleteUploads,
@@ -218,6 +204,35 @@ export function ControlRoomHomeClient() {
       dupIdGroups: dupIssues.length,
       urgent: briefing.urgent_items.length,
       overdueUploadBriefing: briefing.summary.overdue_upload_count,
+    };
+  }, [hub]);
+
+  // 대시보드 통계 — hub 데이터로 프론트에서 계산 (별도 API 없음)
+  const dashStats = useMemo(() => {
+    if (hub.kind !== "ready") return null;
+    const todayYmd = formatSeoulYmd(new Date());
+
+    const today_done       = hub.allTasks.filter(t => isTrue(t["완료"]) && normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd).length;
+    const today_todo       = hub.allTasks.filter(t => !isTrue(t["완료"]) && normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd).length;
+    const total_done_tasks = hub.allTasks.filter(t => isTrue(t["완료"])).length;
+
+    const uploaded_episodes  = hub.uploadRows.filter(r => isTrue(r["완료"])).reduce((s, r) => s + safeInt(r["업로드화수"]), 0);
+    const remaining_episodes = hub.uploadRows.filter(r => !isTrue(r["완료"])).reduce((s, r) => s + safeInt(r["남은업로드화수"]), 0);
+
+    const contracts_done = hub.platformRows.filter(p => (p["계약"] ?? "").trim() === "계약완료").length;
+    const sign_pending   = hub.platformRows.filter(p => (p["계약"] ?? "").trim() === "사인만 남음").length;
+    const meetings       = hub.platformRows.filter(p => (p["미팅"] ?? "").includes("미팅예정")).length;
+
+    const subsidy         = hub.platformRows.filter(p => isTrue(p["지원사업"]));
+    const subsidy_planned = subsidy.filter(p => isTrue(p["예정"])).length;
+    const subsidy_waiting = subsidy.filter(p => isTrue(p["진행중"])).length;
+    const subsidy_done    = subsidy.filter(p => isTrue(p["완료"])).length;
+
+    return {
+      today_done, today_todo, total_done_tasks,
+      uploaded_episodes, remaining_episodes,
+      contracts_done, sign_pending, meetings,
+      subsidy_total: subsidy.length, subsidy_planned, subsidy_waiting, subsidy_done,
     };
   }, [hub]);
 
@@ -242,10 +257,7 @@ export function ControlRoomHomeClient() {
 
     if (id === "due_today") {
       const todayYmd = formatSeoulYmd(new Date());
-      const dueTodayItems = hub.checklist.filter((it) => {
-        const due = normalizeSheetDateYmd(it.due_date ?? "");
-        return due === todayYmd;
-      });
+      const dueTodayItems = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
       openPanel({
         kind: "render", title: "오늘 마감 업무",
         node: (
@@ -513,42 +525,25 @@ export function ControlRoomHomeClient() {
     if (!q) return;
     pushRecentQuery(q);
     refreshHistory();
-
     if (hub.kind !== "ready") {
       openPanel({ kind: "error", message: "데이터 로딩 중입니다. 잠시 후 다시 시도하세요." });
       return;
     }
-
     openPanel({ kind: "loading", label: "AI가 분석 중입니다…" });
-
     try {
       const res = await fetch("/api/ops/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: q,
-          platformMaster: hub.platformMaster,
-          worksMaster: hub.worksMaster,
-          memos: hub.memos,
-        }),
+        body: JSON.stringify({ query: q, platformMaster: hub.platformMaster, worksMaster: hub.worksMaster, memos: hub.memos }),
       });
       const data = await res.json();
-      if (data.error) {
-        openPanel({ kind: "error", message: data.error });
-        return;
-      }
-      openPanel({
-        kind: "render", title: "AI 답변",
-        node: (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-            {data.answer}
-          </div>
-        ),
-      });
+      if (data.error) { openPanel({ kind: "error", message: data.error }); return; }
+      openPanel({ kind: "render", title: "AI 답변", node: <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">{data.answer}</div> });
     } catch (e) {
       openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류가 발생했습니다." });
     }
   }, [hub, openPanel, refreshHistory]);
+
   const submitQuestion = () => { void runQuestion(queryDraft); };
 
   const copyResultPanel = useCallback(async () => {
@@ -586,7 +581,6 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">오키브스 관제실</h1>
-
             <label htmlFor="control-query-input" className="sr-only">관제 질문 입력</label>
             <textarea id="control-query-input" rows={2} value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)} placeholder="예: 이번 주 업로드 / 오늘 마감 / 메모 분류 키워드" className="mt-2 w-full resize-y rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900" />
           </div>
@@ -616,42 +610,23 @@ export function ControlRoomHomeClient() {
         <aside className="space-y-3 lg:col-span-2">
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="text-xs font-semibold uppercase text-zinc-500">플랫폼</h2>
-            <select
-              className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-              aria-label="플랫폼 선택"
-              defaultValue=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!v) return;
-                const q = `${v} 전체정보`;
-                setQueryDraft(q);
-                void runQuestion(q);
-              }}
-            >
+            <select className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="플랫폼 선택" defaultValue=""
+              onChange={(e) => { const v = e.target.value; if (!v) return; const q = `${v} 전체정보`; setQueryDraft(q); void runQuestion(q); }}>
               <option value="">플랫폼 선택…</option>
               {hub.kind === "ready" && Array.from(new Set(hub.platformMaster.map((r) => r["플랫폼명"] ?? r["회사명"] ?? "").filter(Boolean))).map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
             <h2 className="mt-3 text-xs font-semibold uppercase text-zinc-500">작품</h2>
-            <select
-              className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900"
-              aria-label="작품 선택"
-              defaultValue=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!v) return;
-                const q = `${v} 전체정보`;
-                setQueryDraft(q);
-                void runQuestion(q);
-              }}
-            >
+            <select className="mt-2 w-full rounded border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" aria-label="작품 선택" defaultValue=""
+              onChange={(e) => { const v = e.target.value; if (!v) return; const q = `${v} 전체정보`; setQueryDraft(q); void runQuestion(q); }}>
               <option value="">작품 선택…</option>
               {hub.kind === "ready" && Array.from(new Set(hub.worksMaster.map((r) => r["작품명"] ?? "").filter(Boolean))).map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
-            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800" onClick={() => { const q = "전체 플랫폼 목록과 담당자 요약"; setQueryDraft(q); void runQuestion(q); }}>전체정보 보기</button>
+            <button type="button" className="mt-3 w-full rounded-md border border-zinc-400 bg-zinc-100 py-2 text-xs font-medium dark:border-zinc-600 dark:bg-zinc-800"
+              onClick={() => { const q = "전체 플랫폼 목록과 담당자 요약"; setQueryDraft(q); void runQuestion(q); }}>전체정보 보기</button>
           </section>
           <section className="rounded-lg border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950">
             <p className="font-semibold text-zinc-600 dark:text-zinc-400">최근 질문</p>
@@ -670,7 +645,8 @@ export function ControlRoomHomeClient() {
               <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
                 {favorites.map((q) => (
                   <li key={q}>
-                    <button type="button" className="w-full truncate text-left hover:underline" onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else void runQuestion(q); }}>★ {q}</button>
+                    <button type="button" className="w-full truncate text-left hover:underline"
+                      onClick={() => { setQueryDraft(q); const preset = SUGGESTED_QUERIES.find((s) => s.label === q); if (preset) void runPreset(preset.id, q); else void runQuestion(q); }}>★ {q}</button>
                   </li>
                 ))}
               </ul>
@@ -693,15 +669,7 @@ export function ControlRoomHomeClient() {
               const [y, m, d] = ymd.split("-").map(Number);
               const uploads = hub.uploads.items.filter((it) => isUploadOnSeoulDay(it.uploaded_at, ymd));
               const memos = hub.memos.filter((memo) => normalizeSheetDateYmd(memo.memo_date ?? "") === ymd);
-              const checklist = hub.checklist.filter((it) => {
-                const due = it.due_date ?? it.id ?? "";
-                return normalizeSheetDateYmd(due) === ymd;
-              });
-              // 업무정리 탭 전체(완료 포함) 마감일 기준
-              const allTasksOnDay = hub.allTasks.filter((it) => {
-                const due = it["마감일"] ?? "";
-                return normalizeSheetDateYmd(due) === ymd;
-              });
+              const allTasksOnDay = hub.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
               const launchesOnDay = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
               openPanel({
                 kind: "render", title: `${y}년 ${m}월 ${d}일 일정`,
@@ -710,32 +678,31 @@ export function ControlRoomHomeClient() {
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업무 내용 ({allTasksOnDay.length}건)</p>
                       {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => {
-                          const isDoneTask = it["완료"] === "TRUE";
-                          const cat = it["분류"] ? `[${it["분류"]}]` : "";
-                          const plat = it["관련플랫폼"] ? `[${it["관련플랫폼"]}]` : "";
-                          return (
-                            <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                              {cat ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">{cat}</span> : null}
-                              {plat ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{plat}</span> : null}
-                              <span className="text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>
-                            </li>
-                          );
-                        })}</ul>}
+                        const cat = it["분류"] ? `[${it["분류"]}]` : "";
+                        const plat = it["관련플랫폼"] ? `[${it["관련플랫폼"]}]` : "";
+                        return (
+                          <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+                            {cat ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">{cat}</span> : null}
+                            {plat ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{plat}</span> : null}
+                            <span className="text-zinc-900 dark:text-zinc-50">{it["업무명"] ?? ""}</span>
+                          </li>
+                        );
+                      })}</ul>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
                       {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => {
-                          const statusLabel = it.status ?? "업로드 예정";
-                          const isComplete = statusLabel === "업로드 완료";
-                          const platform = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
-                          return (
-                            <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-sky-200 bg-sky-50 dark:border-sky-900/40 dark:bg-sky-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
-                              <span className={`font-medium ${isComplete ? "text-sky-700 dark:text-sky-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
-                              {platform ? <span className="mx-1 text-zinc-500 dark:text-zinc-400">[{platform}]</span> : " "}
-                              <span className="text-zinc-800 dark:text-zinc-200">{it.title}</span>
-                            </li>
-                          );
-                        })}</ul>}
+                        const statusLabel = it.status ?? "업로드 예정";
+                        const isComplete = statusLabel === "업로드 완료";
+                        const platform = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
+                        return (
+                          <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-sky-200 bg-sky-50 dark:border-sky-900/40 dark:bg-sky-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+                            <span className={`font-medium ${isComplete ? "text-sky-700 dark:text-sky-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
+                            {platform ? <span className="mx-1 text-zinc-500 dark:text-zinc-400">[{platform}]</span> : " "}
+                            <span className="text-zinc-800 dark:text-zinc-200">{it.title}</span>
+                          </li>
+                        );
+                      })}</ul>}
                     </div>
                     {launchesOnDay.length > 0 ? (
                       <div>
@@ -784,53 +751,67 @@ export function ControlRoomHomeClient() {
           </section>
         </main>
 
-        {/* ── 우측 대시보드 ── */}
-        <aside className="lg:col-span-3">
-          <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드</h2>
+        <aside className="space-y-3 lg:col-span-3">
+          {metrics ? (
+            <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+              <h2 className="text-xs font-semibold uppercase text-zinc-500">빠른 요약</h2>
+              <ul className="mt-2 grid grid-cols-2 gap-2">
+                <SidebarStat label="오늘 마감" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
+                <SidebarStat label="미완료 업로드" value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
+                <SidebarStat label="데이터 주의" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
+                <SidebarStat label="중복 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
+                <SidebarStat label="긴급 후보" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
+                <SidebarStat label="오늘 업로드(집계)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
+                <SidebarStat label="지연·후속(집계)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
+              </ul>
+            </section>
+          ) : null}
 
-            <div className="mt-3 space-y-3">
-
-              {/* 오늘 */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">오늘</p>
-              <div className="grid grid-cols-2 gap-2">
-                <StatCard label="한 일" value={dashStats?.today_done} color="green" />
-                <StatCard label="남은 일" value={dashStats?.today_todo} color="orange" />
+          {dashStats ? (
+            <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+              <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드</h2>
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">오늘</p>
+                  <ul className="grid grid-cols-2 gap-2">
+                    <SidebarStat label="한 일" value={dashStats.today_done} />
+                    <SidebarStat label="남은 일" value={dashStats.today_todo} />
+                  </ul>
+                </div>
+                <ul className="grid grid-cols-1 gap-2">
+                  <SidebarStat label="완료한 업무 총합" value={dashStats.total_done_tasks} />
+                </ul>
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">업로드</p>
+                  <ul className="grid grid-cols-2 gap-2">
+                    <SidebarStat label="업로드한 화수" value={dashStats.uploaded_episodes} />
+                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} />
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">계약</p>
+                  <ul className="grid grid-cols-2 gap-2">
+                    <SidebarStat label="계약 완료" value={dashStats.contracts_done} />
+                    <SidebarStat label="사인만 남음" value={dashStats.sign_pending} />
+                  </ul>
+                </div>
+                <ul className="grid grid-cols-1 gap-2">
+                  <SidebarStat label="예정된 미팅" value={dashStats.meetings} />
+                </ul>
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                    지원사업 ({dashStats.subsidy_total}개)
+                  </p>
+                  <ul className="grid grid-cols-3 gap-2">
+                    <SidebarStat label="할 예정" value={dashStats.subsidy_planned} />
+                    <SidebarStat label="결과 대기" value={dashStats.subsidy_waiting} />
+                    <SidebarStat label="완료" value={dashStats.subsidy_done} />
+                  </ul>
+                </div>
               </div>
-              <StatCard label="완료한 업무 총합" value={dashStats?.total_done_tasks} color="blue" wide />
-
-              {/* 업로드 */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">업로드</p>
-              <div className="grid grid-cols-2 gap-2">
-                <StatCard label="업로드한 화수" value={dashStats?.uploaded_episodes} suffix="화" color="blue" />
-                <StatCard label="남은 화수" value={dashStats?.remaining_episodes} suffix="화" color="red" />
-              </div>
-
-              {/* 계약 */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">계약</p>
-              <div className="grid grid-cols-2 gap-2">
-                <StatCard label="계약 완료" value={dashStats?.contracts_done} color="green" />
-                <StatCard label="사인만 남음" value={dashStats?.sign_pending} color="yellow" />
-              </div>
-              <StatCard label="예정된 미팅" value={dashStats?.meetings} color="purple" wide />
-
-              {/* 지원사업 */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">
-                지원사업
-                <span className="ml-1 normal-case font-normal text-zinc-500">
-                  ({dashStats?.subsidy_total ?? "…"}개)
-                </span>
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <StatCard label="할 예정" value={dashStats?.subsidy_planned} color="blue" small />
-                <StatCard label="결과 대기" value={dashStats?.subsidy_waiting} color="orange" small />
-                <StatCard label="완료" value={dashStats?.subsidy_done} color="green" small />
-              </div>
-
-            </div>
-          </section>
+            </section>
+          ) : null}
         </aside>
-
       </div>
     </div>
   );
@@ -847,21 +828,18 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
     if (hub.kind !== "ready") return new Map<string, { uploads: number; tasks: number; launches: number }>();
     const map = new Map<string, { uploads: number; tasks: number; launches: number }>();
     const def = () => ({ uploads: 0, tasks: 0, launches: 0 });
-    // 업로드 점 (파란색)
     for (const it of hub.uploads.items) {
       const ymd = formatSeoulYmd(new Date(Date.parse(it.uploaded_at)));
       if (!ymd) continue;
       const cur = map.get(ymd) ?? def();
       map.set(ymd, { ...cur, uploads: cur.uploads + 1 });
     }
-    // 업무 점 (노란색) - 업무정리 전체 마감일 기준
     for (const it of hub.allTasks) {
       const ymd = normalizeSheetDateYmd(it["마감일"] ?? "");
       if (!ymd) continue;
       const cur = map.get(ymd) ?? def();
       map.set(ymd, { ...cur, tasks: cur.tasks + 1 });
     }
-    // 런칭일 점 (빨간색) - 업로드정리 런칭일 기준
     for (const it of hub.uploadRows) {
       const ymd = normalizeSheetDateYmd(it["런칭일"] ?? "");
       if (!ymd) continue;
@@ -900,14 +878,13 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
           const isToday = ymd === todayYmd;
           return (
             <button key={`${ymd}-${i}`} type="button" disabled={!ready} onClick={() => onDayClick(ymd)}
-              className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isToday ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}
-            >
+              className={`relative min-h-[2rem] rounded py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isToday ? "bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}>
               <span>{d}</span>
               {(hasUpload || hasTask || hasLaunch) ? (
                 <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
-                  {hasTask    ? <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" /> : null}
-                  {hasUpload  ? <span className="h-1 w-1 rounded-full bg-sky-500" /> : null}
-                  {hasLaunch  ? <span className="h-1 w-1 rounded-full bg-red-500" /> : null}
+                  {hasTask   ? <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" /> : null}
+                  {hasUpload ? <span className="h-1 w-1 rounded-full bg-sky-500" /> : null}
+                  {hasLaunch ? <span className="h-1 w-1 rounded-full bg-red-500" /> : null}
                 </span>
               ) : null}
             </button>
@@ -918,33 +895,15 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
   );
 }
 
-function StatCard({
-  label, value, color = "gray", suffix = "", wide = false, small = false,
-}: {
-  label: string;
-  value?: number | null;
-  color?: string;
-  suffix?: string;
-  wide?: boolean;
-  small?: boolean;
-}) {
-  const colorMap: Record<string, string> = {
-    green:  "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900/40",
-    blue:   "text-blue-600   bg-blue-50   border-blue-200   dark:text-blue-400   dark:bg-blue-950/30   dark:border-blue-900/40",
-    orange: "text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950/30 dark:border-orange-900/40",
-    red:    "text-red-600    bg-red-50    border-red-200    dark:text-red-400    dark:bg-red-950/30    dark:border-red-900/40",
-    yellow: "text-yellow-700 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/30 dark:border-yellow-900/40",
-    purple: "text-purple-600 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/30 dark:border-purple-900/40",
-    gray:   "text-zinc-700   bg-zinc-50   border-zinc-200   dark:text-zinc-300   dark:bg-zinc-900/60   dark:border-zinc-700",
-  };
-  return (
-    <div className={`rounded-lg border p-2 ${colorMap[color] ?? colorMap.gray} ${wide ? "col-span-2" : ""}`}>
-      <p className={`font-bold leading-none ${small ? "text-lg" : "text-2xl"}`}>
-        {value ?? "…"}{suffix}
-      </p>
-      <p className="mt-1 text-[11px] opacity-70">{label}</p>
-    </div>
+function SidebarStat(props: { label: string; value: number; onClick?: () => void }) {
+  const body = (
+    <>
+      <span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span>
+      <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span>
+    </>
   );
+  if (props.onClick) return <li><button type="button" onClick={props.onClick} className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800">{body}</button></li>;
+  return <li className="rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">{body}</li>;
 }
 
 function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
@@ -962,12 +921,6 @@ function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
       ))}
     </ul>
   );
-}
-
-function SidebarStat(props: { label: string; value: number; onClick?: () => void }) {
-  const body = (<><span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span><span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span></>);
-  if (props.onClick) return <li><button type="button" onClick={props.onClick} className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800">{body}</button></li>;
-  return <li className="rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">{body}</li>;
 }
 
 function UploadPreviewList(props: { items: UploadListItem[]; empty: string; actionHref: string; actionLabel: string }) {
