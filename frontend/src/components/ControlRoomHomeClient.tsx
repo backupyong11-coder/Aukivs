@@ -420,20 +420,13 @@ export function ControlRoomHomeClient() {
 
     if (id === "due_today") {
       const todayYmd = formatSeoulYmd(new Date());
-      const items = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
+      const items = hub.allTasks.filter((t) => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
       openPanel({
         kind: "render", title: "오늘 마감 업무",
         node: (
           <div className="space-y-3 text-sm">
             <p className="text-zinc-600">오늘({todayYmd}) 마감: <span className="font-semibold">{items.length}</span>건</p>
-            {items.length === 0 ? <p className="text-zinc-500">없음</p> : (
-              <ul className="space-y-2">{items.map((it) => (
-                <li key={it.id} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
-                  <p className="font-medium">{it.title}</p>
-                  {it.platform ? <p className="mt-0.5 text-xs text-zinc-500">{it.platform}{it.category ? ` · ${it.category}` : ""}</p> : null}
-                </li>
-              ))}</ul>
-            )}
+            {items.length === 0 ? <p className="text-zinc-500">없음</p> : <TaskList items={items} />}
           </div>
         ),
       }); return;
@@ -492,17 +485,10 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "urgent_only") {
+      const urgentItems = hub.allTasks.filter(t => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음");
       openPanel({
-        kind: "render", title: "급한 일",
-        node: briefing.urgent_items.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : (
-          <ul className="space-y-2">{briefing.urgent_items.map((it) => (
-            <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2">
-              <span className="text-[10px] font-semibold uppercase text-amber-900">{it.source === "checklist" ? "체크" : "업로드"}</span>
-              <p className="mt-1 font-medium">{it.title}</p>
-              {it.note ? <p className="mt-1 text-xs text-zinc-600">{it.note}</p> : null}
-            </li>
-          ))}</ul>
-        ),
+        kind: "render", title: `급한 일 ${urgentItems.length}개`,
+        node: urgentItems.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : <TaskList items={urgentItems} color="red" />,
       }); return;
     }
     if (id === "today_triage") {
@@ -592,9 +578,15 @@ export function ControlRoomHomeClient() {
     if (hub.kind !== "ready") { openPanel({ kind: "error", message: "데이터 로딩 중" }); return; }
     openPanel({ kind: "loading", label: "AI가 분석 중입니다…" });
     try {
+      // 토큰 한도 초과 방지: 각 데이터 50개로 제한, 필드도 핵심만
+      const trimPlatform = hub.platformMaster.slice(0, 50).map(p => ({
+        회사명: p["회사명"], 플랫폼명: p["플랫폼명"], 현재단계: p["현재단계"], 마지막상황: p["마지막상황"] || p["마지막 상황"],
+      }));
+      const trimWorks = hub.worksMaster.slice(0, 50).map(w => ({ 작품명: w["작품명"] }));
+      const trimMemos = hub.memos.slice(0, 30).map(m => ({ content: m.content, category: m.category }));
       const res = await fetch("/api/ops/ask", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, platformMaster: hub.platformMaster, worksMaster: hub.worksMaster, memos: hub.memos }),
+        body: JSON.stringify({ query: q, platformMaster: trimPlatform, worksMaster: trimWorks, memos: trimMemos }),
       });
       const data = await res.json();
       if (data.error) { openPanel({ kind: "error", message: data.error }); return; }
@@ -895,14 +887,25 @@ export function ControlRoomHomeClient() {
 function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; color?: string }) {
   const cls = color === "red" ? "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30"
     : color === "amber" ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"
-      : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
+    : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
   return (
-    <ul className="max-h-80 space-y-1 overflow-y-auto">
+    <ul className="max-h-80 space-y-2 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
-        <li key={i} className={`rounded border px-2 py-1 text-xs ${cls}`}>
-          {t["마감일"] ? <span className="mr-1 text-zinc-400">{t["마감일"]}</span> : null}
-          {t["분류"] ? <span className="mr-1 text-zinc-500">[{t["분류"]}]</span> : null}
-          <span className="font-medium">{t["업무명"] ?? ""}</span>
+        <li key={i} className={`rounded border px-2 py-1.5 text-xs ${cls}`}>
+          {/* 업무명 강조 */}
+          <p className="font-semibold text-zinc-900 dark:text-zinc-50">{t["업무명"] ?? ""}</p>
+          {/* 메타데이터 */}
+          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+            {t["마감일"] ? <span>📅 {t["마감일"]}</span> : null}
+            {t["관련플랫폼"] ? <span>[{t["관련플랫폼"]}]</span> : null}
+            {t["분류"] ? <span>{t["분류"]}</span> : null}
+            {t["우선순위"] ? <span className={t["우선순위"] === "높음" ? "text-red-500 font-medium" : ""}>{t["우선순위"]}</span> : null}
+            {t["난이도"] ? <span>난이도:{t["난이도"]}</span> : null}
+            {t["상태"] ? <span>{t["상태"]}</span> : null}
+            {t["관련작품"] ? <span>🎨 {t["관련작품"]}</span> : null}
+            {t["담당자"] ? <span>👤 {t["담당자"]}</span> : null}
+          </div>
+          {t["메모"] ? <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500 truncate">{t["메모"]}</p> : null}
         </li>
       ))}
     </ul>
