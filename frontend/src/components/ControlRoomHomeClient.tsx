@@ -387,6 +387,23 @@ export function ControlRoomHomeClient() {
         node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["완료"])).map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
+    if (id === "remaining_episodes") {
+      const rows = dashStats._uploadRows.filter(r => !isTrue(r["완료"]));
+      openPanel({
+        kind: "render", title: `남은 업로드화수 총 ${dashStats.remaining_episodes}화`,
+        node: (
+          <ul className="space-y-1">
+            {rows.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : rows.map((r, i) => (
+              <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+                <span className="font-medium">{r["작품명"] ?? ""}</span>
+                {r["플랫폼명"] ? <span className="ml-1 text-zinc-500">({r["플랫폼명"]})</span> : null}
+                <span className="ml-2 text-red-600 dark:text-red-400">{safeInt(r["남은업로드화수"])}화 남음</span>
+              </li>
+            ))}
+          </ul>
+        ),
+      }); return;
+    }
   }, [dashStats, openPanel]);
 
   const runPreset = useCallback(async (id: string, labelForRecent?: string) => {
@@ -792,13 +809,13 @@ export function ControlRoomHomeClient() {
               <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드</h2>
               <div className="mt-2 space-y-3">
 
-                {/* 오늘: 총 / 한 일 / 못 한 일 (3단) */}
+                {/* 오늘: 총 / 한 일 / 남은 일 (3단) */}
                 <div>
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">오늘</p>
                   <ul className="grid grid-cols-3 gap-2">
                     <SidebarStat label="총 일" value={dashStats.today_total} onClick={() => openDashPanel("today_total")} />
                     <SidebarStat label="한 일" value={dashStats.today_done} onClick={() => openDashPanel("today_done")} />
-                    <SidebarStat label="못 한 일" value={dashStats.today_undone} onClick={() => openDashPanel("today_undone")} />
+                    <SidebarStat label="남은 일" value={dashStats.today_undone} onClick={() => openDashPanel("today_undone")} />
                   </ul>
                 </div>
 
@@ -820,7 +837,7 @@ export function ControlRoomHomeClient() {
                   <ul className="grid grid-cols-3 gap-2">
                     <SidebarStat label="업로드한 화수" value={dashStats.uploaded_episodes} onClick={() => openDashPanel("uploaded_episodes")} />
                     <SidebarStat label="오늘 업로드" value={dashStats.today_uploads} onClick={() => openDashPanel("today_uploads")} />
-                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} />
+                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} onClick={() => openDashPanel("remaining_episodes")} />
                   </ul>
                 </div>
 
