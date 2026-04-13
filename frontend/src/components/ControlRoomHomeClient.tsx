@@ -420,7 +420,7 @@ export function ControlRoomHomeClient() {
 
     if (id === "due_today") {
       const todayYmd = formatSeoulYmd(new Date());
-      const items = hub.allTasks.filter((t) => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
+      const items = hub.allTasks.filter(t => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
       openPanel({
         kind: "render", title: "오늘 마감 업무",
         node: (
@@ -440,14 +440,12 @@ export function ControlRoomHomeClient() {
       openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "incomplete_check") {
-      openPanel({ kind: "loading", label: "체크리스트 불러오는 중…" });
-      try {
-        const r = await fetchChecklist();
-        if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
-        openPanel({ kind: "render", title: "미완료 체크리스트", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
-      } catch (e: unknown) {
-        openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
-      } return;
+      if (hub.kind !== "ready") return;
+      const incomplete = hub.allTasks.filter(t => !isTrue(t["완료"]));
+      openPanel({
+        kind: "render", title: `미완료 업무 ${incomplete.length}개`,
+        node: <TaskList items={incomplete} color="amber" />,
+      }); return;
     }
     if (id === "upload_gaps") {
       const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
@@ -578,7 +576,6 @@ export function ControlRoomHomeClient() {
     if (hub.kind !== "ready") { openPanel({ kind: "error", message: "데이터 로딩 중" }); return; }
     openPanel({ kind: "loading", label: "AI가 분석 중입니다…" });
     try {
-      // 토큰 한도 초과 방지: 각 데이터 50개로 제한, 필드도 핵심만
       const trimPlatform = hub.platformMaster.slice(0, 50).map(p => ({
         회사명: p["회사명"], 플랫폼명: p["플랫폼명"], 현재단계: p["현재단계"], 마지막상황: p["마지막상황"] || p["마지막 상황"],
       }));
@@ -589,7 +586,15 @@ export function ControlRoomHomeClient() {
         body: JSON.stringify({ query: q, platformMaster: trimPlatform, worksMaster: trimWorks, memos: trimMemos }),
       });
       const data = await res.json();
-      if (data.error) { openPanel({ kind: "error", message: data.error }); return; }
+      if (data.error) {
+        const errType = data.error?.error?.type ?? "";
+        const msg = errType === "overloaded_error"
+          ? "AI 서버가 일시적으로 과부하 상태예요. 잠시 후 다시 시도해주세요."
+          : errType === "invalid_request_error"
+          ? "요청 데이터가 너무 커요. 질문을 더 구체적으로 해주세요."
+          : (data.error?.error?.message ?? data.error ?? "AI 오류가 발생했습니다.");
+        openPanel({ kind: "error", message: msg }); return;
+      }
       openPanel({ kind: "render", title: "AI 답변", node: <div className="whitespace-pre-wrap text-sm leading-relaxed">{data.answer}</div> });
     } catch (e) {
       openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
@@ -892,9 +897,7 @@ function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; 
     <ul className="max-h-80 space-y-2 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
         <li key={i} className={`rounded border px-2 py-1.5 text-xs ${cls}`}>
-          {/* 업무명 강조 */}
           <p className="font-semibold text-zinc-900 dark:text-zinc-50">{t["업무명"] ?? ""}</p>
-          {/* 메타데이터 */}
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
             {t["마감일"] ? <span>📅 {t["마감일"]}</span> : null}
             {t["관련플랫폼"] ? <span>[{t["관련플랫폼"]}]</span> : null}
