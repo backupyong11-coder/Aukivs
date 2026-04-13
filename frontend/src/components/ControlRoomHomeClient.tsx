@@ -204,13 +204,13 @@ export function ControlRoomHomeClient() {
     const todayYmd = formatSeoulYmd(new Date());
 
     // 오늘 기준 (마감일 B열 = 오늘인 것)
-    const today_tasks     = hub.allTasks.filter(t => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
-    const today_total     = today_tasks.length;
-    const today_done      = today_tasks.filter(t => isTrue(t["완료"])).length;
-    const today_undone    = today_tasks.filter(t => !isTrue(t["완료"])).length;
+    const today_tasks = hub.allTasks.filter(t => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
+    const today_total = today_tasks.length;
+    const today_done = today_tasks.filter(t => isTrue(t["완료"])).length;
+    const today_undone = today_tasks.filter(t => !isTrue(t["완료"])).length;
 
     // 전체 업무
-    const total_done_tasks   = hub.allTasks.filter(t => isTrue(t["완료"])).length;
+    const total_done_tasks = hub.allTasks.filter(t => isTrue(t["완료"])).length;
     const total_undone_tasks = hub.allTasks.filter(t => !isTrue(t["완료"])).length;
 
     // 긴급/끝내고 (완료 안 된 것 중)
@@ -218,26 +218,26 @@ export function ControlRoomHomeClient() {
     const normal = hub.allTasks.filter(t => !isTrue(t["완료"]) && ["보통", "낮음"].includes((t["우선순위"] ?? "").trim())).length;
 
     // 업로드 — A열 완료 체크된 행의 E열(업로드화수) 합계
-    const doneUploadRows     = hub.uploadRows.filter(r => isTrue(r["완료"]));
-    const uploaded_episodes  = doneUploadRows.reduce((s, r) => s + safeInt(r["업로드화수"]), 0);
+    const doneUploadRows = hub.uploadRows.filter(r => isTrue(r["완료"]));
+    const uploaded_episodes = doneUploadRows.reduce((s, r) => s + safeInt(r["업로드화수"]), 0);
     // 오늘 업로드 — B열 업로드일 기준
-    const today_uploads      = hub.uploadRows.filter(r => normalizeSheetDateYmd(r["업로드일"] ?? "") === todayYmd).length;
+    const today_uploads = hub.uploadRows.filter(r => normalizeSheetDateYmd(r["업로드일"] ?? "") === todayYmd).length;
     // 남은 업로드화수 — 완료 안 된 행의 F열 합계
     const remaining_episodes = hub.uploadRows.filter(r => !isTrue(r["완료"])).reduce((s, r) => s + safeInt(r["남은업로드화수"]), 0);
 
     // 계약
     const contracts_done = hub.platformRows.filter(p => (p["계약"] ?? "").trim() === "계약완료").length;
-    const sign_pending   = hub.platformRows.filter(p => (p["계약"] ?? "").trim() === "사인만 남음").length;
+    const sign_pending = hub.platformRows.filter(p => (p["계약"] ?? "").trim() === "사인만 남음").length;
 
     // 미팅
-    const total_meetings   = hub.allTasks.filter(t => (t["분류"] ?? "").trim() === "[업무미팅]").length;
+    const total_meetings = hub.allTasks.filter(t => (t["분류"] ?? "").trim() === "[업무미팅]").length;
     const planned_meetings = hub.platformRows.filter(p => (p["미팅"] ?? "").includes("미팅예정")).length;
 
     // 지원사업
-    const subsidy         = hub.platformRows.filter(p => isTrue(p["지원사업"]));
+    const subsidy = hub.platformRows.filter(p => isTrue(p["지원사업"]));
     const subsidy_planned = subsidy.filter(p => isTrue(p["예정"])).length;
     const subsidy_waiting = subsidy.filter(p => isTrue(p["진행중"])).length;
-    const subsidy_done    = subsidy.filter(p => isTrue(p["완료"])).length;
+    const subsidy_done = subsidy.filter(p => isTrue(p["완료"])).length;
 
     return {
       today_total, today_done, today_undone,
@@ -269,35 +269,50 @@ export function ControlRoomHomeClient() {
     if (!dashStats) return;
 
     if (id === "today_total") {
-      openPanel({ kind: "render", title: `오늘 총 일 ${dashStats.today_total}개`,
-        node: <TaskList items={dashStats._todayTasks} /> }); return;
+      openPanel({
+        kind: "render", title: `오늘 총 일 ${dashStats.today_total}개`,
+        node: <TaskList items={dashStats._todayTasks} />
+      }); return;
     }
     if (id === "today_done") {
-      openPanel({ kind: "render", title: `오늘 한 일 ${dashStats.today_done}개`,
-        node: <TaskList items={dashStats._todayTasks.filter(t => isTrue(t["완료"]))} /> }); return;
+      openPanel({
+        kind: "render", title: `오늘 한 일 ${dashStats.today_done}개`,
+        node: <TaskList items={dashStats._todayTasks.filter(t => isTrue(t["완료"]))} />
+      }); return;
     }
     if (id === "today_undone") {
-      openPanel({ kind: "render", title: `오늘 못 한 일 ${dashStats.today_undone}개`,
-        node: <TaskList items={dashStats._todayTasks.filter(t => !isTrue(t["완료"]))} color="amber" /> }); return;
+      openPanel({
+        kind: "render", title: `오늘 남은 일 ${dashStats.today_undone}개`,
+        node: <TaskList items={dashStats._todayTasks.filter(t => !isTrue(t["완료"]))} color="amber" />
+      }); return;
     }
     if (id === "urgent") {
-      openPanel({ kind: "render", title: `긴급한 일 ${dashStats.urgent}개`,
-        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음")} color="red" /> }); return;
+      openPanel({
+        kind: "render", title: `긴급한 일 ${dashStats.urgent}개`,
+        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음")} color="red" />
+      }); return;
     }
     if (id === "normal") {
-      openPanel({ kind: "render", title: `끝내고 할 일 ${dashStats.normal}개`,
-        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]) && ["보통","낮음"].includes((t["우선순위"] ?? "").trim()))} /> }); return;
+      openPanel({
+        kind: "render", title: `끝내고 할 일 ${dashStats.normal}개`,
+        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]) && ["보통", "낮음"].includes((t["우선순위"] ?? "").trim()))} />
+      }); return;
     }
     if (id === "total_done_tasks") {
-      openPanel({ kind: "render", title: `완료한 업무 총 ${dashStats.total_done_tasks}개`,
-        node: <TaskList items={dashStats._allTasks.filter(t => isTrue(t["완료"]))} /> }); return;
+      openPanel({
+        kind: "render", title: `완료한 업무 총 ${dashStats.total_done_tasks}개`,
+        node: <TaskList items={dashStats._allTasks.filter(t => isTrue(t["완료"]))} />
+      }); return;
     }
     if (id === "total_undone_tasks") {
-      openPanel({ kind: "render", title: `남은 업무 총 ${dashStats.total_undone_tasks}개`,
-        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]))} color="amber" /> }); return;
+      openPanel({
+        kind: "render", title: `남은 업무 총 ${dashStats.total_undone_tasks}개`,
+        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]))} color="amber" />
+      }); return;
     }
     if (id === "uploaded_episodes") {
-      openPanel({ kind: "render", title: `업로드한 화수 총 ${dashStats.uploaded_episodes}화`,
+      openPanel({
+        kind: "render", title: `업로드한 화수 총 ${dashStats.uploaded_episodes}화`,
         node: (
           <ul className="max-h-80 space-y-1 overflow-y-auto">
             {dashStats._doneUploadRows.map((r, i) => (
@@ -313,7 +328,8 @@ export function ControlRoomHomeClient() {
     }
     if (id === "today_uploads") {
       const rows = dashStats._uploadRows.filter(r => normalizeSheetDateYmd(r["업로드일"] ?? "") === dashStats._todayYmd);
-      openPanel({ kind: "render", title: `오늘 업로드 ${dashStats.today_uploads}건`,
+      openPanel({
+        kind: "render", title: `오늘 업로드 ${dashStats.today_uploads}건`,
         node: (
           <ul className="space-y-1">
             {rows.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : rows.map((r, i) => (
@@ -328,38 +344,46 @@ export function ControlRoomHomeClient() {
     }
     if (id === "contracts_done") {
       const rows = dashStats._platformRows.filter(p => (p["계약"] ?? "").trim() === "계약완료");
-      openPanel({ kind: "render", title: "계약 완료",
+      openPanel({
+        kind: "render", title: "계약 완료",
         node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs dark:border-emerald-900/40 dark:bg-emerald-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
       }); return;
     }
     if (id === "sign_pending") {
       const rows = dashStats._platformRows.filter(p => (p["계약"] ?? "").trim() === "사인만 남음");
-      openPanel({ kind: "render", title: "사인만 남음",
+      openPanel({
+        kind: "render", title: "사인만 남음",
         node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs dark:border-yellow-900/40 dark:bg-yellow-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
       }); return;
     }
     if (id === "total_meetings") {
-      openPanel({ kind: "render", title: `총 미팅 ${dashStats.total_meetings}회`,
-        node: <TaskList items={dashStats._allTasks.filter(t => (t["분류"] ?? "").trim() === "[업무미팅]")} /> }); return;
+      openPanel({
+        kind: "render", title: `총 미팅 ${dashStats.total_meetings}회`,
+        node: <TaskList items={dashStats._allTasks.filter(t => (t["분류"] ?? "").trim() === "[업무미팅]")} />
+      }); return;
     }
     if (id === "planned_meetings") {
       const rows = dashStats._platformRows.filter(p => (p["미팅"] ?? "").includes("미팅예정"));
-      openPanel({ kind: "render", title: "예정된 미팅",
+      openPanel({
+        kind: "render", title: "예정된 미팅",
         node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs dark:border-purple-900/40 dark:bg-purple-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}<span className="ml-2 text-purple-700 dark:text-purple-300">{p["미팅"] ?? ""}</span></li>)}</ul>
       }); return;
     }
     if (id === "subsidy_planned") {
-      openPanel({ kind: "render", title: "지원사업 — 쓸 예정",
+      openPanel({
+        kind: "render", title: "지원사업 — 쓸 예정",
         node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["예정"])).map((p, i) => <li key={i} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
     if (id === "subsidy_waiting") {
-      openPanel({ kind: "render", title: "지원사업 — 결과 대기",
+      openPanel({
+        kind: "render", title: "지원사업 — 결과 대기",
         node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["진행중"])).map((p, i) => <li key={i} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["대기사유"] ? <p className="mt-0.5 text-zinc-500">{p["대기사유"]}</p> : null}</li>)}</ul>
       }); return;
     }
     if (id === "subsidy_done") {
-      openPanel({ kind: "render", title: "지원사업 — 완료",
+      openPanel({
+        kind: "render", title: "지원사업 — 완료",
         node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["완료"])).map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
@@ -380,7 +404,8 @@ export function ControlRoomHomeClient() {
     if (id === "due_today") {
       const todayYmd = formatSeoulYmd(new Date());
       const items = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
-      openPanel({ kind: "render", title: "오늘 마감 업무",
+      openPanel({
+        kind: "render", title: "오늘 마감 업무",
         node: (
           <div className="space-y-3 text-sm">
             <p className="text-zinc-600">오늘({todayYmd}) 마감: <span className="font-semibold">{items.length}</span>건</p>
@@ -427,7 +452,8 @@ export function ControlRoomHomeClient() {
       const dup = uploads.issues.filter((x) => x.kind === "duplicate_id");
       const affected = duplicateUploadIdsFromIssues(uploads.issues);
       const rows = uploads.items.filter((it) => affected.has(it.id));
-      openPanel({ kind: "render", title: "중복 id",
+      openPanel({
+        kind: "render", title: "중복 id",
         node: (
           <div className="space-y-3 text-sm">
             {dup.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="list-inside list-disc space-y-1">{dup.map((iss, i) => <li key={i}><span className="font-mono text-xs">{iss.id}</span> — 행 {iss.sheet_rows.join(", ")}</li>)}</ul>}
@@ -437,7 +463,8 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "upload_summary") {
-      openPanel({ kind: "render", title: "업로드 요약",
+      openPanel({
+        kind: "render", title: "업로드 요약",
         node: (
           <ul className="list-inside list-disc space-y-1 text-sm">
             <li>미완료: {uploads.items.filter(it => uploadLooksIncomplete(it.status)).length}건</li>
@@ -448,7 +475,8 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "urgent_only") {
-      openPanel({ kind: "render", title: "급한 일",
+      openPanel({
+        kind: "render", title: "급한 일",
         node: briefing.urgent_items.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : (
           <ul className="space-y-2">{briefing.urgent_items.map((it) => (
             <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2">
@@ -461,7 +489,8 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "today_triage") {
-      openPanel({ kind: "render", title: "오늘 브리핑",
+      openPanel({
+        kind: "render", title: "오늘 브리핑",
         node: (
           <div className="space-y-3 text-sm">
             <p className="text-zinc-600">{briefing.briefing_text}</p>
@@ -476,52 +505,62 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "platform_stage") {
-      openPanel({ kind: "render", title: "플랫폼 현재단계", node: (
-        <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.map((p, i) => (
-          <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
-            <span className="font-semibold">{p["회사명"] ?? ""}</span>
-            {p["현재단계"] ? <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800">{p["현재단계"]}</span> : null}
-          </li>
-        ))}</ul>
-      )}); return;
+      openPanel({
+        kind: "render", title: "플랫폼 현재단계", node: (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.map((p, i) => (
+            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
+              <span className="font-semibold">{p["회사명"] ?? ""}</span>
+              {p["현재단계"] ? <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800">{p["현재단계"]}</span> : null}
+            </li>
+          ))}</ul>
+        )
+      }); return;
     }
     if (id === "platform_status") {
-      openPanel({ kind: "render", title: "플랫폼 마지막상황", node: (
-        <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["마지막상황"] || p["마지막 상황"]).map((p, i) => (
-          <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
-            <span className="font-semibold">{p["회사명"] ?? ""}</span>
-            <p className="mt-0.5 text-zinc-600">{p["마지막상황"] || p["마지막 상황"] || ""}</p>
-          </li>
-        ))}</ul>
-      )}); return;
+      openPanel({
+        kind: "render", title: "플랫폼 마지막상황", node: (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["마지막상황"] || p["마지막 상황"]).map((p, i) => (
+            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
+              <span className="font-semibold">{p["회사명"] ?? ""}</span>
+              <p className="mt-0.5 text-zinc-600">{p["마지막상황"] || p["마지막 상황"] || ""}</p>
+            </li>
+          ))}</ul>
+        )
+      }); return;
     }
     if (id === "platform_waiting") {
-      openPanel({ kind: "render", title: "플랫폼 대기사유", node: (
-        <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
-          <li key={i} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs">
-            <span className="font-semibold">{p["회사명"] ?? ""}</span>
-            <p className="mt-0.5 text-zinc-600">{p["대기사유"]}</p>
-          </li>
-        ))}</ul>
-      )}); return;
+      openPanel({
+        kind: "render", title: "플랫폼 대기사유", node: (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
+            <li key={i} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs">
+              <span className="font-semibold">{p["회사명"] ?? ""}</span>
+              <p className="mt-0.5 text-zinc-600">{p["대기사유"]}</p>
+            </li>
+          ))}</ul>
+        )
+      }); return;
     }
     if (id === "platform_action") {
-      openPanel({ kind: "render", title: "플랫폼 다음액션", node: (
-        <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음").map((p, i) => (
-          <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
-            <span className="font-semibold">{p["회사명"] ?? ""}</span>
-            <p className="mt-0.5 font-medium">{p["다음액션"]}</p>
-          </li>
-        ))}</ul>
-      )}); return;
+      openPanel({
+        kind: "render", title: "플랫폼 다음액션", node: (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음").map((p, i) => (
+            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
+              <span className="font-semibold">{p["회사명"] ?? ""}</span>
+              <p className="mt-0.5 font-medium">{p["다음액션"]}</p>
+            </li>
+          ))}</ul>
+        )
+      }); return;
     }
     if (id === "memo_all") {
-      openPanel({ kind: "render", title: "메모장", node: (
-        <div className="space-y-3 text-sm">
-          {hub.memosError ? <p className="text-xs text-amber-900">{hub.memosError}</p> : null}
-          <MemoPreviewList items={hub.memos} emptyHint="메모 없음" />
-        </div>
-      )}); return;
+      openPanel({
+        kind: "render", title: "메모장", node: (
+          <div className="space-y-3 text-sm">
+            {hub.memosError ? <p className="text-xs text-amber-900">{hub.memosError}</p> : null}
+            <MemoPreviewList items={hub.memos} emptyHint="메모 없음" />
+          </div>
+        )
+      }); return;
     }
     if (id === "platform_stub") {
       openPanel({ kind: "render", title: "플랫폼·작품 조회", node: <p className="text-sm text-zinc-500">좌측 선택 상자를 이용하세요.</p> }); return;
@@ -839,7 +878,7 @@ export function ControlRoomHomeClient() {
 function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; color?: string }) {
   const cls = color === "red" ? "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30"
     : color === "amber" ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"
-    : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
+      : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
   return (
     <ul className="max-h-80 space-y-1 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
@@ -918,7 +957,7 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
               <span>{d}</span>
               {(hasUpload || hasTask || hasLaunch) && (
                 <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
-                  {hasTask   && <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" />}
+                  {hasTask && <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" />}
                   {hasUpload && <span className="h-1 w-1 rounded-full bg-sky-500" />}
                   {hasLaunch && <span className="h-1 w-1 rounded-full bg-red-500" />}
                 </span>

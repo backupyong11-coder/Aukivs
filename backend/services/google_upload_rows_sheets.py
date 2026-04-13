@@ -20,16 +20,20 @@ from .sheets_errors import (
     SheetsParseError,
 )
 
-# A=완료, B=업로드일, C=플랫폼명, D=작품명, E=업로드완료여부,
-# F=업로드주기, G=업로드요일, H=업로드방식, I=런칭일,
-# J=마지막업로드일, K=다음업로드일, L=남은업로드화수,   ← 변경
-# M=원고준비, N=(빈), O=업로드링크/제출처, P=마지막업로드회수, Q=비고
-_COLS = 17
-_IDX = dict(완료=0, 업로드일=1, 플랫폼명=2, 작품명=3, 업로드완료여부=4,
-            업로드주기=5, 업로드요일=6, 업로드방식=7, 런칭일=8,
-            마지막업로드일=9, 다음업로드일=10, 남은업로드화수=11,  # ← 변경
-            원고준비=12, 업로드링크=14, 마지막업로드회수=15, 비고=16)
-_COL_LETTER = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q"]
+# 현재 시트 열 구조:
+# A=완료, B=업로드일, C=플랫폼명, D=작품명,
+# E=업로드화수, F=남은업로드화수, G=업로드완료여부,
+# H=업로드주기, I=업로드요일, J=업로드방식, K=런칭일,
+# L=마지막업로드일, M=다음업로드일, N=원고준비,
+# O=(빈), P=업로드링크/제출처, Q=마지막업로드회수, R=비고
+_COLS = 18
+_IDX = dict(
+    완료=0, 업로드일=1, 플랫폼명=2, 작품명=3,
+    업로드화수=4, 남은업로드화수=5, 업로드완료여부=6,
+    업로드주기=7, 업로드요일=8, 업로드방식=9, 런칭일=10,
+    마지막업로드일=11, 다음업로드일=12, 원고준비=13,
+    업로드링크=15, 마지막업로드회수=16, 비고=17,
+)
 
 
 def _tab_esc(tab: str) -> str:
@@ -59,7 +63,7 @@ def _row_id(sheet_row: int) -> str:
 def fetch_upload_rows(settings: Settings) -> list[dict]:
     cred, sid, tab = _ctx(settings)
     esc = _tab_esc(tab)
-    rows = read_sheet_tab_values(cred, sid, f"'{esc}'!A2:Q")
+    rows = read_sheet_tab_values(cred, sid, f"'{esc}'!A2:R")
     out = []
     for i, row in enumerate(rows):
         cells = padded_row_cells(row if isinstance(row, list) else [], _COLS)
@@ -73,6 +77,8 @@ def fetch_upload_rows(settings: Settings) -> list[dict]:
             "업로드일": _c(cells, "업로드일"),
             "플랫폼명": _c(cells, "플랫폼명"),
             "작품명": 작품명,
+            "업로드화수": _c(cells, "업로드화수"),
+            "남은업로드화수": _c(cells, "남은업로드화수"),
             "업로드완료여부": _c(cells, "업로드완료여부"),
             "업로드주기": _c(cells, "업로드주기"),
             "업로드요일": _c(cells, "업로드요일"),
@@ -80,7 +86,6 @@ def fetch_upload_rows(settings: Settings) -> list[dict]:
             "런칭일": _c(cells, "런칭일"),
             "마지막업로드일": _c(cells, "마지막업로드일"),
             "다음업로드일": _c(cells, "다음업로드일"),
-            "남은업로드화수": _c(cells, "남은업로드화수"),  # ← 변경
             "원고준비": _c(cells, "원고준비"),
             "업로드링크": _c(cells, "업로드링크"),
             "마지막업로드회수": _c(cells, "마지막업로드회수"),
@@ -92,7 +97,7 @@ def fetch_upload_rows(settings: Settings) -> list[dict]:
 def _find_row(settings: Settings) -> tuple[Path, str, str, dict[str, int]]:
     cred, sid, tab = _ctx(settings)
     esc = _tab_esc(tab)
-    rows = read_sheet_tab_values(cred, sid, f"'{esc}'!A2:Q")
+    rows = read_sheet_tab_values(cred, sid, f"'{esc}'!A2:R")
     id_to_row: dict[str, int] = {}
     for i, row in enumerate(rows):
         cells = padded_row_cells(row if isinstance(row, list) else [], _COLS)
@@ -107,27 +112,26 @@ def create_upload_row(settings: Settings, fields: dict) -> dict:
     if not 작품명:
         raise SheetsParseError("[파싱] 작품명은 비울 수 없습니다.")
     row = [""] * _COLS
-    key_to_idx = {k: v for k, v in _IDX.items()}
-    for key, idx in key_to_idx.items():
+    for key, idx in _IDX.items():
         val = str(fields.get(key, "")).strip()
         if val:
             row[idx] = val
     esc = _tab_esc(tab)
     import re
-    updated = append_rows_to_sheet_range(cred, sid, f"'{esc}'!A:Q", [row])
+    updated = append_rows_to_sheet_range(cred, sid, f"'{esc}'!A:R", [row])
     m = re.search(r"!([A-Za-z]+)(\d+)", updated or "")
     sheet_row = int(m.group(2)) if m else 0
     return {"id": _row_id(sheet_row), "sheet_row": sheet_row, "작품명": 작품명,
             **{k: str(fields.get(k, "")) for k in _IDX if k != "작품명"}}
 
 
-# 수정 가능 필드
 _EDITABLE_COL_MAP = {
     "완료": "A", "업로드일": "B", "플랫폼명": "C", "작품명": "D",
-    "업로드완료여부": "E", "업로드주기": "F", "업로드요일": "G",
-    "업로드방식": "H", "런칭일": "I", "마지막업로드일": "J",
-    "다음업로드일": "K", "남은업로드화수": "L",  # ← 변경
-    "원고준비": "M", "업로드링크": "O", "마지막업로드회수": "P", "비고": "Q",
+    "업로드화수": "E", "남은업로드화수": "F",
+    "업로드완료여부": "G", "업로드주기": "H", "업로드요일": "I",
+    "업로드방식": "J", "런칭일": "K", "마지막업로드일": "L",
+    "다음업로드일": "M", "원고준비": "N",
+    "업로드링크": "P", "마지막업로드회수": "Q", "비고": "R",
 }
 
 
