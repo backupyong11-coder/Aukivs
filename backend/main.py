@@ -580,3 +580,70 @@ def post_platform_rows_update(body: dict):
         raise HTTPException(status_code=404, detail=str(e)) from e
     except SheetsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ── 대시보드 통계 ────────────────────────────────────────────────────
+@app.get("/stats")
+def get_stats():
+    from datetime import date as _date
+    settings = load_settings()
+
+    def is_true(v) -> bool:
+        return v is True or str(v).strip().upper() == "TRUE"
+
+    def safe_int(v) -> int:
+        try:
+            return int(float(str(v))) if v not in (None, "", "-") else 0
+        except Exception:
+            return 0
+
+    today = _date.today().isoformat()  # e.g. "2026-04-13"
+
+    # 업무정리
+    try:
+        tasks = fetch_tasks(settings)
+    except Exception:
+        tasks = []
+
+    today_done = sum(1 for t in tasks if is_true(t.get("완료")) and str(t.get("마감일", ""))[:10] == today)
+    today_todo = sum(1 for t in tasks if not is_true(t.get("완료")) and str(t.get("마감일", ""))[:10] == today)
+    total_done = sum(1 for t in tasks if is_true(t.get("완료")))
+
+    # 업로드정리
+    try:
+        upload_rows = fetch_upload_rows(settings)
+    except Exception:
+        upload_rows = []
+
+    uploaded_eps  = sum(safe_int(r.get("업로드화수")) for r in upload_rows if is_true(r.get("완료")))
+    remaining_eps = sum(safe_int(r.get("남은업로드화수")) for r in upload_rows if not is_true(r.get("완료")))
+
+    # 플랫폼정리
+    try:
+        platforms = fetch_platforms(settings)
+    except Exception:
+        platforms = []
+
+    contracts_done = sum(1 for p in platforms if str(p.get("계약", "")).strip() == "계약완료")
+    sign_pending   = sum(1 for p in platforms if str(p.get("계약", "")).strip() == "사인만 남음")
+    meetings       = sum(1 for p in platforms if "미팅예정" in str(p.get("미팅", "")))
+
+    subsidy         = [p for p in platforms if is_true(p.get("지원사업"))]
+    subsidy_planned = sum(1 for p in subsidy if is_true(p.get("예정")))
+    subsidy_waiting = sum(1 for p in subsidy if is_true(p.get("진행중")))
+    subsidy_done    = sum(1 for p in subsidy if is_true(p.get("완료")))
+
+    return {
+        "today_done":         today_done,
+        "today_todo":         today_todo,
+        "total_done_tasks":   total_done,
+        "uploaded_episodes":  uploaded_eps,
+        "remaining_episodes": remaining_eps,
+        "contracts_done":     contracts_done,
+        "sign_pending":       sign_pending,
+        "meetings":           meetings,
+        "subsidy_total":      len(subsidy),
+        "subsidy_planned":    subsidy_planned,
+        "subsidy_waiting":    subsidy_waiting,
+        "subsidy_done":       subsidy_done,
+    }

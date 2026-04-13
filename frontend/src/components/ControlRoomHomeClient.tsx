@@ -117,12 +117,29 @@ type PanelState =
   | { kind: "error"; message: string }
   | { kind: "render"; title: string; node: ReactNode };
 
+// 대시보드 통계 타입
+type DashStats = {
+  today_done: number;
+  today_todo: number;
+  total_done_tasks: number;
+  uploaded_episodes: number;
+  remaining_episodes: number;
+  contracts_done: number;
+  sign_pending: number;
+  meetings: number;
+  subsidy_total: number;
+  subsidy_planned: number;
+  subsidy_waiting: number;
+  subsidy_done: number;
+};
+
 export function ControlRoomHomeClient() {
   const [hub, setHub] = useState<HubLoadState>({ kind: "loading" });
   const [panel, setPanel] = useState<PanelState>({ kind: "welcome" });
   const [queryDraft, setQueryDraft] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [dashStats, setDashStats] = useState<DashStats | null>(null);
 
   const refreshHistory = useCallback(() => {
     setRecent(loadRecentQueries());
@@ -172,6 +189,14 @@ export function ControlRoomHomeClient() {
     })();
     return () => ac.abort();
   }, [hubRefreshKey]);
+
+  // 대시보드 통계 fetch
+  useEffect(() => {
+    fetch(`${getApiBaseUrl()}/stats`)
+      .then(r => r.json())
+      .then(setDashStats)
+      .catch(console.error);
+  }, []);
 
   const metrics = useMemo(() => {
     if (hub.kind !== "ready") return null;
@@ -759,22 +784,53 @@ export function ControlRoomHomeClient() {
           </section>
         </main>
 
+        {/* ── 우측 대시보드 ── */}
         <aside className="lg:col-span-3">
-          {metrics ? (
-            <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드 요약</h2>
-              <ul className="mt-2 grid grid-cols-2 gap-2">
-                <SidebarStat label="오늘 마감" value={metrics.dueTodayCheck} onClick={() => void runPreset("due_today")} />
-                <SidebarStat label="미완료 업로드" value={metrics.incompleteUploads} onClick={() => void runPreset("upload_gaps")} />
-                <SidebarStat label="데이터 주의" value={metrics.dataOdd} onClick={() => void runPreset("data_bad")} />
-                <SidebarStat label="중복 id" value={metrics.dupIdGroups} onClick={() => void runPreset("dup_id")} />
-                <SidebarStat label="긴급 후보" value={metrics.urgent} onClick={() => void runPreset("urgent_only")} />
-                <SidebarStat label="오늘 업로드(집계)" value={metrics.todayUploadBriefing} onClick={() => void runPreset("today_upload")} />
-                <SidebarStat label="지연·후속(집계)" value={metrics.overdueUploadBriefing} onClick={() => void runPreset("upload_summary")} />
-              </ul>
-            </section>
-          ) : null}
+          <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+            <h2 className="text-xs font-semibold uppercase text-zinc-500">대시보드</h2>
+
+            <div className="mt-3 space-y-3">
+
+              {/* 오늘 */}
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">오늘</p>
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard label="한 일" value={dashStats?.today_done} color="green" />
+                <StatCard label="남은 일" value={dashStats?.today_todo} color="orange" />
+              </div>
+              <StatCard label="완료한 업무 총합" value={dashStats?.total_done_tasks} color="blue" wide />
+
+              {/* 업로드 */}
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">업로드</p>
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard label="업로드한 화수" value={dashStats?.uploaded_episodes} suffix="화" color="blue" />
+                <StatCard label="남은 화수" value={dashStats?.remaining_episodes} suffix="화" color="red" />
+              </div>
+
+              {/* 계약 */}
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">계약</p>
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard label="계약 완료" value={dashStats?.contracts_done} color="green" />
+                <StatCard label="사인만 남음" value={dashStats?.sign_pending} color="yellow" />
+              </div>
+              <StatCard label="예정된 미팅" value={dashStats?.meetings} color="purple" wide />
+
+              {/* 지원사업 */}
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 pt-1">
+                지원사업
+                <span className="ml-1 normal-case font-normal text-zinc-500">
+                  ({dashStats?.subsidy_total ?? "…"}개)
+                </span>
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <StatCard label="할 예정" value={dashStats?.subsidy_planned} color="blue" small />
+                <StatCard label="결과 대기" value={dashStats?.subsidy_waiting} color="orange" small />
+                <StatCard label="완료" value={dashStats?.subsidy_done} color="green" small />
+              </div>
+
+            </div>
+          </section>
         </aside>
+
       </div>
     </div>
   );
@@ -858,6 +914,35 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label, value, color = "gray", suffix = "", wide = false, small = false,
+}: {
+  label: string;
+  value?: number | null;
+  color?: string;
+  suffix?: string;
+  wide?: boolean;
+  small?: boolean;
+}) {
+  const colorMap: Record<string, string> = {
+    green:  "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900/40",
+    blue:   "text-blue-600   bg-blue-50   border-blue-200   dark:text-blue-400   dark:bg-blue-950/30   dark:border-blue-900/40",
+    orange: "text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-950/30 dark:border-orange-900/40",
+    red:    "text-red-600    bg-red-50    border-red-200    dark:text-red-400    dark:bg-red-950/30    dark:border-red-900/40",
+    yellow: "text-yellow-700 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/30 dark:border-yellow-900/40",
+    purple: "text-purple-600 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-950/30 dark:border-purple-900/40",
+    gray:   "text-zinc-700   bg-zinc-50   border-zinc-200   dark:text-zinc-300   dark:bg-zinc-900/60   dark:border-zinc-700",
+  };
+  return (
+    <div className={`rounded-lg border p-2 ${colorMap[color] ?? colorMap.gray} ${wide ? "col-span-2" : ""}`}>
+      <p className={`font-bold leading-none ${small ? "text-lg" : "text-2xl"}`}>
+        {value ?? "…"}{suffix}
+      </p>
+      <p className="mt-1 text-[11px] opacity-70">{label}</p>
     </div>
   );
 }
