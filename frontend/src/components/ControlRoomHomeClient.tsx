@@ -395,8 +395,8 @@ export function ControlRoomHomeClient() {
           <ul className="space-y-1">
             {rows.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : rows.map((r, i) => (
               <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+                {r["플랫폼명"] ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">[{r["플랫폼명"]}]</span> : null}
                 <span className="font-medium">{r["작품명"] ?? ""}</span>
-                {r["플랫폼명"] ? <span className="ml-1 text-zinc-500">({r["플랫폼명"]})</span> : null}
                 <span className="ml-2 text-red-600 dark:text-red-400">{safeInt(r["남은업로드화수"])}화 남음</span>
               </li>
             ))}
