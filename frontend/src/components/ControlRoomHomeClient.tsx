@@ -394,7 +394,7 @@ export function ControlRoomHomeClient() {
         node: (
           <ul className="space-y-1">
             {rows.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : rows.map((r, i) => (
-              <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
+              <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
                 {r["플랫폼명"] ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">[{r["플랫폼명"]}]</span> : null}
                 <span className="font-medium">{r["작품명"] ?? ""}</span>
                 <span className="ml-2 text-red-600 dark:text-red-400">{safeInt(r["남은업로드화수"])}화 남음</span>
@@ -444,7 +444,7 @@ export function ControlRoomHomeClient() {
       const incomplete = hub.allTasks.filter(t => !isTrue(t["완료"]));
       openPanel({
         kind: "render", title: `미완료 업무 ${incomplete.length}개`,
-        node: <TaskList items={incomplete} color="amber" />,
+        node: <TaskList items={incomplete} />,
       }); return;
     }
     if (id === "upload_gaps") {
@@ -486,7 +486,7 @@ export function ControlRoomHomeClient() {
       const urgentItems = hub.allTasks.filter(t => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음");
       openPanel({
         kind: "render", title: `급한 일 ${urgentItems.length}개`,
-        node: urgentItems.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : <TaskList items={urgentItems} color="red" />,
+        node: urgentItems.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : <TaskList items={urgentItems} />,
       }); return;
     }
     if (id === "today_triage") {
@@ -577,7 +577,8 @@ export function ControlRoomHomeClient() {
     openPanel({ kind: "loading", label: "AI가 분석 중입니다…" });
     try {
       const trimPlatform = hub.platformMaster.slice(0, 50).map(p => ({
-        회사명: p["회사명"], 플랫폼명: p["플랫폼명"], 현재단계: p["현재단계"], 마지막상황: p["마지막상황"] || p["마지막 상황"],
+        회사명: p["회사명"], 플랫폼명: p["플랫폼명"], 현재단계: p["현재단계"],
+        마지막상황: p["마지막상황"] || p["마지막 상황"],
       }));
       const trimWorks = hub.worksMaster.slice(0, 50).map(w => ({ 작품명: w["작품명"] }));
       const trimMemos = hub.memos.slice(0, 30).map(m => ({ content: m.content, category: m.category }));
@@ -592,7 +593,7 @@ export function ControlRoomHomeClient() {
           ? "AI 서버가 일시적으로 과부하 상태예요. 잠시 후 다시 시도해주세요."
           : errType === "invalid_request_error"
           ? "요청 데이터가 너무 커요. 질문을 더 구체적으로 해주세요."
-          : (data.error?.error?.message ?? data.error ?? "AI 오류가 발생했습니다.");
+          : "AI 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
         openPanel({ kind: "error", message: msg }); return;
       }
       openPanel({ kind: "render", title: "AI 답변", node: <div className="whitespace-pre-wrap text-sm leading-relaxed">{data.answer}</div> });
@@ -735,8 +736,8 @@ export function ControlRoomHomeClient() {
                       <p className="text-xs font-semibold text-zinc-500">업무 ({allTasksOnDay.length}건)</p>
                       {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => (
                         <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                          {it["분류"] ? <span className="mr-1 font-medium text-zinc-700">[{it["분류"]}]</span> : null}
-                          {it["관련플랫폼"] ? <span className="mr-1 text-zinc-500">[{it["관련플랫폼"]}]</span> : null}
+                          {it["분류"] ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">{it["분류"]}</span> : null}
+                          {it["관련플랫폼"] ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{it["관련플랫폼"]}</span> : null}
                           <span>{it["업무명"] ?? ""}</span>
                         </li>
                       ))}</ul>}
@@ -890,17 +891,14 @@ export function ControlRoomHomeClient() {
 }
 
 function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; color?: string }) {
-  const cls = color === "red" ? "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30"
-    : color === "amber" ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"
-    : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
   return (
     <ul className="max-h-80 space-y-2 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
-        <li key={i} className={`rounded border px-2 py-1.5 text-xs ${cls}`}>
-          <p className="font-semibold text-zinc-900 dark:text-zinc-50">{t["업무명"] ?? ""}</p>
+        <li key={i} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
+          <p className="font-medium text-zinc-900 dark:text-zinc-50">{t["업무명"] ?? ""}</p>
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
             {t["마감일"] ? <span>📅 {t["마감일"]}</span> : null}
-            {t["관련플랫폼"] ? <span>[{t["관련플랫폼"]}]</span> : null}
+            {t["관련플랫폼"] ? <span>{t["관련플랫폼"]}</span> : null}
             {t["분류"] ? <span>{t["분류"]}</span> : null}
             {t["우선순위"] ? <span className={t["우선순위"] === "높음" ? "text-red-500 font-medium" : ""}>{t["우선순위"]}</span> : null}
             {t["난이도"] ? <span>난이도:{t["난이도"]}</span> : null}
