@@ -863,8 +863,8 @@ export function ControlRoomHomeClient() {
     if (id === "platform_status") {
       openPanel({
         kind: "render", title: "플랫폼 마지막 상황", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => (p["마지막상황"] || p["마지막 상황"]) && !isTrue(p["예정"])).map((p, i) => (
-            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
+          <ul className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto">{hub.platformMaster.filter(p => (p["마지막상황"] || p["마지막 상황"]) && !isTrue(p["예정"])).map((p, i) => (
+            <li key={i} className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs break-words">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 text-zinc-600">{p["마지막상황"] || p["마지막 상황"] || ""}</p>
             </li>
@@ -875,8 +875,8 @@ export function ControlRoomHomeClient() {
     if (id === "platform_waiting") {
       openPanel({
         kind: "render", title: "플랫폼 대기사유", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
-            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+          <ul className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto">{hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
+            <li key={i} className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs break-words dark:border-zinc-700 dark:bg-zinc-900/50">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 text-zinc-600">{p["대기사유"]}</p>
             </li>
@@ -887,8 +887,8 @@ export function ControlRoomHomeClient() {
     if (id === "platform_action") {
       openPanel({
         kind: "render", title: "플랫폼 다음액션", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음" && !isTrue(p["불가"]) && !isTrue(p["예정"])).map((p, i) => (
-            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
+          <ul className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음" && !isTrue(p["불가"]) && !isTrue(p["예정"])).map((p, i) => (
+            <li key={i} className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs break-words">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 font-medium">{p["다음액션"]}</p>
             </li>
@@ -995,19 +995,15 @@ export function ControlRoomHomeClient() {
           </div>
         </div>
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
-              <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
-              <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
-              <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
-              <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
-            </div>
-            <div className="grid w-full max-w-lg grid-cols-2 gap-2">
-              <button type="button" className={`${quickBtn} w-full`} onClick={() => void runPreset("platform_status", "마지막 상황")}>마지막 상황</button>
-              <button type="button" className={`${quickBtn} w-full`} onClick={() => void runPreset("platform_waiting", "대기사유")}>대기사유</button>
-              <button type="button" className={`${quickBtn} w-full`} onClick={() => void runPreset("platform_action", "다음액션")}>다음액션</button>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_status", "마지막 상황")}>마지막 상황</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_waiting", "대기사유")}>대기사유</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_action", "다음액션")}>다음액션</button>
           </div>
         </div>
       </header>
