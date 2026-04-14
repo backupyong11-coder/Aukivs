@@ -100,8 +100,9 @@ function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
 }
 
-/** 업무정리 D열(분류) 값으로 탭 구분 — 나머지는 '나머지업무'(컬러판형·작품업로드 제외) */
-type TaskCategoryTab =
+/** 업무정리 D열(분류) 값으로 탭 구분 — '전체'는 필터 없음, 나머지는 '나머지업무' 등으로 귀속 */
+type TaskFilterTab =
+  | "전체"
   | "유통관련"
   | "작품제작"
   | "업무미팅"
@@ -112,19 +113,20 @@ type TaskCategoryTab =
   | "작품업로드"
   | "나머지업무";
 
-const TASK_CATEGORY_TABS: { id: TaskCategoryTab; label: string }[] = [
+const TASK_CATEGORY_TABS: { id: TaskFilterTab; label: string }[] = [
+  { id: "전체", label: "전체" },
   { id: "유통관련", label: "유통관련" },
+  { id: "작품업로드", label: "작품업로드" },
   { id: "작품제작", label: "작품제작" },
   { id: "업무미팅", label: "업무미팅" },
   { id: "지원사업", label: "지원사업" },
   { id: "협력제작", label: "협력제작" },
   { id: "작품수정", label: "작품수정" },
   { id: "컬러판형", label: "컬러판형" },
-  { id: "작품업로드", label: "작품업로드" },
   { id: "나머지업무", label: "나머지업무" },
 ];
 
-function bucketFromClassification(d: string): TaskCategoryTab {
+function bucketFromClassification(d: string): Exclude<TaskFilterTab, "전체"> {
   const t = d.trim();
   if (t.includes("유통관련")) return "유통관련";
   if (t.includes("작품제작")) return "작품제작";
@@ -154,9 +156,15 @@ function taskRowSubLines(t: TaskSheetRow): { label: string; value: string }[] {
   return rows;
 }
 
-function RemainingTasksPanel(props: { items: TaskSheetRow[] }) {
-  const [tab, setTab] = useState<TaskCategoryTab>("유통관련");
+function RemainingTasksPanel(props: {
+  items: TaskSheetRow[];
+  /** 남은 일(미완료) / 오늘 할 일(마감일=오늘) */
+  variant?: "remaining" | "today";
+  todayYmd?: string;
+}) {
+  const [tab, setTab] = useState<TaskFilterTab>("전체");
   const filtered = useMemo(() => {
+    if (tab === "전체") return props.items;
     return props.items.filter(
       (row) => bucketFromClassification(row["분류"] ?? "") === tab,
     );
@@ -168,12 +176,26 @@ function RemainingTasksPanel(props: { items: TaskSheetRow[] }) {
   const tabOff =
     "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800";
 
+  const summaryLine =
+    props.variant === "today" && props.todayYmd
+      ? (
+          <>
+            마감일 <span className="font-mono">{props.todayYmd}</span>
+            {" "}
+            · <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
+            건 · D열 분류로 필터
+          </>
+        )
+      : (
+          <>
+            미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
+            건 · D열 분류로 필터
+          </>
+        );
+
   return (
     <div className="space-y-2">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-        건 · D열 분류로 필터
-      </p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{summaryLine}</p>
       <div className="-mx-1 flex gap-1 overflow-x-auto pb-1">
         {TASK_CATEGORY_TABS.map((x) => (
           <button
@@ -189,7 +211,7 @@ function RemainingTasksPanel(props: { items: TaskSheetRow[] }) {
       <ul className="grid max-h-[min(70vh,26rem)] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
         {filtered.length === 0 ? (
           <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">
-            이 분류에 해당하는 남은 일이 없습니다.
+            {tab === "전체" ? "표시할 항목이 없습니다." : "이 분류에 해당하는 항목이 없습니다."}
           </li>
         ) : (
           filtered.map((row, i) => {
@@ -631,40 +653,30 @@ export function ControlRoomHomeClient() {
     pushRecentQuery(label);
     refreshHistory();
 
-    if (hub.kind !== "ready") {
-      openPanel({ kind: "error", message: hub.kind === "error" ? hub.message : "아직 데이터를 불러오는 중입니다." });
-      return;
-    }
-
-    const { briefing, uploads } = hub;
-
+    /* GET /tasks 만 사용 — hub 로딩과 무관하게 동작 */
     if (id === "due_today") {
-      const todayYmd = formatSeoulYmd(new Date());
-      const items = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
-      openPanel({
-        kind: "render", title: "오늘 할 일",
-        node: (
-          <div className="space-y-3 text-sm">
-            <p className="text-zinc-600">오늘({todayYmd}) 할 일: <span className="font-semibold">{items.length}</span>건</p>
-            {items.length === 0 ? <p className="text-zinc-500">없음</p> : (
-              <ul className="space-y-2">{items.map((it) => (
-                <li key={it.id} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
-                  <p className="font-medium">{it.title}</p>
-                  {it.platform ? <p className="mt-0.5 text-xs text-zinc-500">{it.platform}{it.category ? ` · ${it.category}` : ""}</p> : null}
-                </li>
-              ))}</ul>
-            )}
-          </div>
-        ),
-      }); return;
-    }
-    if (id === "today_upload") {
-      const rows = uploads.items.filter((it) => isUploadToday(it.uploaded_at));
-      openPanel({ kind: "render", title: "오늘 업로드", node: <UploadPreviewList items={rows} empty="오늘 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
-    }
-    if (id === "week_upload") {
-      const rows = uploads.items.filter((it) => isUploadThisSeoulWeek(it.uploaded_at));
-      openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
+      openPanel({ kind: "loading", label: "오늘 할 일 불러오는 중…" });
+      try {
+        const r = await fetchTasks();
+        if (!r.ok) {
+          openPanel({ kind: "error", message: r.message });
+          return;
+        }
+        const todayYmd = formatSeoulYmd(new Date());
+        const todayRows = r.items.filter(
+          (row) => normalizeSheetDateYmd(row["마감일"] ?? "") === todayYmd,
+        );
+        openPanel({
+          kind: "render",
+          title: "오늘 할 일",
+          node: (
+            <RemainingTasksPanel items={todayRows} variant="today" todayYmd={todayYmd} />
+          ),
+        });
+      } catch (e: unknown) {
+        openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
+      }
+      return;
     }
     if (id === "incomplete_check") {
       openPanel({ kind: "loading", label: "남은 일 불러오는 중…" });
@@ -678,11 +690,28 @@ export function ControlRoomHomeClient() {
         openPanel({
           kind: "render",
           title: "남은 일",
-          node: <RemainingTasksPanel items={undone} />,
+          node: <RemainingTasksPanel items={undone} variant="remaining" />,
         });
       } catch (e: unknown) {
         openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
-      } return;
+      }
+      return;
+    }
+
+    if (hub.kind !== "ready") {
+      openPanel({ kind: "error", message: hub.kind === "error" ? hub.message : "아직 데이터를 불러오는 중입니다." });
+      return;
+    }
+
+    const { briefing, uploads } = hub;
+
+    if (id === "today_upload") {
+      const rows = uploads.items.filter((it) => isUploadToday(it.uploaded_at));
+      openPanel({ kind: "render", title: "오늘 업로드", node: <UploadPreviewList items={rows} empty="오늘 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
+    }
+    if (id === "week_upload") {
+      const rows = uploads.items.filter((it) => isUploadThisSeoulWeek(it.uploaded_at));
+      openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "upload_gaps") {
       const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
