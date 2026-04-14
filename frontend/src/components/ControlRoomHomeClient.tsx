@@ -749,18 +749,19 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "urgent_only") {
+      if (!dashStats) {
+        openPanel({ kind: "error", message: "대시보드 데이터를 불러오는 중입니다." });
+        return;
+      }
+      const urgentItems = dashStats._allTasks.filter(
+        (t) => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음",
+      );
       openPanel({
-        kind: "render", title: "급한 일",
-        node: briefing.urgent_items.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : (
-          <ul className="space-y-2">{briefing.urgent_items.map((it) => (
-            <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2">
-              <span className="text-[10px] font-semibold uppercase text-amber-900">{it.source === "checklist" ? "체크" : "업로드"}</span>
-              <p className="mt-1 font-medium">{it.title}</p>
-              {it.note ? <p className="mt-1 text-xs text-zinc-600">{it.note}</p> : null}
-            </li>
-          ))}</ul>
-        ),
-      }); return;
+        kind: "render",
+        title: `긴급한 일 ${dashStats.urgent}개`,
+        node: <TaskList items={urgentItems} color="red" />,
+      });
+      return;
     }
     if (id === "today_triage") {
       openPanel({
@@ -838,7 +839,7 @@ export function ControlRoomHomeClient() {
     if (id === "platform_stub") {
       openPanel({ kind: "render", title: "플랫폼·작품 조회", node: <p className="text-sm text-zinc-500">좌측 선택 상자를 이용하세요.</p> }); return;
     }
-  }, [hub, openPanel, refreshHistory]);
+  }, [hub, openPanel, refreshHistory, dashStats]);
 
   const runQuestion = useCallback(async (qRaw: string) => {
     const q = qRaw.trim();
@@ -926,7 +927,7 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
