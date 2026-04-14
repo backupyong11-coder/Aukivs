@@ -100,7 +100,7 @@ function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
 }
 
-/** 업무정리 D열(분류) 값으로 탭 구분 — 나머지는 '나머지업무' */
+/** 업무정리 D열(분류) 값으로 탭 구분 — 나머지는 '나머지업무'(컬러판형·작품업로드 제외) */
 type TaskCategoryTab =
   | "유통관련"
   | "작품제작"
@@ -108,6 +108,8 @@ type TaskCategoryTab =
   | "지원사업"
   | "협력제작"
   | "작품수정"
+  | "컬러판형"
+  | "작품업로드"
   | "나머지업무";
 
 const TASK_CATEGORY_TABS: { id: TaskCategoryTab; label: string }[] = [
@@ -117,6 +119,8 @@ const TASK_CATEGORY_TABS: { id: TaskCategoryTab; label: string }[] = [
   { id: "지원사업", label: "지원사업" },
   { id: "협력제작", label: "협력제작" },
   { id: "작품수정", label: "작품수정" },
+  { id: "컬러판형", label: "컬러판형" },
+  { id: "작품업로드", label: "작품업로드" },
   { id: "나머지업무", label: "나머지업무" },
 ];
 
@@ -128,6 +132,8 @@ function bucketFromClassification(d: string): TaskCategoryTab {
   if (t.includes("지원사업")) return "지원사업";
   if (t.includes("협력제작")) return "협력제작";
   if (t.includes("작품수정")) return "작품수정";
+  if (t.includes("컬러판형")) return "컬러판형";
+  if (t.includes("작품업로드")) return "작품업로드";
   return "나머지업무";
 }
 
