@@ -7,15 +7,18 @@ type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 type SortKey = "마지막업데이트날짜" | "현재단계" | "우선순위" | "회사명" | "마지막상황" | "대기사유" | "다음액션" | "비고";
 type SortDir = "asc" | "desc";
 
+/** 현재단계 셀 최대 가로 — 마지막업데이트 열과 동일 계열(8rem), 넘치면 말줄임 */
+const STAGE_MAX_W = "max-w-[8rem]";
+
 const INLINE_COLS: { key: string; label: string; sortKey?: SortKey; width: string; badge?: boolean }[] = [
   { key: "마지막업데이트날짜", label: "마지막업데이트", sortKey: "마지막업데이트날짜", width: "w-32" },
-  { key: "현재단계",           label: "현재단계",       sortKey: "현재단계",           width: "w-36", badge: true },
-  { key: "우선순위",           label: "우선순위",       sortKey: "우선순위",           width: "w-20", badge: true },
-  { key: "회사명",             label: "회사명",         sortKey: "회사명",             width: "w-24" },
-  { key: "마지막상황",         label: "마지막상황",     sortKey: "마지막상황",         width: "w-48" },
-  { key: "대기사유",           label: "대기사유",       sortKey: "대기사유",           width: "w-36" },
-  { key: "다음액션",           label: "다음액션",       sortKey: "다음액션",           width: "w-48" },
-  { key: "비고",               label: "비고",           sortKey: "비고",               width: "w-32" },
+  { key: "현재단계",           label: "현재단계",       sortKey: "현재단계",           width: "w-32", badge: true },
+  { key: "우선순위",           label: "우선순위",       sortKey: "우선순위",           width: "w-24", badge: true },
+  { key: "회사명",             label: "회사명",         sortKey: "회사명",             width: "w-28" },
+  { key: "마지막상황",         label: "마지막상황",     sortKey: "마지막상황",         width: "min-w-[12rem] max-w-[18rem]" },
+  { key: "대기사유",           label: "대기사유",       sortKey: "대기사유",           width: "min-w-[10rem] max-w-[14rem]" },
+  { key: "다음액션",           label: "다음액션",       sortKey: "다음액션",           width: "min-w-[12rem] max-w-[18rem]" },
+  { key: "비고",               label: "비고",           sortKey: "비고",               width: "w-36" },
 ];
 
 const STATUS_KEY_CANDIDATES = ["마지막상황", "마지막 상황", "최근상황", "최근 상황", "상황"];
@@ -65,6 +68,15 @@ export function PlatformRowsClient() {
     return new Set<string>();
   });
   const [companyFilterOpen, setCompanyFilterOpen] = useState(false);
+  const [priorityFilterOpen, setPriorityFilterOpen] = useState(false);
+  const [hiddenPriorities, setHiddenPriorities] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("platform.hiddenPriorities");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
   const [sortKey, setSortKey] = useState<SortKey>("마지막업데이트날짜");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [manualOrder, setManualOrder] = useState<string[] | null>(null); // null = 자동정렬
@@ -99,6 +111,21 @@ export function PlatformRowsClient() {
     return [...new Set(state.items.map(it => it["회사명"] ?? "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   }, [state]);
 
+  const allPriorities = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    const raw = state.items.map(it => it["우선순위"] ?? "");
+    const keys = [...new Set(raw.map(v => v.trim()))];
+    keys.sort((a, b) => {
+      const ae = a === "", be = b === "";
+      if (ae && !be) return 1;
+      if (!ae && be) return -1;
+      return a.localeCompare(b, "ko");
+    });
+    return keys;
+  }, [state]);
+
+  const priorityListLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
+
   // 정렬/필터 적용 목록
   const sorted = useMemo(() => {
     if (state.kind !== "ready") return [];
@@ -109,6 +136,9 @@ export function PlatformRowsClient() {
     if (hiddenCompanies.size > 0) {
       items = items.filter(it => !hiddenCompanies.has(it["회사명"] ?? ""));
     }
+    if (hiddenPriorities.size > 0) {
+      items = items.filter(it => !hiddenPriorities.has((it["우선순위"] ?? "").trim()));
+    }
     if (manualOrder) {
       const idxMap = new Map(manualOrder.map((id, i) => [id, i]));
       return [...items].sort((a, b) => (idxMap.get(a.id) ?? 9999) - (idxMap.get(b.id) ?? 9999));
@@ -117,7 +147,7 @@ export function PlatformRowsClient() {
       const va = a[sortKey] ?? "", vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, filterText, hiddenCompanies, manualOrder, sortKey, sortDir]);
+  }, [state, filterText, hiddenCompanies, hiddenPriorities, manualOrder, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     setManualOrder(null); // 컬럼 정렬하면 수동 순서 초기화
@@ -156,10 +186,24 @@ export function PlatformRowsClient() {
     });
   };
 
+  const togglePriority = (key: string) => {
+    setHiddenPriorities(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("platform.hiddenPriorities", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
   // 전체보기/전체숨김도 저장
   const setHiddenAndSave = (next: Set<string>) => {
     try { window.localStorage.setItem("platform.hiddenCompanies", JSON.stringify([...next])); } catch { /* ignore */ }
     setHiddenCompanies(next);
+  };
+
+  const setHiddenPrioritiesAndSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("platform.hiddenPriorities", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenPriorities(next);
   };
 
   const startInline = (rowId: string, key: string, currentVal: string) => {
@@ -267,6 +311,47 @@ export function PlatformRowsClient() {
           )}
         </div>
 
+        <div className="relative">
+          <button type="button" onClick={() => setPriorityFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            우선순위 필터
+            {hiddenPriorities.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">
+                {hiddenPriorities.size}
+              </span>
+            )}
+            <span className="text-[10px]">{priorityFilterOpen ? "▲" : "▼"}</span>
+          </button>
+
+          {priorityFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 우선순위</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenPrioritiesAndSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPrioritiesAndSave(new Set(allPriorities))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allPriorities.map(key => (
+                  <li key={key || "__empty__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenPriorities.has(key)} onChange={() => togglePriority(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{priorityListLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setPriorityFilterOpen(false)}
+                  className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">
+                  닫기
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {manualOrder && (
           <button onClick={() => setManualOrder(null)}
             className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400">
@@ -298,7 +383,7 @@ export function PlatformRowsClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[1000px] text-xs">
+          <table className="w-full min-w-[1280px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thCls} title="드래그로 행 순서 변경">≡</th>
@@ -314,7 +399,7 @@ export function PlatformRowsClient() {
             <tbody>
               {sorted.length === 0 ? (
                 <tr><td colSpan={INLINE_COLS.length + 3} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText || hiddenCompanies.size > 0 ? "조건에 맞는 항목이 없습니다" : "항목이 없습니다"}
+                  {filterText || hiddenCompanies.size > 0 || hiddenPriorities.size > 0 ? "조건에 맞는 항목이 없습니다" : "항목이 없습니다"}
                 </td></tr>
               ) : sorted.map(item => {
                 const isSaving = savingInline === item.id;
@@ -354,14 +439,14 @@ export function PlatformRowsClient() {
 
                       if (col.key === "마지막업데이트날짜") {
                         return (
-                          <td key={col.key} className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">
+                          <td key={col.key} className="w-32 whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">
                             {currentVal}
                           </td>
                         );
                       }
 
                       return (
-                        <td key={col.key} className={`px-1.5 py-1 ${col.width}`}>
+                        <td key={col.key} className={`min-w-0 px-1.5 py-1 ${col.width} ${col.key === "현재단계" ? STAGE_MAX_W : ""}`}>
                           {isEditing ? (
                             <input autoFocus value={editVal}
                               onChange={e => changeInline(item.id, col.key, e.target.value)}
@@ -374,10 +459,11 @@ export function PlatformRowsClient() {
                           ) : (
                             <button type="button" disabled={isSaving}
                               onClick={() => startInline(item.id, col.key, currentVal)}
-                              className="w-full rounded px-1.5 py-0.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:cursor-not-allowed"
-                              title="클릭해서 편집">
+                              className="block w-full max-w-full rounded px-1.5 py-0.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:cursor-not-allowed"
+                              title={currentVal || undefined}
+                              >
                               {col.badge && currentVal ? (
-                                <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                <span className={`block w-full max-w-full truncate whitespace-nowrap rounded px-1.5 py-0.5 text-left text-[10px] font-medium ${
                                   col.key === "현재단계"
                                     ? "bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-200"
                                     : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
