@@ -977,8 +977,6 @@ export function ControlRoomHomeClient() {
   };
 
   const quickBtn = "rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-left text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800";
-  const quickBtnUrgent =
-    "rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-left text-xs font-medium text-red-950 shadow-sm hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/55";
 
   return (
     <div className="min-h-full bg-zinc-100/90 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -999,7 +997,7 @@ export function ControlRoomHomeClient() {
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
-            <button type="button" className={quickBtnUrgent} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
@@ -1166,7 +1164,7 @@ export function ControlRoomHomeClient() {
 
                 {/* 긴급한 일 / 끝내고 할 일 (2단) */}
                 <ul className="grid grid-cols-2 gap-2">
-                  <SidebarStat label="긴급한 일" value={dashStats.urgent} accent="red" onClick={() => openDashPanel("urgent")} />
+                  <SidebarStat label="긴급한 일" value={dashStats.urgent} onClick={() => openDashPanel("urgent")} />
                   <SidebarStat label="끝내고 할 일" value={dashStats.normal} onClick={() => openDashPanel("normal")} />
                 </ul>
 
@@ -1190,7 +1188,7 @@ export function ControlRoomHomeClient() {
                 <div>
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">계약</p>
                   <ul className="grid grid-cols-2 gap-2">
-                    <SidebarStat label="계약 완료" value={dashStats.contracts_done} accent="red" onClick={() => openDashPanel("contracts_done")} />
+                    <SidebarStat label="계약 완료" value={dashStats.contracts_done} onClick={() => openDashPanel("contracts_done")} />
                     <SidebarStat label="사인만 남음" value={dashStats.sign_pending} onClick={() => openDashPanel("sign_pending")} />
                   </ul>
                 </div>
@@ -1331,31 +1329,27 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
   );
 }
 
-function SidebarStat(props: { label: string; value: number; onClick?: () => void; accent?: "red" }) {
+function SidebarStat(props: { label: string; value: number; onClick?: () => void }) {
   const body = (
     <>
       <span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span>
       <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span>
     </>
   );
-  const accentCls =
-    props.accent === "red"
-      ? "border-red-200 bg-red-50/90 hover:bg-red-100 dark:border-red-900/45 dark:bg-red-950/35 dark:hover:bg-red-950/50"
-      : "border-zinc-200 bg-zinc-50/80 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800";
   if (props.onClick) {
     return (
       <li>
-        <button type="button" onClick={props.onClick} className={`flex w-full flex-col rounded-md border px-2 py-2 text-left transition-colors ${accentCls}`}>
+        <button
+          type="button"
+          onClick={props.onClick}
+          className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800"
+        >
           {body}
         </button>
       </li>
     );
   }
-  return (
-    <li className={`rounded-md border px-2 py-2 ${props.accent === "red" ? accentCls : "border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/60"}`}>
-      {body}
-    </li>
-  );
+  return <li className="rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">{body}</li>;
 }
 
 function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
