@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -350,6 +351,57 @@ function safeInt(v: unknown): number {
   } catch { return 0; }
 }
 
+/** 업로드정리 탭: 미완료이면서 F열 남은업로드화수 > 0 */
+function remainingUploadOrganizeRows(rows: Record<string, string>[]): Record<string, string>[] {
+  return rows.filter(
+    (r) => !isTrue(r["완료"]) && safeInt(r["남은업로드화수"]) > 0,
+  );
+}
+
+/** B·C·D·F·J·K(런칭일 접두) 순 표시 */
+function RemainingUploadOrganizePanel(props: { rows: Record<string, string>[] }) {
+  const { rows } = props;
+  if (rows.length === 0) {
+    return <p className="text-sm text-zinc-500">없음</p>;
+  }
+  return (
+    <ul className="max-h-80 space-y-1.5 overflow-y-auto">
+      {rows.map((r, i) => {
+        const b = (r["업로드일"] ?? "").trim();
+        const c = (r["플랫폼명"] ?? "").trim();
+        const d = (r["작품명"] ?? "").trim();
+        const f = safeInt(r["남은업로드화수"]);
+        const j = (r["업로드방식"] ?? "").trim();
+        const k = (r["런칭일"] ?? "").trim();
+        const segments: ReactNode[] = [];
+        if (b) segments.push(<span key="b" className="font-mono">{b}</span>);
+        if (c) segments.push(<span key="c">{c}</span>);
+        if (d) segments.push(<span key="d" className="font-medium">{d}</span>);
+        segments.push(
+          <span key="f" className="font-semibold text-amber-800 dark:text-amber-200">{f}화</span>,
+        );
+        if (j) segments.push(<span key="j">{j}</span>);
+        segments.push(
+          <span key="k" className="text-zinc-600 dark:text-zinc-400">런칭일 {k || "—"}</span>,
+        );
+        return (
+          <li
+            key={r["id"] ? String(r["id"]) : `uo-${i}`}
+            className="rounded border border-amber-200 bg-amber-50/90 px-2 py-1.5 text-xs leading-relaxed dark:border-amber-900/40 dark:bg-amber-950/30"
+          >
+            {segments.map((seg, idx) => (
+              <Fragment key={idx}>
+                {idx > 0 ? <span className="text-zinc-400"> · </span> : null}
+                {seg}
+              </Fragment>
+            ))}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 const SUGGESTED_QUERIES: { id: string; label: string }[] = [
   { id: "due_today", label: "오늘 마감 뭐야" },
   { id: "week_upload", label: "이번 주 업로드 일정 보여줘" },
@@ -601,6 +653,15 @@ export function ControlRoomHomeClient() {
         ),
       }); return;
     }
+    if (id === "remaining_episodes") {
+      const rows = remainingUploadOrganizeRows(dashStats._uploadRows);
+      openPanel({
+        kind: "render",
+        title: `남은 화수 총 ${dashStats.remaining_episodes}화`,
+        node: <RemainingUploadOrganizePanel rows={rows} />,
+      });
+      return;
+    }
     if (id === "contracts_done") {
       const rows = dashStats._platformRows.filter(p => (p["계약"] ?? "").trim() === "계약완료");
       openPanel({
@@ -714,8 +775,17 @@ export function ControlRoomHomeClient() {
       openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "upload_gaps") {
-      const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
-      openPanel({ kind: "render", title: "남은 업로드", node: <UploadPreviewList items={rows.slice(0, 20)} empty="없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
+      if (!dashStats) {
+        openPanel({ kind: "error", message: "대시보드 데이터를 불러오는 중입니다." });
+        return;
+      }
+      const rows = remainingUploadOrganizeRows(dashStats._uploadRows);
+      openPanel({
+        kind: "render",
+        title: `남은 화수 총 ${dashStats.remaining_episodes}화`,
+        node: <RemainingUploadOrganizePanel rows={rows} />,
+      });
+      return;
     }
     if (id === "data_bad") {
       const skipped = uploads.issues.filter((x) => x.kind === "row_skipped");
@@ -1110,7 +1180,7 @@ export function ControlRoomHomeClient() {
                   <ul className="grid grid-cols-3 gap-2">
                     <SidebarStat label="업로드한 화수" value={dashStats.uploaded_episodes} onClick={() => openDashPanel("uploaded_episodes")} />
                     <SidebarStat label="오늘 업로드" value={dashStats.today_uploads} onClick={() => openDashPanel("today_uploads")} />
-                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} />
+                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} onClick={() => openDashPanel("remaining_episodes")} />
                   </ul>
                 </div>
 
