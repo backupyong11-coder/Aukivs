@@ -17,6 +17,7 @@ import {
   toggleFavoriteQuery,
 } from "@/lib/controlRoomQueryHistory";
 import { fetchChecklist, type ChecklistItem } from "@/lib/checklist";
+import { fetchTasks, type TaskSheetRow } from "@/lib/tasks";
 import {
   duplicateUploadIdsFromIssues,
   fetchUploads,
@@ -97,6 +98,128 @@ function platformAdultWebtoonRow(p: PlatformMasterItem): boolean {
 /** C열 지원사업 체크 + G|H */
 function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
+}
+
+/** 업무정리 D열(분류) 값으로 탭 구분 — 나머지는 '나머지업무' */
+type TaskCategoryTab =
+  | "유통관련"
+  | "작품제작"
+  | "업무미팅"
+  | "지원사업"
+  | "협력제작"
+  | "작품수정"
+  | "나머지업무";
+
+const TASK_CATEGORY_TABS: { id: TaskCategoryTab; label: string }[] = [
+  { id: "유통관련", label: "유통관련" },
+  { id: "작품제작", label: "작품제작" },
+  { id: "업무미팅", label: "업무미팅" },
+  { id: "지원사업", label: "지원사업" },
+  { id: "협력제작", label: "협력제작" },
+  { id: "작품수정", label: "작품수정" },
+  { id: "나머지업무", label: "나머지업무" },
+];
+
+function bucketFromClassification(d: string): TaskCategoryTab {
+  const t = d.trim();
+  if (t.includes("유통관련")) return "유통관련";
+  if (t.includes("작품제작")) return "작품제작";
+  if (t.includes("업무미팅")) return "업무미팅";
+  if (t.includes("지원사업")) return "지원사업";
+  if (t.includes("협력제작")) return "협력제작";
+  if (t.includes("작품수정")) return "작품수정";
+  return "나머지업무";
+}
+
+/** 시트 E→D→C→G→H→I→J */
+function taskRowSubLines(t: TaskSheetRow): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  const push = (label: string, key: string) => {
+    const v = (t[key] ?? "").trim();
+    if (v) rows.push({ label, value: v });
+  };
+  push("우선순위", "우선순위");
+  push("분류", "분류");
+  push("관련플랫폼", "관련플랫폼");
+  push("정량화", "정량화");
+  push("난이도", "난이도");
+  push("피로도", "피로도");
+  push("상태", "상태");
+  return rows;
+}
+
+function RemainingTasksPanel(props: { items: TaskSheetRow[] }) {
+  const [tab, setTab] = useState<TaskCategoryTab>("유통관련");
+  const filtered = useMemo(() => {
+    return props.items.filter(
+      (row) => bucketFromClassification(row["분류"] ?? "") === tab,
+    );
+  }, [props.items, tab]);
+
+  const tabBtn =
+    "shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors";
+  const tabOn = "border-zinc-800 bg-zinc-900 text-white dark:border-zinc-200 dark:bg-zinc-100 dark:text-zinc-900";
+  const tabOff =
+    "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800";
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
+        건 · D열 분류로 필터
+      </p>
+      <div className="-mx-1 flex gap-1 overflow-x-auto pb-1">
+        {TASK_CATEGORY_TABS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            className={`${tabBtn} ${tab === x.id ? tabOn : tabOff}`}
+            onClick={() => setTab(x.id)}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      <ul className="grid max-h-[min(70vh,26rem)] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.length === 0 ? (
+          <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">
+            이 분류에 해당하는 남은 일이 없습니다.
+          </li>
+        ) : (
+          filtered.map((row, i) => {
+            const title = (row["업무명"] ?? "").trim() || "(제목 없음)";
+            const subs = taskRowSubLines(row);
+            const key = row["id"] ? String(row["id"]) : `task-${tab}-${i}`;
+            return (
+              <li
+                key={key}
+                className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+              >
+                <p className="font-semibold leading-snug text-zinc-900 dark:text-zinc-50">{title}</p>
+                {subs.length > 0 ? (
+                  <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+                    {subs.map((s, j) => (
+                      <li key={`${s.label}-${j}`}>
+                        <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
+                        {" "}
+                        <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })
+        )}
+      </ul>
+      <Link
+        href="/tasks"
+        className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100"
+      >
+        업무정리 시트 →
+      </Link>
+    </div>
+  );
 }
 
 /** K열 우선, 비어 있으면 회사명 */
@@ -540,9 +663,17 @@ export function ControlRoomHomeClient() {
     if (id === "incomplete_check") {
       openPanel({ kind: "loading", label: "남은 일 불러오는 중…" });
       try {
-        const r = await fetchChecklist();
-        if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
-        openPanel({ kind: "render", title: "남은 일", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
+        const r = await fetchTasks();
+        if (!r.ok) {
+          openPanel({ kind: "error", message: r.message });
+          return;
+        }
+        const undone = r.items.filter((row) => !isTrue(row["완료"]));
+        openPanel({
+          kind: "render",
+          title: "남은 일",
+          node: <RemainingTasksPanel items={undone} />,
+        });
       } catch (e: unknown) {
         openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
       } return;
@@ -1142,55 +1273,6 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
         })}
       </ul>
       <Link href={props.actionHref} className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">{props.actionLabel} →</Link>
-    </div>
-  );
-}
-
-/** 업무정리 시트: E → D → C → G → H → I → J */
-function checklistPreviewSubRows(it: ChecklistItem): { label: string; value: string }[] {
-  const rows: { label: string; value: string }[] = [];
-  const push = (label: string, raw: string | null | undefined) => {
-    const v = raw?.trim();
-    if (v) rows.push({ label, value: v });
-  };
-  push("우선순위", it.priority);
-  push("분류", it.category);
-  push("관련플랫폼", it.platform);
-  push("정량화", it.quantification);
-  push("난이도", it.difficulty);
-  push("피로도", it.fatigue);
-  push("상태", it.work_status);
-  return rows;
-}
-
-function ChecklistPreviewList(props: { items: ChecklistItem[]; total: number }) {
-  return (
-    <div className="space-y-2">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">활성 행 {props.total}건 중 {props.items.length}건</p>
-      <ul className="max-h-64 space-y-2 overflow-y-auto">
-        {props.items.map((it) => {
-          const sub = checklistPreviewSubRows(it);
-          return (
-            <li key={it.id} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
-              {sub.length > 0 ? (
-                <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
-                  {sub.map((s) => (
-                    <li key={s.label}>
-                      <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
-                      {" "}
-                      <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : it.note ? (
-                <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">{it.note}</p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      <Link href="/checklist" className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">체크 작업 →</Link>
     </div>
   );
 }
