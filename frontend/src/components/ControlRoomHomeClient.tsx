@@ -863,7 +863,7 @@ export function ControlRoomHomeClient() {
     if (id === "platform_status") {
       openPanel({
         kind: "render", title: "플랫폼 마지막상황", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["마지막상황"] || p["마지막 상황"]).map((p, i) => (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => (p["마지막상황"] || p["마지막 상황"]) && !isTrue(p["예정"])).map((p, i) => (
             <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 text-zinc-600">{p["마지막상황"] || p["마지막 상황"] || ""}</p>
@@ -887,7 +887,7 @@ export function ControlRoomHomeClient() {
     if (id === "platform_action") {
       openPanel({
         kind: "render", title: "플랫폼 다음액션", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음").map((p, i) => (
+          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["다음액션"] && p["다음액션"] !== "아직 없음" && !isTrue(p["불가"]) && !isTrue(p["예정"])).map((p, i) => (
             <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 font-medium">{p["다음액션"]}</p>
