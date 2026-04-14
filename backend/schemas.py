@@ -38,6 +38,18 @@ class ChecklistItem(BaseModel):
         default=None,
         description="정량화(G열, 업무정리 탭 연동 시), 비어 있으면 null",
     )
+    difficulty: str | None = Field(
+        default=None,
+        description="난이도(H열, 업무정리 탭 연동 시)",
+    )
+    fatigue: str | None = Field(
+        default=None,
+        description="피로도(I열, 업무정리 탭 연동 시)",
+    )
+    work_status: str | None = Field(
+        default=None,
+        description="상태(J열, 업무정리 탭 연동 시)",
+    )
     memo: str | None = Field(
         default=None,
         description="메모(M열, 업무정리 탭 연동 시), 비어 있으면 null",

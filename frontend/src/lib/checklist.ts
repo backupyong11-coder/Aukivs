@@ -11,6 +11,12 @@ export type ChecklistItem = {
   priority?: string | null;
   /** 업무정리 시트 G열 */
   quantification?: string | null;
+  /** 업무정리 시트 H열 */
+  difficulty?: string | null;
+  /** 업무정리 시트 I열 */
+  fatigue?: string | null;
+  /** 업무정리 시트 J열 */
+  work_status?: string | null;
   /** 업무정리 시트 M열 */
   memo?: string | null;
 };
@@ -50,6 +56,9 @@ function parseChecklistItems(raw: unknown): ChecklistItem[] | null {
       category: typeof rec.category === "string" ? rec.category : null,
       priority: typeof rec.priority === "string" ? rec.priority : null,
       quantification: typeof rec.quantification === "string" ? rec.quantification : null,
+      difficulty: typeof rec.difficulty === "string" ? rec.difficulty : null,
+      fatigue: typeof rec.fatigue === "string" ? rec.fatigue : null,
+      work_status: typeof rec.work_status === "string" ? rec.work_status : null,
       memo: typeof rec.memo === "string" ? rec.memo : null,
     });
   }

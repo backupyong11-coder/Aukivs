@@ -22,10 +22,14 @@ def _format_checklist_for_prompt(items: list[ChecklistItem]) -> str:
         memo = it.memo or ""
         plat = it.platform or ""
         cat = it.category or ""
+        diff = it.difficulty or ""
+        fat = it.fatigue or ""
+        st = it.work_status or ""
         lines.append(
             f"{i}. id={it.id!r} due_date={due!r} title={it.title!r} "
             f"platform={plat!r} category={cat!r} priority={pr!r} "
-            f"quantification={q!r} memo={memo!r} note={note!r}",
+            f"quantification={q!r} difficulty={diff!r} fatigue={fat!r} "
+            f"status={st!r} memo={memo!r} note={note!r}",
         )
     return "\n".join(lines) if lines else "(없음)"
 

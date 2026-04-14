@@ -71,12 +71,16 @@ class Settings:
 def load_settings() -> Settings:
     _materialize_google_credentials_from_env()
 
-    checklist_tab = os.getenv("GOOGLE_CHECKLIST_TAB", "체크리스트").strip() or "체크리스트"
     uploads_tab = os.getenv("GOOGLE_UPLOADS_TAB", "업로드운영").strip() or "업로드운영"
     memo_tab = os.getenv("GOOGLE_MEMO_TAB", "메모장").strip() or "메모장"
     platform_tab = os.getenv("GOOGLE_PLATFORM_TAB", "플랫폼마스터").strip() or "플랫폼마스터"
     works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품마스터").strip() or "작품마스터"
     tasks_tab = os.getenv("GOOGLE_TASKS_TAB", "업무정리").strip() or "업무정리"
+    # 미설정 시 업무정리 탭과 동일(체크리스트 전용 탭을 쓰려면 GOOGLE_CHECKLIST_TAB=체크리스트 로 명시)
+    _raw_checklist = os.getenv("GOOGLE_CHECKLIST_TAB")
+    checklist_tab = (
+        (_raw_checklist or "").strip() or tasks_tab
+    )
     raw_key = os.getenv("OPENAI_API_KEY")
     openai_key = raw_key.strip() if raw_key and str(raw_key).strip() else None
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"

@@ -37,6 +37,11 @@ _TASK_IDX: dict[str, int] = {
     "우선순위": 4,
     "업무명": 5,
     "정량화": 6,
+    "난이도": 7,
+    "피로도": 8,
+    "상태": 9,
+    "담당자": 10,
+    "관련작품": 11,
     "메모": 12,
 }
 
@@ -92,6 +97,9 @@ def _task_row_active_item(
         category=_optional_nonempty(_task_cell_str(cells, "분류")),
         priority=_optional_nonempty(_task_cell_str(cells, "우선순위")),
         quantification=_optional_nonempty(_task_cell_str(cells, "정량화")),
+        difficulty=_optional_nonempty(_task_cell_str(cells, "난이도")),
+        fatigue=_optional_nonempty(_task_cell_str(cells, "피로도")),
+        work_status=_optional_nonempty(_task_cell_str(cells, "상태")),
         memo=_optional_nonempty(_task_cell_str(cells, "메모")),
     )
 
@@ -164,7 +172,8 @@ def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem
         raise SheetsConfigurationError(
             "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
             "backend/.env 등에 설정하세요. "
-            "(선택) GOOGLE_CHECKLIST_TAB 으로 체크리스트 탭 이름을 바꿀 수 있습니다(기본: 체크리스트)."
+            "(선택) GOOGLE_CHECKLIST_TAB 으로 탭 이름을 바꿀 수 있습니다. "
+            "미설정 시 GOOGLE_TASKS_TAB(기본 업무정리)과 동일합니다."
         )
 
     cred_path = Path(settings.google_service_account_file).expanduser()
@@ -229,7 +238,8 @@ def fetch_checklist_for_briefing(
         raise SheetsConfigurationError(
             "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
             "backend/.env 등에 설정하세요. "
-            "(선택) GOOGLE_CHECKLIST_TAB 으로 체크리스트 탭 이름을 바꿀 수 있습니다(기본: 체크리스트)."
+            "(선택) GOOGLE_CHECKLIST_TAB 으로 탭 이름을 바꿀 수 있습니다. "
+            "미설정 시 GOOGLE_TASKS_TAB(기본 업무정리)과 동일합니다."
         )
 
     cred_path = Path(settings.google_service_account_file).expanduser()

@@ -1094,18 +1094,20 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
   );
 }
 
+/** 업무정리 시트: E → D → C → G → H → I → J */
 function checklistPreviewSubRows(it: ChecklistItem): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
-  const p = it.platform?.trim();
-  if (p) rows.push({ label: "관련플랫폼", value: p });
-  const c = it.category?.trim();
-  if (c) rows.push({ label: "분류", value: c });
-  const pr = it.priority?.trim();
-  if (pr) rows.push({ label: "우선순위", value: pr });
-  const q = it.quantification?.trim();
-  if (q) rows.push({ label: "정량화", value: q });
-  const m = it.memo?.trim();
-  if (m) rows.push({ label: "메모", value: m });
+  const push = (label: string, raw: string | null | undefined) => {
+    const v = raw?.trim();
+    if (v) rows.push({ label, value: v });
+  };
+  push("우선순위", it.priority);
+  push("분류", it.category);
+  push("관련플랫폼", it.platform);
+  push("정량화", it.quantification);
+  push("난이도", it.difficulty);
+  push("피로도", it.fatigue);
+  push("상태", it.work_status);
   return rows;
 }
 
