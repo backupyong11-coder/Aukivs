@@ -20,23 +20,24 @@ from .sheets_errors import (
 
 _SEOUL = ZoneInfo("Asia/Seoul")
 
-# 플랫폼정리 열 (이미지 기준):
-# A=회사명, B=현재단계, C=마지막업데이트날짜, D=마지막상황, E=대기사유,
-# F=다음액션, G=플랫폼명, H=우선순위, I=담당자명, J=담당자이메일, ...
-# 수정 가능: B=현재단계, C=마지막업데이트날짜(자동), D=마지막상황, E=대기사유, F=다음액션, H=우선순위 + 비고(AD)
-_COLS = 30  # 넉넉하게
+# 현재 플랫폼정리 열 구조:
+# A=회사명, B=발표일, C=지원사업, D=일반계약, E=불가, F=예정, G=진행중, H=완료,
+# I=계약, J=미팅, K=현재단계, L=마지막업데이트날짜(자동), M=마지막상황,
+# N=대기사유, O=다음액션, P=플랫폼명, Q=우선순위,
+# R=담당자명, S=담당자이메일, T=연락수단/연락처, ...AD=비고
+
+_COLS = 32  # 넉넉하게
 
 _EDITABLE_COL_MAP = {
-    "현재단계": "B",
-    "마지막업데이트날짜": "C",
-    "마지막상황": "D",
-    "대기사유": "E",
-    "다음액션": "F",
-    "우선순위": "H",
+    "현재단계": "K",
+    "마지막업데이트날짜": "L",
+    "마지막상황": "M",
+    "대기사유": "N",
+    "다음액션": "O",
+    "우선순위": "Q",
     "비고": "AD",
 }
 
-# 조회용 전체 헤더 (A~Q 범위, 이미지 기준)
 _READ_RANGE_END = "AD"
 
 
@@ -77,7 +78,6 @@ def fetch_platforms(settings: Settings) -> list[dict]:
         rec: dict = {"id": _row_id(i), "sheet_row": i}
         for j, h in enumerate(header):
             rec[h if h else f"_col_{j+1}"] = str(cells[j]).strip() if j < len(cells) and cells[j] else ""
-        # 회사명이 없으면 건너뜀
         company = rec.get("회사명", "").strip()
         if not company:
             continue
@@ -94,20 +94,19 @@ def _find_row(settings: Settings) -> tuple[Path, str, str, dict[str, int]]:
     id_to_row: dict[str, int] = {}
     for i, row in enumerate(all_rows[1:], start=2):
         cells = padded_row_cells(row if isinstance(row, list) else [], _COLS)
-        if cells[0].strip():  # A열 회사명 있으면
+        if cells[0].strip():
             id_to_row[_row_id(i)] = i
     return cred, sid, tab, id_to_row
 
 
 def update_platform(settings: Settings, platform_id: str, fields: dict) -> None:
-    """핵심 필드 수정 + C열(마지막업데이트날짜) 자동 기록."""
+    """핵심 필드 수정 + L열(마지막업데이트날짜) 자동 기록."""
     cred, sid, tab, id_to_row = _find_row(settings)
     if platform_id not in id_to_row:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {platform_id}")
     row_num = id_to_row[platform_id]
     esc = _tab_esc(tab)
 
-    # 수정 대상 필드만 업데이트
     data = []
     for key, col in _EDITABLE_COL_MAP.items():
         if key == "마지막업데이트날짜":
@@ -115,8 +114,8 @@ def update_platform(settings: Settings, platform_id: str, fields: dict) -> None:
         if key in fields:
             data.append({"range": f"'{esc}'!{col}{row_num}", "values": [[str(fields[key])]]})
 
-    # 마지막업데이트날짜 항상 자동 갱신
-    data.append({"range": f"'{esc}'!C{row_num}", "values": [[_now_seoul_str()]]})
+    # 마지막업데이트날짜 L열 자동 갱신
+    data.append({"range": f"'{esc}'!L{row_num}", "values": [[_now_seoul_str()]]})
 
     if data:
         batch_update_sheet_values(cred, sid, data)

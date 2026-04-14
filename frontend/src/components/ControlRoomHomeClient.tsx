@@ -387,23 +387,6 @@ export function ControlRoomHomeClient() {
         node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["완료"])).map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
-    if (id === "remaining_episodes") {
-      const rows = dashStats._uploadRows.filter(r => !isTrue(r["완료"]));
-      openPanel({
-        kind: "render", title: `남은 업로드화수 총 ${dashStats.remaining_episodes}화`,
-        node: (
-          <ul className="space-y-1">
-            {rows.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : rows.map((r, i) => (
-              <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900">
-                {r["플랫폼명"] ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">[{r["플랫폼명"]}]</span> : null}
-                <span className="font-medium">{r["작품명"] ?? ""}</span>
-                <span className="ml-2 text-red-600 dark:text-red-400">{safeInt(r["남은업로드화수"])}화 남음</span>
-              </li>
-            ))}
-          </ul>
-        ),
-      }); return;
-    }
   }, [dashStats, openPanel]);
 
   const runPreset = useCallback(async (id: string, labelForRecent?: string) => {
@@ -420,13 +403,20 @@ export function ControlRoomHomeClient() {
 
     if (id === "due_today") {
       const todayYmd = formatSeoulYmd(new Date());
-      const items = hub.allTasks.filter(t => normalizeSheetDateYmd(t["마감일"] ?? "") === todayYmd);
+      const items = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
       openPanel({
         kind: "render", title: "오늘 마감 업무",
         node: (
           <div className="space-y-3 text-sm">
             <p className="text-zinc-600">오늘({todayYmd}) 마감: <span className="font-semibold">{items.length}</span>건</p>
-            {items.length === 0 ? <p className="text-zinc-500">없음</p> : <TaskList items={items} />}
+            {items.length === 0 ? <p className="text-zinc-500">없음</p> : (
+              <ul className="space-y-2">{items.map((it) => (
+                <li key={it.id} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
+                  <p className="font-medium">{it.title}</p>
+                  {it.platform ? <p className="mt-0.5 text-xs text-zinc-500">{it.platform}{it.category ? ` · ${it.category}` : ""}</p> : null}
+                </li>
+              ))}</ul>
+            )}
           </div>
         ),
       }); return;
@@ -440,12 +430,14 @@ export function ControlRoomHomeClient() {
       openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "incomplete_check") {
-      if (hub.kind !== "ready") return;
-      const incomplete = hub.allTasks.filter(t => !isTrue(t["완료"]));
-      openPanel({
-        kind: "render", title: `미완료 업무 ${incomplete.length}개`,
-        node: <TaskList items={incomplete} />,
-      }); return;
+      openPanel({ kind: "loading", label: "체크리스트 불러오는 중…" });
+      try {
+        const r = await fetchChecklist();
+        if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
+        openPanel({ kind: "render", title: "미완료 체크리스트", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
+      } catch (e: unknown) {
+        openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
+      } return;
     }
     if (id === "upload_gaps") {
       const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
@@ -483,10 +475,17 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "urgent_only") {
-      const urgentItems = hub.allTasks.filter(t => !isTrue(t["완료"]) && (t["우선순위"] ?? "").trim() === "높음");
       openPanel({
-        kind: "render", title: `급한 일 ${urgentItems.length}개`,
-        node: urgentItems.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : <TaskList items={urgentItems} />,
+        kind: "render", title: "급한 일",
+        node: briefing.urgent_items.length === 0 ? <p className="text-sm text-zinc-500">없음</p> : (
+          <ul className="space-y-2">{briefing.urgent_items.map((it) => (
+            <li key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase text-amber-900">{it.source === "checklist" ? "체크" : "업로드"}</span>
+              <p className="mt-1 font-medium">{it.title}</p>
+              {it.note ? <p className="mt-1 text-xs text-zinc-600">{it.note}</p> : null}
+            </li>
+          ))}</ul>
+        ),
       }); return;
     }
     if (id === "today_triage") {
@@ -579,6 +578,9 @@ export function ControlRoomHomeClient() {
       const trimPlatform = hub.platformMaster.slice(0, 50).map(p => ({
         회사명: p["회사명"], 플랫폼명: p["플랫폼명"], 현재단계: p["현재단계"],
         마지막상황: p["마지막상황"] || p["마지막 상황"],
+        담당자명: p["담당자명"], 담당자이메일: p["담당자이메일"],
+        연락수단연락처: p["연락수단/연락처"] || p["연락수단연락처"],
+        우선순위: p["우선순위"], 다음액션: p["다음액션"],
       }));
       const trimWorks = hub.worksMaster.slice(0, 50).map(w => ({ 작품명: w["작품명"] }));
       const trimMemos = hub.memos.slice(0, 30).map(m => ({ content: m.content, category: m.category }));
@@ -736,8 +738,8 @@ export function ControlRoomHomeClient() {
                       <p className="text-xs font-semibold text-zinc-500">업무 ({allTasksOnDay.length}건)</p>
                       {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => (
                         <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                          {it["분류"] ? <span className="mr-1 font-medium text-zinc-700 dark:text-zinc-300">{it["분류"]}</span> : null}
-                          {it["관련플랫폼"] ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">{it["관련플랫폼"]}</span> : null}
+                          {it["분류"] ? <span className="mr-1 font-medium text-zinc-700">[{it["분류"]}]</span> : null}
+                          {it["관련플랫폼"] ? <span className="mr-1 text-zinc-500">[{it["관련플랫폼"]}]</span> : null}
                           <span>{it["업무명"] ?? ""}</span>
                         </li>
                       ))}</ul>}
@@ -835,7 +837,7 @@ export function ControlRoomHomeClient() {
                   <ul className="grid grid-cols-3 gap-2">
                     <SidebarStat label="업로드한 화수" value={dashStats.uploaded_episodes} onClick={() => openDashPanel("uploaded_episodes")} />
                     <SidebarStat label="오늘 업로드" value={dashStats.today_uploads} onClick={() => openDashPanel("today_uploads")} />
-                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} onClick={() => openDashPanel("remaining_episodes")} />
+                    <SidebarStat label="남은 화수" value={dashStats.remaining_episodes} />
                   </ul>
                 </div>
 
@@ -891,22 +893,16 @@ export function ControlRoomHomeClient() {
 }
 
 function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; color?: string }) {
+  const cls = color === "red" ? "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30"
+    : color === "amber" ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"
+      : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
   return (
-    <ul className="max-h-80 space-y-2 overflow-y-auto">
+    <ul className="max-h-80 space-y-1 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
-        <li key={i} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="font-medium text-zinc-900 dark:text-zinc-50">{t["업무명"] ?? ""}</p>
-          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
-            {t["마감일"] ? <span>📅 {t["마감일"]}</span> : null}
-            {t["관련플랫폼"] ? <span>{t["관련플랫폼"]}</span> : null}
-            {t["분류"] ? <span>{t["분류"]}</span> : null}
-            {t["우선순위"] ? <span className={t["우선순위"] === "높음" ? "text-red-500 font-medium" : ""}>{t["우선순위"]}</span> : null}
-            {t["난이도"] ? <span>난이도:{t["난이도"]}</span> : null}
-            {t["상태"] ? <span>{t["상태"]}</span> : null}
-            {t["관련작품"] ? <span>🎨 {t["관련작품"]}</span> : null}
-            {t["담당자"] ? <span>👤 {t["담당자"]}</span> : null}
-          </div>
-          {t["메모"] ? <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500 truncate">{t["메모"]}</p> : null}
+        <li key={i} className={`rounded border px-2 py-1 text-xs ${cls}`}>
+          {t["마감일"] ? <span className="mr-1 text-zinc-400">{t["마감일"]}</span> : null}
+          {t["분류"] ? <span className="mr-1 text-zinc-500">[{t["분류"]}]</span> : null}
+          <span className="font-medium">{t["업무명"] ?? ""}</span>
         </li>
       ))}
     </ul>
