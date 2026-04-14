@@ -7,6 +7,12 @@ export type ChecklistItem = {
   due_date?: string | null;
   platform?: string | null;
   category?: string | null;
+  /** 업무정리 시트 E열 */
+  priority?: string | null;
+  /** 업무정리 시트 G열 */
+  quantification?: string | null;
+  /** 업무정리 시트 M열 */
+  memo?: string | null;
 };
 
 /** due_date가 있으면 `[마감일] 업무명`, 없으면 업무명만 */
@@ -42,6 +48,9 @@ function parseChecklistItems(raw: unknown): ChecklistItem[] | null {
       due_date: parseDueDate(rec),
       platform: typeof rec.platform === "string" ? rec.platform : null,
       category: typeof rec.category === "string" ? rec.category : null,
+      priority: typeof rec.priority === "string" ? rec.priority : null,
+      quantification: typeof rec.quantification === "string" ? rec.quantification : null,
+      memo: typeof rec.memo === "string" ? rec.memo : null,
     });
   }
   return items;

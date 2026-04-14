@@ -83,6 +83,36 @@ function isTrue(v: unknown): boolean {
   return v === true || String(v).trim().toUpperCase() === "TRUE";
 }
 
+/** 플랫폼정리 시트: G(진행중) 또는 H(완료) 체크된 행만 */
+function platformRowGhChecked(p: PlatformMasterItem): boolean {
+  return isTrue(p["진행중"]) || isTrue(p["완료"]);
+}
+
+/** K열 우선, 비어 있으면 회사명 */
+function platformOngoingMainTitle(p: PlatformMasterItem): string {
+  const stage = (p["현재단계"] ?? "").trim();
+  if (stage) return stage;
+  return (p["회사명"] ?? "").trim();
+}
+
+/** I → L → M → N → O (계약, 마지막업데이트, 마지막 상황, 대기사유, 다음액션) */
+function platformOngoingProjectSubLines(p: PlatformMasterItem): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  const push = (label: string, raw: string | undefined) => {
+    const v = (raw ?? "").trim();
+    if (v) rows.push({ label, value: v });
+  };
+  push("계약", p["계약"]);
+  push(
+    "마지막업데이트",
+    p["마지막업데이트날짜"] ?? p["마지막업데이트"],
+  );
+  push("마지막 상황", p["마지막상황"] ?? p["마지막 상황"]);
+  push("대기사유", p["대기사유"]);
+  push("다음액션", p["다음액션"]);
+  return rows;
+}
+
 function safeInt(v: unknown): number {
   try {
     const s = String(v ?? "").trim();
@@ -505,15 +535,39 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "platform_stage") {
+      const rows = hub.platformMaster.filter(platformRowGhChecked);
       openPanel({
-        kind: "render", title: "플랫폼 현재단계", node: (
-          <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.map((p, i) => (
-            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs">
-              <span className="font-semibold">{p["회사명"] ?? ""}</span>
-              {p["현재단계"] ? <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800">{p["현재단계"]}</span> : null}
-            </li>
-          ))}</ul>
-        )
+        kind: "render", title: "현재 진행 프로젝트", node: (
+          <ul className="max-h-80 space-y-2 overflow-y-auto">
+            {rows.length === 0 ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">진행중·완료(G·H)에 체크된 행이 없습니다.</p>
+            ) : (
+              rows.map((p, i) => {
+                const main = platformOngoingMainTitle(p);
+                const subs = platformOngoingProjectSubLines(p);
+                return (
+                  <li
+                    key={p["id"] ? String(p["id"]) : `pf-${i}`}
+                    className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+                  >
+                    <p className="font-semibold text-zinc-900 dark:text-zinc-50">{main || "(제목 없음)"}</p>
+                    {subs.length > 0 ? (
+                      <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+                        {subs.map((s) => (
+                          <li key={s.label}>
+                            <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
+                            {" "}
+                            <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        ),
       }); return;
     }
     if (id === "platform_status") {
@@ -657,7 +711,7 @@ export function ControlRoomHomeClient() {
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "미완료 업로드")}>미완료 업로드</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 마감")}>오늘 마감</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "미완료 업무")}>미완료 업무</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재단계")}>현재단계</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_status", "마지막상황")}>마지막상황</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_waiting", "대기사유")}>대기사유</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_action", "다음액션")}>다음액션</button>
@@ -1040,17 +1094,47 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
   );
 }
 
+function checklistPreviewSubRows(it: ChecklistItem): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  const p = it.platform?.trim();
+  if (p) rows.push({ label: "관련플랫폼", value: p });
+  const c = it.category?.trim();
+  if (c) rows.push({ label: "분류", value: c });
+  const pr = it.priority?.trim();
+  if (pr) rows.push({ label: "우선순위", value: pr });
+  const q = it.quantification?.trim();
+  if (q) rows.push({ label: "정량화", value: q });
+  const m = it.memo?.trim();
+  if (m) rows.push({ label: "메모", value: m });
+  return rows;
+}
+
 function ChecklistPreviewList(props: { items: ChecklistItem[]; total: number }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">활성 행 {props.total}건 중 {props.items.length}건</p>
       <ul className="max-h-64 space-y-2 overflow-y-auto">
-        {props.items.map((it) => (
-          <li key={it.id} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-            <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
-            {it.note ? <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">{it.note}</p> : null}
-          </li>
-        ))}
+        {props.items.map((it) => {
+          const sub = checklistPreviewSubRows(it);
+          return (
+            <li key={it.id} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+              <p className="font-medium text-zinc-900 dark:text-zinc-50">{it.title}</p>
+              {sub.length > 0 ? (
+                <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+                  {sub.map((s) => (
+                    <li key={s.label}>
+                      <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
+                      {" "}
+                      <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : it.note ? (
+                <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">{it.note}</p>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
       <Link href="/checklist" className="inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-100">체크 작업 →</Link>
     </div>

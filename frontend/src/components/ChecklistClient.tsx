@@ -42,6 +42,8 @@ function itemMatchesToday(item: ChecklistItem): boolean {
 }
 
 function itemLooksPriority(item: ChecklistItem): boolean {
+  const pr = item.priority?.trim();
+  if (pr === "높음") return true;
   return /높음|긴급|CEO|우선|\[높/i.test(
     `${item.title} ${item.note ?? ""} ${item.due_date ?? ""}`,
   );
