@@ -538,9 +538,9 @@ export function ControlRoomHomeClient() {
       const rows = hub.platformMaster.filter(platformRowGhChecked);
       openPanel({
         kind: "render", title: "현재 진행 프로젝트", node: (
-          <ul className="max-h-80 space-y-2 overflow-y-auto">
+          <ul className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
             {rows.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">진행중·완료(G·H)에 체크된 행이 없습니다.</p>
+              <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">진행중·완료(G·H)에 체크된 행이 없습니다.</li>
             ) : (
               rows.map((p, i) => {
                 const main = platformOngoingMainTitle(p);
@@ -548,7 +548,7 @@ export function ControlRoomHomeClient() {
                 return (
                   <li
                     key={p["id"] ? String(p["id"]) : `pf-${i}`}
-                    className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+                    className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
                   >
                     <p className="font-semibold text-zinc-900 dark:text-zinc-50">{main || "(제목 없음)"}</p>
                     {subs.length > 0 ? (
