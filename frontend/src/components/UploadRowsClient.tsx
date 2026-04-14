@@ -88,6 +88,24 @@ export function UploadRowsClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("업로드일");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [platformFilterOpen, setPlatformFilterOpen] = useState(false);
+  const [workFilterOpen, setWorkFilterOpen] = useState(false);
+  const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("upload.hiddenPlatforms");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
+  const [hiddenWorks, setHiddenWorks] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("upload.hiddenWorks");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -107,6 +125,57 @@ export function UploadRowsClient() {
     return { 미완료: state.items.length - done, 완료: done, 전체: state.items.length };
   }, [state]);
 
+  const allPlatforms = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    const keys = [...new Set(state.items.map(it => (it.플랫폼명 ?? "").trim()))];
+    keys.sort((a, b) => {
+      const ae = a === "", be = b === "";
+      if (ae && !be) return 1;
+      if (!ae && be) return -1;
+      return a.localeCompare(b, "ko");
+    });
+    return keys;
+  }, [state]);
+
+  const allWorks = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    const keys = [...new Set(state.items.map(it => (it.작품명 ?? "").trim()))];
+    keys.sort((a, b) => {
+      const ae = a === "", be = b === "";
+      if (ae && !be) return 1;
+      if (!ae && be) return -1;
+      return a.localeCompare(b, "ko");
+    });
+    return keys;
+  }, [state]);
+
+  const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
+
+  const togglePlatform = (key: string) => {
+    setHiddenPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("upload.hiddenPlatforms", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const toggleWork = (key: string) => {
+    setHiddenWorks(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("upload.hiddenWorks", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const setHiddenPlatformsSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("upload.hiddenPlatforms", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenPlatforms(next);
+  };
+  const setHiddenWorksSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("upload.hiddenWorks", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenWorks(next);
+  };
+
   const visible = useMemo(() => {
     if (state.kind !== "ready") return [];
     let items = state.items;
@@ -118,12 +187,18 @@ export function UploadRowsClient() {
         it.비고.includes(filterText)
       );
     }
+    if (hiddenPlatforms.size > 0) {
+      items = items.filter(it => !hiddenPlatforms.has((it.플랫폼명 ?? "").trim()));
+    }
+    if (hiddenWorks.size > 0) {
+      items = items.filter(it => !hiddenWorks.has((it.작품명 ?? "").trim()));
+    }
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, tab, filterText, sortKey, sortDir]);
+  }, [state, tab, filterText, hiddenPlatforms, hiddenWorks, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -227,6 +302,76 @@ export function UploadRowsClient() {
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           새 업로드 추가
         </button>
+        <div className="relative">
+          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            플랫폼 필터
+            {hiddenPlatforms.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
+            )}
+            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {platformFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allPlatforms.map(key => (
+                  <li key={key || "__p__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <button type="button" onClick={() => setWorkFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            작품명 필터
+            {hiddenWorks.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenWorks.size}</span>
+            )}
+            <span className="text-[10px]">{workFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {workFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 작품명</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenWorksSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenWorksSave(new Set(allWorks))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allWorks.map(key => (
+                  <li key={key || "__w__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenWorks.has(key)} onChange={() => toggleWork(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setWorkFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
@@ -269,9 +414,10 @@ export function UploadRowsClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[800px] text-xs">
+          <table className="w-full min-w-[1280px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+                <th className={thCls}>수정</th>
                 <th className={thCls}>완료</th>
                 <th className={thSort} onClick={() => handleSort("업로드일")}>업로드일<SortIcon col="업로드일"/></th>
                 <th className={thSort} onClick={() => handleSort("플랫폼명")}>플랫폼<SortIcon col="플랫폼명"/></th>
@@ -280,24 +426,30 @@ export function UploadRowsClient() {
                 <th className={thSort} onClick={() => handleSort("업로드방식")}>업로드방식<SortIcon col="업로드방식"/></th>
                 <th className={thSort} onClick={() => handleSort("다음업로드일")}>다음업로드일<SortIcon col="다음업로드일"/></th>
                 <th className={thSort} onClick={() => handleSort("비고")}>비고<SortIcon col="비고"/></th>
-                <th className={thCls}></th>
+                <th className={thCls}>삭제</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText ? "검색 결과가 없습니다" : `${tab} 업로드가 없습니다`}
+                <tr><td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText || hiddenPlatforms.size > 0 || hiddenWorks.size > 0 ? "조건에 맞는 항목이 없습니다" : `${tab} 업로드가 없습니다`}
                 </td></tr>
               ) : visible.map(item => (
                 <tr key={item.id}
                   className={`border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 ${isDone(item) ? "opacity-50" : ""}`}>
+                  <td className="px-2 py-1.5">
+                    <button type="button" onClick={() => openEdit(item)}
+                      className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                      수정
+                    </button>
+                  </td>
                   <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
                     {isDone(item) ? "✓" : ""}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.업로드일}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 font-medium">{item.플랫폼명}</td>
                   <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
-                    <span className="block max-w-[200px] truncate">{item.작품명}</span>
+                    <span className="block max-w-[280px] truncate">{item.작품명}</span>
                   </td>
                   <td className="px-3 py-1.5">
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
@@ -309,19 +461,13 @@ export function UploadRowsClient() {
                   <td className="whitespace-nowrap px-3 py-1.5">{item.업로드방식}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.다음업로드일}</td>
                   <td className="px-3 py-1.5">
-                    <span className="block w-28 truncate text-zinc-400">{item.비고}</span>
+                    <span className="block max-w-[14rem] truncate text-zinc-400">{item.비고}</span>
                   </td>
-                  <td className="px-3 py-1.5">
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(item)}
-                        className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
-                        수정
-                      </button>
-                      <button onClick={() => void handleDelete(item)}
-                        className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-                        삭제
-                      </button>
-                    </div>
+                  <td className="px-2 py-1.5">
+                    <button type="button" onClick={() => void handleDelete(item)}
+                      className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                      삭제
+                    </button>
                   </td>
                 </tr>
               ))}

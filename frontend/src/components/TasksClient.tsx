@@ -80,6 +80,33 @@ export function TasksClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("마감일");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [platformFilterOpen, setPlatformFilterOpen] = useState(false);
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
+  const [priorityFilterOpen, setPriorityFilterOpen] = useState(false);
+  const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("tasks.hiddenPlatforms");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("tasks.hiddenCategories");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
+  const [hiddenPriorities, setHiddenPriorities] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("tasks.hiddenPriorities");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -99,6 +126,71 @@ export function TasksClient() {
     return { 미완료: state.items.length - done, 완료: done, 전체: state.items.length };
   }, [state]);
 
+  const sortedKeys = (vals: string[]) => {
+    const keys = [...new Set(vals)];
+    keys.sort((a, b) => {
+      const ae = a === "", be = b === "";
+      if (ae && !be) return 1;
+      if (!ae && be) return -1;
+      return a.localeCompare(b, "ko");
+    });
+    return keys;
+  };
+
+  const allPlatforms = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return sortedKeys(state.items.map(it => (it.관련플랫폼 ?? "").trim()));
+  }, [state]);
+
+  const allCategories = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return sortedKeys(state.items.map(it => (it.분류 ?? "").trim()));
+  }, [state]);
+
+  const allPriorities = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return sortedKeys(state.items.map(it => (it.우선순위 ?? "").trim()));
+  }, [state]);
+
+  const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
+
+  const togglePlatform = (key: string) => {
+    setHiddenPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("tasks.hiddenPlatforms", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const toggleCategory = (key: string) => {
+    setHiddenCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("tasks.hiddenCategories", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const togglePriority = (key: string) => {
+    setHiddenPriorities(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("tasks.hiddenPriorities", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const setHiddenPlatformsSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("tasks.hiddenPlatforms", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenPlatforms(next);
+  };
+  const setHiddenCategoriesSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("tasks.hiddenCategories", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenCategories(next);
+  };
+  const setHiddenPrioritiesSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("tasks.hiddenPriorities", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenPriorities(next);
+  };
+
   const visible = useMemo(() => {
     if (state.kind !== "ready") return [];
     let items = state.items;
@@ -110,12 +202,21 @@ export function TasksClient() {
         it.분류.includes(filterText) || it.메모.includes(filterText)
       );
     }
+    if (hiddenPlatforms.size > 0) {
+      items = items.filter(it => !hiddenPlatforms.has((it.관련플랫폼 ?? "").trim()));
+    }
+    if (hiddenCategories.size > 0) {
+      items = items.filter(it => !hiddenCategories.has((it.분류 ?? "").trim()));
+    }
+    if (hiddenPriorities.size > 0) {
+      items = items.filter(it => !hiddenPriorities.has((it.우선순위 ?? "").trim()));
+    }
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, tab, filterText, sortKey, sortDir]);
+  }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -219,6 +320,111 @@ export function TasksClient() {
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           새 업무 추가
         </button>
+        <div className="relative">
+          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            플랫폼 필터
+            {hiddenPlatforms.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
+            )}
+            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {platformFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allPlatforms.map(key => (
+                  <li key={key || "__pf__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <button type="button" onClick={() => setCategoryFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            분류 필터
+            {hiddenCategories.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenCategories.size}</span>
+            )}
+            <span className="text-[10px]">{categoryFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {categoryFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분류</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenCategoriesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenCategoriesSave(new Set(allCategories))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allCategories.map(key => (
+                  <li key={key || "__cat__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenCategories.has(key)} onChange={() => toggleCategory(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setCategoryFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <button type="button" onClick={() => setPriorityFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            우선순위 필터
+            {hiddenPriorities.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPriorities.size}</span>
+            )}
+            <span className="text-[10px]">{priorityFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {priorityFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 우선순위</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set(allPriorities))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allPriorities.map(key => (
+                  <li key={key || "__pr__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenPriorities.has(key)} onChange={() => togglePriority(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setPriorityFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
@@ -261,9 +467,10 @@ export function TasksClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[860px] text-xs">
+          <table className="w-full min-w-[1280px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+                <th className={thCls}>수정</th>
                 <th className={thCls}>완료</th>
                 <th className={thSort} onClick={() => handleSort("마감일")}>마감일<SortIcon col="마감일"/></th>
                 <th className={thSort} onClick={() => handleSort("관련플랫폼")}>플랫폼<SortIcon col="관련플랫폼"/></th>
@@ -273,17 +480,25 @@ export function TasksClient() {
                 <th className={thSort} onClick={() => handleSort("상태")}>상태<SortIcon col="상태"/></th>
                 <th className={thSort} onClick={() => handleSort("피로도")}>피로도<SortIcon col="피로도"/></th>
                 <th className={thCls}>메모</th>
-                <th className={thCls}></th>
+                <th className={thCls}>삭제</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText ? "검색 결과가 없습니다" : `${tab} 업무가 없습니다`}
+                <tr><td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0
+                    ? "조건에 맞는 항목이 없습니다"
+                    : `${tab} 업무가 없습니다`}
                 </td></tr>
               ) : visible.map(item => (
                 <tr key={item.id}
                   className={`border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 ${isDone(item) ? "opacity-50" : ""}`}>
+                  <td className="px-2 py-1.5">
+                    <button type="button" onClick={() => openEdit(item)}
+                      className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                      수정
+                    </button>
+                  </td>
                   <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
                     {isDone(item) ? "✓" : ""}
                   </td>
@@ -292,24 +507,18 @@ export function TasksClient() {
                   <td className="whitespace-nowrap px-3 py-1.5">{item.분류}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.우선순위}</td>
                   <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
-                    <span className="block max-w-xs truncate">{item.업무명}</span>
+                    <span className="block max-w-[320px] truncate">{item.업무명}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">{item.상태}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.피로도}</td>
                   <td className="px-3 py-1.5">
-                    <span className="block w-32 truncate text-zinc-400">{item.메모}</span>
+                    <span className="block max-w-[14rem] truncate text-zinc-400">{item.메모}</span>
                   </td>
-                  <td className="px-3 py-1.5">
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(item)}
-                        className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
-                        수정
-                      </button>
-                      <button onClick={() => void handleDelete(item)}
-                        className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-                        삭제
-                      </button>
-                    </div>
+                  <td className="px-2 py-1.5">
+                    <button type="button" onClick={() => void handleDelete(item)}
+                      className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                      삭제
+                    </button>
                   </td>
                 </tr>
               ))}
