@@ -378,7 +378,7 @@ function RemainingUploadOrganizePanel(props: { rows: Record<string, string>[] })
         if (c) segments.push(<span key="c">{c}</span>);
         if (d) segments.push(<span key="d" className="font-medium">{d}</span>);
         segments.push(
-          <span key="f" className="font-semibold text-amber-800 dark:text-amber-200">{f}화</span>,
+          <span key="f" className="font-semibold text-zinc-800 dark:text-zinc-200">{f}화</span>,
         );
         if (j) segments.push(<span key="j">{j}</span>);
         segments.push(
@@ -387,7 +387,7 @@ function RemainingUploadOrganizePanel(props: { rows: Record<string, string>[] })
         return (
           <li
             key={r["id"] ? String(r["id"]) : `uo-${i}`}
-            className="rounded border border-amber-200 bg-amber-50/90 px-2 py-1.5 text-xs leading-relaxed dark:border-amber-900/40 dark:bg-amber-950/30"
+            className="rounded border border-zinc-200 bg-zinc-50/90 px-2 py-1.5 text-xs leading-relaxed dark:border-zinc-700 dark:bg-zinc-900/50"
           >
             {segments.map((seg, idx) => (
               <Fragment key={idx}>
@@ -594,7 +594,7 @@ export function ControlRoomHomeClient() {
     if (id === "today_undone") {
       openPanel({
         kind: "render", title: `오늘 남은 일 ${dashStats.today_undone}개`,
-        node: <TaskList items={dashStats._todayTasks.filter(t => !isTrue(t["완료"]))} color="amber" />
+        node: <TaskList items={dashStats._todayTasks.filter(t => !isTrue(t["완료"]))} />
       }); return;
     }
     if (id === "urgent") {
@@ -618,7 +618,7 @@ export function ControlRoomHomeClient() {
     if (id === "total_undone_tasks") {
       openPanel({
         kind: "render", title: `남은 업무 총 ${dashStats.total_undone_tasks}개`,
-        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]))} color="amber" />
+        node: <TaskList items={dashStats._allTasks.filter(t => !isTrue(t["완료"]))} />
       }); return;
     }
     if (id === "uploaded_episodes") {
@@ -627,10 +627,10 @@ export function ControlRoomHomeClient() {
         node: (
           <ul className="max-h-80 space-y-1 overflow-y-auto">
             {dashStats._doneUploadRows.map((r, i) => (
-              <li key={i} className="rounded border border-sky-200 bg-sky-50 px-2 py-1 text-xs dark:border-sky-900/40 dark:bg-sky-950/30">
+              <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
                 <span className="font-medium">{r["작품명"] ?? ""}</span>
                 {r["플랫폼명"] ? <span className="ml-1 text-zinc-500">({r["플랫폼명"]})</span> : null}
-                <span className="ml-2 text-sky-700 dark:text-sky-300">{safeInt(r["업로드화수"])}화</span>
+                <span className="ml-2 font-medium text-zinc-700 dark:text-zinc-300">{safeInt(r["업로드화수"])}화</span>
               </li>
             ))}
           </ul>
@@ -666,14 +666,14 @@ export function ControlRoomHomeClient() {
       const rows = dashStats._platformRows.filter(p => (p["계약"] ?? "").trim() === "계약완료");
       openPanel({
         kind: "render", title: "계약 완료",
-        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs dark:border-emerald-900/40 dark:bg-emerald-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
+        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs dark:border-red-900/40 dark:bg-red-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
       }); return;
     }
     if (id === "sign_pending") {
       const rows = dashStats._platformRows.filter(p => (p["계약"] ?? "").trim() === "사인만 남음");
       openPanel({
         kind: "render", title: "사인만 남음",
-        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs dark:border-yellow-900/40 dark:bg-yellow-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
+        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}</li>)}</ul>
       }); return;
     }
     if (id === "total_meetings") {
@@ -686,25 +686,25 @@ export function ControlRoomHomeClient() {
       const rows = dashStats._platformRows.filter(p => (p["미팅"] ?? "").includes("미팅예정"));
       openPanel({
         kind: "render", title: "예정된 미팅",
-        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs dark:border-purple-900/40 dark:bg-purple-950/30"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}<span className="ml-2 text-purple-700 dark:text-purple-300">{p["미팅"] ?? ""}</span></li>)}</ul>
+        node: <ul className="space-y-1">{rows.map((p, i) => <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["플랫폼명"] ? <span className="ml-1 text-zinc-500">({p["플랫폼명"]})</span> : null}<span className="ml-2 text-zinc-600 dark:text-zinc-400">{p["미팅"] ?? ""}</span></li>)}</ul>
       }); return;
     }
     if (id === "subsidy_planned") {
       openPanel({
         kind: "render", title: "지원사업 — 쓸 예정",
-        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["예정"])).map((p, i) => <li key={i} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
+        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["예정"])).map((p, i) => <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
     if (id === "subsidy_waiting") {
       openPanel({
         kind: "render", title: "지원사업 — 결과 대기",
-        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["진행중"])).map((p, i) => <li key={i} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["대기사유"] ? <p className="mt-0.5 text-zinc-500">{p["대기사유"]}</p> : null}</li>)}</ul>
+        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["진행중"])).map((p, i) => <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"><span className="font-medium">{p["회사명"] ?? ""}</span>{p["대기사유"] ? <p className="mt-0.5 text-zinc-500">{p["대기사유"]}</p> : null}</li>)}</ul>
       }); return;
     }
     if (id === "subsidy_done") {
       openPanel({
         kind: "render", title: "지원사업 — 완료",
-        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["완료"])).map((p, i) => <li key={i} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
+        node: <ul className="space-y-1">{dashStats._subsidy.filter(p => isTrue(p["완료"])).map((p, i) => <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"><span className="font-medium">{p["회사명"] ?? ""}</span></li>)}</ul>
       }); return;
     }
   }, [dashStats, openPanel]);
@@ -840,7 +840,7 @@ export function ControlRoomHomeClient() {
           <div className="space-y-3 text-sm">
             <p className="text-zinc-600">{briefing.briefing_text}</p>
             {briefing.urgent_items.slice(0, 10).map((it) => (
-              <div key={it.uid} className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2">
+              <div key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
                 <p className="font-medium">{it.title}</p>
                 {it.note ? <p className="mt-1 text-xs text-zinc-600">{it.note}</p> : null}
               </div>
@@ -876,7 +876,7 @@ export function ControlRoomHomeClient() {
       openPanel({
         kind: "render", title: "플랫폼 대기사유", node: (
           <ul className="max-h-80 space-y-1.5 overflow-y-auto">{hub.platformMaster.filter(p => p["대기사유"] && p["대기사유"] !== "아직 없음").map((p, i) => (
-            <li key={i} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs">
+            <li key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
               <span className="font-semibold">{p["회사명"] ?? ""}</span>
               <p className="mt-0.5 text-zinc-600">{p["대기사유"]}</p>
             </li>
@@ -900,7 +900,7 @@ export function ControlRoomHomeClient() {
       openPanel({
         kind: "render", title: "메모장", node: (
           <div className="space-y-3 text-sm">
-            {hub.memosError ? <p className="text-xs text-amber-900">{hub.memosError}</p> : null}
+            {hub.memosError ? <p className="text-xs text-zinc-700 dark:text-zinc-300">{hub.memosError}</p> : null}
             <MemoPreviewList items={hub.memos} emptyHint="메모 없음" />
           </div>
         )
@@ -977,6 +977,8 @@ export function ControlRoomHomeClient() {
   };
 
   const quickBtn = "rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-left text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800";
+  const quickBtnUrgent =
+    "rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-left text-xs font-medium text-red-950 shadow-sm hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/55";
 
   return (
     <div className="min-h-full bg-zinc-100/90 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -991,13 +993,13 @@ export function ControlRoomHomeClient() {
             <button type="button" onClick={submitQuestion} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">질문하기</button>
             <button type="button" onClick={() => void copyResultPanel()} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">결과 복사</button>
             <button type="button" onClick={saveResultTxt} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">TXT 저장</button>
-            <button type="button" onClick={saveFavoriteFromInput} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">즐겨찾기 저장</button>
+            <button type="button" onClick={saveFavoriteFromInput} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-600 dark:bg-zinc-900">즐겨찾기 저장</button>
           </div>
         </div>
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
+            <button type="button" className={quickBtnUrgent} onClick={() => void runPreset("urgent_only", "긴급한 일")}>긴급한 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
@@ -1037,7 +1039,7 @@ export function ControlRoomHomeClient() {
                 {recent.map((q) => (
                   <li key={q} className="flex gap-1">
                     <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => { setQueryDraft(q); void runQuestion(q); }}>{q}</button>
-                    <button type="button" className="text-amber-600" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>{favorites.includes(q) ? "★" : "☆"}</button>
+                    <button type="button" className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200" onClick={() => { toggleFavoriteQuery(q); refreshHistory(); }}>{favorites.includes(q) ? "★" : "☆"}</button>
                   </li>
                 ))}
               </ul>
@@ -1093,8 +1095,8 @@ export function ControlRoomHomeClient() {
                         const statusLabel = it.status ?? "업로드 예정";
                         const isComplete = statusLabel === "업로드 완료";
                         return (
-                          <li key={it.uid} className={`rounded border px-2 py-1 text-xs ${isComplete ? "border-sky-200 bg-sky-50" : "border-amber-200 bg-amber-50"}`}>
-                            <span className={`font-medium ${isComplete ? "text-sky-700" : "text-amber-700"}`}>[{statusLabel}]</span>
+                          <li key={it.uid} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                            <span className="font-medium text-zinc-800 dark:text-zinc-200">[{statusLabel}]</span>
                             {it.file_name && it.file_name !== "(파일명 미입력)" ? <span className="mx-1 text-zinc-500">[{it.file_name}]</span> : " "}
                             <span>{it.title}</span>
                           </li>
@@ -1164,7 +1166,7 @@ export function ControlRoomHomeClient() {
 
                 {/* 긴급한 일 / 끝내고 할 일 (2단) */}
                 <ul className="grid grid-cols-2 gap-2">
-                  <SidebarStat label="긴급한 일" value={dashStats.urgent} onClick={() => openDashPanel("urgent")} />
+                  <SidebarStat label="긴급한 일" value={dashStats.urgent} accent="red" onClick={() => openDashPanel("urgent")} />
                   <SidebarStat label="끝내고 할 일" value={dashStats.normal} onClick={() => openDashPanel("normal")} />
                 </ul>
 
@@ -1188,7 +1190,7 @@ export function ControlRoomHomeClient() {
                 <div>
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">계약</p>
                   <ul className="grid grid-cols-2 gap-2">
-                    <SidebarStat label="계약 완료" value={dashStats.contracts_done} onClick={() => openDashPanel("contracts_done")} />
+                    <SidebarStat label="계약 완료" value={dashStats.contracts_done} accent="red" onClick={() => openDashPanel("contracts_done")} />
                     <SidebarStat label="사인만 남음" value={dashStats.sign_pending} onClick={() => openDashPanel("sign_pending")} />
                   </ul>
                 </div>
@@ -1237,8 +1239,7 @@ export function ControlRoomHomeClient() {
 
 function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; color?: string }) {
   const cls = color === "red" ? "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30"
-    : color === "amber" ? "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"
-      : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
+    : "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900";
   return (
     <ul className="max-h-80 space-y-1 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
@@ -1318,7 +1319,7 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
               {(hasUpload || hasTask || hasLaunch) && (
                 <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
                   {hasTask && <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" />}
-                  {hasUpload && <span className="h-1 w-1 rounded-full bg-sky-500" />}
+                  {hasUpload && <span className="h-1 w-1 rounded-full bg-zinc-500 dark:bg-zinc-400" />}
                   {hasLaunch && <span className="h-1 w-1 rounded-full bg-red-500" />}
                 </span>
               )}
@@ -1330,15 +1331,31 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
   );
 }
 
-function SidebarStat(props: { label: string; value: number; onClick?: () => void }) {
+function SidebarStat(props: { label: string; value: number; onClick?: () => void; accent?: "red" }) {
   const body = (
     <>
       <span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{props.value}</span>
       <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{props.label}</span>
     </>
   );
-  if (props.onClick) return <li><button type="button" onClick={props.onClick} className="flex w-full flex-col rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 text-left transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800">{body}</button></li>;
-  return <li className="rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">{body}</li>;
+  const accentCls =
+    props.accent === "red"
+      ? "border-red-200 bg-red-50/90 hover:bg-red-100 dark:border-red-900/45 dark:bg-red-950/35 dark:hover:bg-red-950/50"
+      : "border-zinc-200 bg-zinc-50/80 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800";
+  if (props.onClick) {
+    return (
+      <li>
+        <button type="button" onClick={props.onClick} className={`flex w-full flex-col rounded-md border px-2 py-2 text-left transition-colors ${accentCls}`}>
+          {body}
+        </button>
+      </li>
+    );
+  }
+  return (
+    <li className={`rounded-md border px-2 py-2 ${props.accent === "red" ? accentCls : "border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/60"}`}>
+      {body}
+    </li>
+  );
 }
 
 function MemoPreviewList(props: { items: MemoItem[]; emptyHint: string }) {
@@ -1368,9 +1385,9 @@ function UploadPreviewList(props: { items: UploadListItem[]; empty: string; acti
           const isComplete = statusLabel === "업로드 완료";
           const platform = it.file_name && it.file_name !== "(파일명 미입력)" ? it.file_name : null;
           return (
-            <li key={it.uid} className={`rounded-lg border px-3 py-2 text-xs ${isComplete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30" : "border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30"}`}>
+            <li key={it.uid} className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
               <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                <span className={`mr-1 ${isComplete ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>[{statusLabel}]</span>
+                <span className="mr-1 text-zinc-700 dark:text-zinc-300">[{statusLabel}]</span>
                 {platform ? <span className="mr-1 text-zinc-500 dark:text-zinc-400">[{platform}]</span> : null}
                 {it.title}
               </p>
@@ -1390,8 +1407,8 @@ function IssueSummaryBody(props: {
 }) {
   return (
     <div className="space-y-4 text-sm">
-      {props.warnings.length > 0 && <div><p className="text-xs font-semibold text-amber-900 dark:text-amber-100">경고</p><ul className="mt-1 list-inside list-disc space-y-1">{props.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
-      {props.skipped.length > 0 && <div><p className="text-xs font-semibold text-amber-900 dark:text-amber-100">제외된 행</p><ul className="mt-1 space-y-1">{props.skipped.map((s, i) => <li key={i}>행 {s.sheet_row}: {s.message}</li>)}</ul></div>}
+      {props.warnings.length > 0 && <div><p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">경고</p><ul className="mt-1 list-inside list-disc space-y-1">{props.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
+      {props.skipped.length > 0 && <div><p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">제외된 행</p><ul className="mt-1 space-y-1">{props.skipped.map((s, i) => <li key={i}>행 {s.sheet_row}: {s.message}</li>)}</ul></div>}
       {props.dup.length > 0 && <div><p className="text-xs font-semibold text-rose-900 dark:text-rose-100">중복 id</p><ul className="mt-1 space-y-1">{props.dup.map((d, i) => <li key={i}><span className="font-mono text-xs">{d.id}</span> — 행 {d.sheet_rows.join(", ")}</li>)}</ul></div>}
       {props.warnings.length === 0 && props.skipped.length === 0 && props.dup.length === 0 && <p className="text-zinc-600">이상 없음</p>}
       <p className="text-xs text-zinc-500">시트를 고친 뒤 새로고침하세요.</p>
