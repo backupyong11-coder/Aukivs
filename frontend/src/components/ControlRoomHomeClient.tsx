@@ -513,10 +513,10 @@ export function ControlRoomHomeClient() {
       const todayYmd = formatSeoulYmd(new Date());
       const items = hub.checklist.filter((it) => normalizeSheetDateYmd(it.due_date ?? "") === todayYmd);
       openPanel({
-        kind: "render", title: "오늘 마감 업무",
+        kind: "render", title: "오늘 할 일",
         node: (
           <div className="space-y-3 text-sm">
-            <p className="text-zinc-600">오늘({todayYmd}) 마감: <span className="font-semibold">{items.length}</span>건</p>
+            <p className="text-zinc-600">오늘({todayYmd}) 할 일: <span className="font-semibold">{items.length}</span>건</p>
             {items.length === 0 ? <p className="text-zinc-500">없음</p> : (
               <ul className="space-y-2">{items.map((it) => (
                 <li key={it.id} className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
@@ -538,18 +538,18 @@ export function ControlRoomHomeClient() {
       openPanel({ kind: "render", title: "이번 주 업로드", node: <UploadPreviewList items={rows} empty="이번 주 업로드 없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "incomplete_check") {
-      openPanel({ kind: "loading", label: "체크리스트 불러오는 중…" });
+      openPanel({ kind: "loading", label: "남은 일 불러오는 중…" });
       try {
         const r = await fetchChecklist();
         if (!r.ok) { openPanel({ kind: "error", message: userFacingListError("checklist", r.message) }); return; }
-        openPanel({ kind: "render", title: "미완료 체크리스트", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
+        openPanel({ kind: "render", title: "남은 일", node: <ChecklistPreviewList items={r.items.slice(0, 15)} total={r.items.length} /> });
       } catch (e: unknown) {
         openPanel({ kind: "error", message: e instanceof Error ? e.message : "오류" });
       } return;
     }
     if (id === "upload_gaps") {
       const rows = uploads.items.filter((it) => uploadLooksIncomplete(it.status));
-      openPanel({ kind: "render", title: "미완료 업로드", node: <UploadPreviewList items={rows.slice(0, 20)} empty="없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
+      openPanel({ kind: "render", title: "남은 업로드", node: <UploadPreviewList items={rows.slice(0, 20)} empty="없음" actionHref="/uploads" actionLabel="업로드 작업" /> }); return;
     }
     if (id === "data_bad") {
       const skipped = uploads.issues.filter((x) => x.kind === "row_skipped");
@@ -759,12 +759,11 @@ export function ControlRoomHomeClient() {
         </div>
         <div className="mx-auto mt-3 max-w-[1600px] border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("today_upload", "오늘 업로드")}>오늘 업로드</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "미완료 업로드")}>미완료 업로드</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 마감")}>오늘 마감</button>
-            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "미완료 업무")}>미완료 업무</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_stage", "현재 진행 프로젝트")}>현재 진행 프로젝트</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("urgent_only", "급한 일")}>급한 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("due_today", "오늘 할 일")}>오늘 할 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("incomplete_check", "남은 일")}>남은 일</button>
+            <button type="button" className={quickBtn} onClick={() => void runPreset("upload_gaps", "남은 업로드")}>남은 업로드</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_status", "마지막상황")}>마지막상황</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_waiting", "대기사유")}>대기사유</button>
             <button type="button" className={quickBtn} onClick={() => void runPreset("platform_action", "다음액션")}>다음액션</button>
