@@ -88,6 +88,17 @@ function platformRowGhChecked(p: PlatformMasterItem): boolean {
   return isTrue(p["진행중"]) || isTrue(p["완료"]);
 }
 
+/** D열 성인웹툰(구 헤더명 일반계약) 체크 + G|H — 시트 헤더 변경 전후 모두 허용 */
+function platformAdultWebtoonRow(p: PlatformMasterItem): boolean {
+  const dChecked = isTrue(p["성인웹툰"]) || isTrue(p["일반계약"]);
+  return dChecked && platformRowGhChecked(p);
+}
+
+/** C열 지원사업 체크 + G|H */
+function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
+  return isTrue(p["지원사업"]) && platformRowGhChecked(p);
+}
+
 /** K열 우선, 비어 있으면 회사명 */
 function platformOngoingMainTitle(p: PlatformMasterItem): string {
   const stage = (p["현재단계"] ?? "").trim();
@@ -111,6 +122,73 @@ function platformOngoingProjectSubLines(p: PlatformMasterItem): { label: string;
   push("대기사유", p["대기사유"]);
   push("다음액션", p["다음액션"]);
   return rows;
+}
+
+function PlatformOngoingProjectPanel(props: {
+  adultRows: PlatformMasterItem[];
+  subsidyRows: PlatformMasterItem[];
+}) {
+  const [tab, setTab] = useState<"adult" | "subsidy">("adult");
+  const rows = tab === "adult" ? props.adultRows : props.subsidyRows;
+  const tabBtn =
+    "flex-1 rounded-t-md border border-b-0 px-3 py-2 text-xs font-medium transition-colors";
+  const tabActive = "border-zinc-300 bg-white text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-50";
+  const tabIdle =
+    "border-transparent bg-zinc-100/80 text-zinc-500 hover:bg-zinc-100 dark:bg-zinc-800/80 dark:text-zinc-400 dark:hover:bg-zinc-800";
+  const emptyHint =
+    tab === "adult"
+      ? "성인웹툰(D)·진행중/완료(G·H) 조건에 맞는 행이 없습니다."
+      : "지원사업(C)·진행중/완료(G·H) 조건에 맞는 행이 없습니다.";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-0">
+        <button
+          type="button"
+          className={`${tabBtn} ${tab === "adult" ? tabActive : tabIdle}`}
+          onClick={() => setTab("adult")}
+        >
+          성인웹툰
+        </button>
+        <button
+          type="button"
+          className={`${tabBtn} ${tab === "subsidy" ? tabActive : tabIdle}`}
+          onClick={() => setTab("subsidy")}
+        >
+          지원사업
+        </button>
+      </div>
+      <ul className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto border border-t-0 border-zinc-200 bg-white p-2 sm:grid-cols-2 dark:border-zinc-700 dark:bg-zinc-950">
+        {rows.length === 0 ? (
+          <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">{emptyHint}</li>
+        ) : (
+          rows.map((p, i) => {
+            const main = platformOngoingMainTitle(p);
+            const subs = platformOngoingProjectSubLines(p);
+            return (
+              <li
+                key={p["id"] ? String(p["id"]) : `pf-${tab}-${i}`}
+                className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+              >
+                <p className="font-semibold text-zinc-900 dark:text-zinc-50">{main || "(제목 없음)"}</p>
+                {subs.length > 0 ? (
+                  <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+                    {subs.map((s) => (
+                      <li key={s.label}>
+                        <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
+                        {" "}
+                        <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })
+        )}
+      </ul>
+    </div>
+  );
 }
 
 function safeInt(v: unknown): number {
@@ -535,38 +613,13 @@ export function ControlRoomHomeClient() {
       }); return;
     }
     if (id === "platform_stage") {
-      const rows = hub.platformMaster.filter(platformRowGhChecked);
+      const adultRows = hub.platformMaster.filter(platformAdultWebtoonRow);
+      const subsidyRows = hub.platformMaster.filter(platformSubsidyBizRow);
       openPanel({
-        kind: "render", title: "현재 진행 프로젝트", node: (
-          <ul className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
-            {rows.length === 0 ? (
-              <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">진행중·완료(G·H)에 체크된 행이 없습니다.</li>
-            ) : (
-              rows.map((p, i) => {
-                const main = platformOngoingMainTitle(p);
-                const subs = platformOngoingProjectSubLines(p);
-                return (
-                  <li
-                    key={p["id"] ? String(p["id"]) : `pf-${i}`}
-                    className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/90 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
-                  >
-                    <p className="font-semibold text-zinc-900 dark:text-zinc-50">{main || "(제목 없음)"}</p>
-                    {subs.length > 0 ? (
-                      <ul className="mt-1.5 space-y-0.5 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
-                        {subs.map((s) => (
-                          <li key={s.label}>
-                            <span className="text-zinc-500 dark:text-zinc-500">{s.label}</span>
-                            {" "}
-                            <span className="text-zinc-700 dark:text-zinc-300">{s.value}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                );
-              })
-            )}
-          </ul>
+        kind: "render",
+        title: "현재 진행 프로젝트",
+        node: (
+          <PlatformOngoingProjectPanel adultRows={adultRows} subsidyRows={subsidyRows} />
         ),
       }); return;
     }
