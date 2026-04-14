@@ -39,7 +39,7 @@ ${JSON.stringify(memos, null, 2)}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1000,
         system: systemPrompt,
         messages: [{ role: "user", content: query }],
@@ -47,8 +47,10 @@ ${JSON.stringify(memos, null, 2)}
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      return NextResponse.json({ error: err }, { status: 500 });
+      const errText = await response.text();
+      let errObj: unknown;
+      try { errObj = JSON.parse(errText); } catch { errObj = { message: errText }; }
+      return NextResponse.json({ error: errObj }, { status: 500 });
     }
 
     const data = await response.json();
