@@ -29,6 +29,8 @@ _SEOUL = ZoneInfo("Asia/Seoul")
 _COLS = 32  # 넉넉하게
 
 _EDITABLE_COL_MAP = {
+    "발표일": "B",
+    "플랫폼명": "P",
     "현재단계": "K",
     "마지막업데이트날짜": "L",
     "마지막상황": "M",
