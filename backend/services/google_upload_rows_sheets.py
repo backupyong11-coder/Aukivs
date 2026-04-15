@@ -47,7 +47,7 @@ def _ctx(settings: Settings) -> tuple[Path, str, str]:
     if not cred.is_file():
         raise SheetsConfigurationError(f"[설정] 서비스 계정 파일 없음: {cred}")
     sid = spreadsheet_id_from_url(settings.google_sheet_url)
-    tab = getattr(settings, "google_uploads_tab", "업로드정리")
+    tab = (settings.google_upload_rows_tab or "").strip() or "업로드정리"
     return cred, sid, tab
 
 

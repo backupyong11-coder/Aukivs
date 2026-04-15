@@ -8,8 +8,9 @@ Railway/Render: --host 0.0.0.0 --port $PORT
 from __future__ import annotations
 
 import os
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import load_settings
@@ -444,7 +445,7 @@ def get_tasks():
 
 
 @app.post("/tasks/create")
-def post_tasks_create(body: dict):
+def post_tasks_create(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     try:
         return create_task(settings, body)
@@ -457,7 +458,7 @@ def post_tasks_create(body: dict):
 
 
 @app.post("/tasks/update")
-def post_tasks_update(body: dict):
+def post_tasks_update(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     task_id = str(body.pop("id", "")).strip()
     if not task_id:
@@ -474,7 +475,7 @@ def post_tasks_update(body: dict):
 
 
 @app.post("/tasks/delete")
-def post_tasks_delete(body: dict):
+def post_tasks_delete(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     task_id = str(body.get("id", "")).strip()
     if not task_id:
@@ -505,7 +506,7 @@ def get_upload_rows():
 
 
 @app.post("/upload-rows/create")
-def post_upload_rows_create(body: dict):
+def post_upload_rows_create(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     try:
         return create_upload_row(settings, body)
@@ -518,7 +519,7 @@ def post_upload_rows_create(body: dict):
 
 
 @app.post("/upload-rows/update")
-def post_upload_rows_update(body: dict):
+def post_upload_rows_update(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     row_id = str(body.pop("id", "")).strip()
     if not row_id:
@@ -535,7 +536,7 @@ def post_upload_rows_update(body: dict):
 
 
 @app.post("/upload-rows/delete")
-def post_upload_rows_delete(body: dict):
+def post_upload_rows_delete(body: dict[str, Any] = Body(...)):
     settings = load_settings()
     row_id = str(body.get("id", "")).strip()
     if not row_id:

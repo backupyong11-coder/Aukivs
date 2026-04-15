@@ -63,6 +63,7 @@ class Settings:
     google_platform_tab: str
     google_works_tab: str
     google_tasks_tab: str
+    google_upload_rows_tab: str  # POST /upload-rows* (레거시 GOOGLE_UPLOADS_TAB 과 분리)
     openai_api_key: str | None
     openai_model: str
     openai_timeout_sec: float
@@ -76,6 +77,7 @@ def load_settings() -> Settings:
     platform_tab = os.getenv("GOOGLE_PLATFORM_TAB", "플랫폼마스터").strip() or "플랫폼마스터"
     works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품마스터").strip() or "작품마스터"
     tasks_tab = os.getenv("GOOGLE_TASKS_TAB", "업무정리").strip() or "업무정리"
+    upload_rows_tab = (os.getenv("GOOGLE_UPLOAD_ROWS_TAB") or "").strip() or "업로드정리"
     # 미설정 시 업무정리 탭과 동일(체크리스트 전용 탭을 쓰려면 GOOGLE_CHECKLIST_TAB=체크리스트 로 명시)
     _raw_checklist = os.getenv("GOOGLE_CHECKLIST_TAB")
     checklist_tab = (
@@ -99,6 +101,7 @@ def load_settings() -> Settings:
         google_platform_tab=platform_tab,
         google_works_tab=works_tab,
         google_tasks_tab=tasks_tab,
+        google_upload_rows_tab=upload_rows_tab,
         openai_api_key=openai_key,
         openai_model=openai_model,
         openai_timeout_sec=openai_timeout,

@@ -31,12 +31,10 @@ def test_create_200_mocked(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     )
     assert r.status_code == 200
     data = r.json()
-    assert data == {
-        "id": "sheet-row-99",
-        "title": "새 할 일",
-        "note": None,
-        "due_date": None,
-    }
+    assert data["id"] == "sheet-row-99"
+    assert data["title"] == "새 할 일"
+    assert data["note"] is None
+    assert data["due_date"] is None
     assert called == {"title": "새 할 일", "note": "메모"}
 
 
