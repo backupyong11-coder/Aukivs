@@ -1471,9 +1471,6 @@ function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; 
           {(t["마감일"] ?? "").trim() ? (
             <span className="mr-1 text-zinc-400">{(t["마감일"] ?? "").trim()}</span>
           ) : null}
-          {(t["분류"] ?? "").trim() ? (
-            <span className="mr-1 text-zinc-500">{(t["분류"] ?? "").trim()}</span>
-          ) : null}
           <span className="font-medium">{(t["업무명"] ?? "").trim()}</span>
         </li>
       ))}
