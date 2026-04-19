@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 from config import Settings
 from schemas import ChecklistItem
 
+from .google_tasks_sheets import (
+    _col_index_to_a1_letters_zero_based,
+    read_tasks_header_column_map,
+)
 from .sheet_cell_utils import padded_row_cells
 from .google_sheets import (
     append_rows_to_sheet_range,
@@ -23,35 +28,38 @@ from .sheets_errors import (
     SheetsParseError,
 )
 
+logger = logging.getLogger(__name__)
+
 _STATUS_DONE = "완료"
 _CHECKLIST_COLS = 11  # A2:K (완료, 마감, 플랫폼, 분류, 업무명, 작품, 빈칸, 상태, …)
 
-# GOOGLE_CHECKLIST_TAB 이 GOOGLE_TASKS_TAB 과 같을 때(예: 둘 다 "업무정리"):
-# google_tasks_sheets 와 동일한 열 — A~U (업무명=H, 완료=C, 관련플랫폼=M)
-_TASK_COLS = 21
-_TASK_IDX: dict[str, int] = {
-    "날짜그룹": 0,
-    "우선순위": 1,
-    "완료": 2,
-    "마감일": 3,
-    "분야": 4,
-    "분류": 5,
-    "정량화 분": 6,
-    "업무명": 7,
-    "정량화": 8,
-    "정량화 구분": 9,
-    "시간": 10,
-    "시간변환": 11,
-    "관련플랫폼": 12,
-    "세부수치": 13,
-    "세부단위": 14,
-    "관련작품": 15,
-    "난이도": 16,
-    "피로도": 17,
-    "상태": 18,
-    "담당자": 19,
-    "메모": 20,
-}
+# --- 구버전: 업무정리 고정 인덱스( google_tasks_sheets.read_tasks_header_column_map 으로 대체) ---
+# # GOOGLE_CHECKLIST_TAB 이 GOOGLE_TASKS_TAB 과 같을 때(예: 둘 다 "업무정리"):
+# # google_tasks_sheets 와 동일한 열 — A~U (업무명=H, 완료=C, 관련플랫폼=M)
+# _TASK_COLS = 21
+# _TASK_IDX: dict[str, int] = {
+#     "날짜그룹": 0,
+#     "우선순위": 1,
+#     "완료": 2,
+#     "마감일": 3,
+#     "분야": 4,
+#     "분류": 5,
+#     "정량화 분": 6,
+#     "업무명": 7,
+#     "정량화": 8,
+#     "정량화 구분": 9,
+#     "시간": 10,
+#     "시간변환": 11,
+#     "관련플랫폼": 12,
+#     "세부수치": 13,
+#     "세부단위": 14,
+#     "관련작품": 15,
+#     "난이도": 16,
+#     "피로도": 17,
+#     "상태": 18,
+#     "담당자": 19,
+#     "메모": 20,
+# }
 
 
 def _uses_tasks_layout(settings: Settings) -> bool:
@@ -65,18 +73,23 @@ def _uses_tasks_layout(settings: Settings) -> bool:
 
 def _data_range_a2(settings: Settings) -> str:
     escaped = settings.google_checklist_tab.replace("'", "''")
-    if _uses_tasks_layout(settings):
-        return f"'{escaped}'!A2:U"
+    # 레거시 체크리스트(A2:K)만 사용. 업무정리 레이아웃은 read_tasks_header_column_map 으로 A1:ZZ 읽음.
     return f"'{escaped}'!A2:K"
 
 
 def _row_width(settings: Settings) -> int:
-    return _TASK_COLS if _uses_tasks_layout(settings) else _CHECKLIST_COLS
+    # 업무정리 레이아웃은 호출부에서 헤더 width 사용. 여기서는 레거시 열만.
+    return _CHECKLIST_COLS
 
 
-def _task_cell_str(cells: list[str], key: str) -> str:
-    i = _TASK_IDX[key]
-    return cells[i] if i < len(cells) else ""
+def _task_cell_str(cells: list[str], key: str, col_map: dict[str, int]) -> str:
+    # 구버전: i = _TASK_IDX[key]; return cells[i] if i < len(cells) else ""
+    idx = col_map.get(key)
+    if idx is None:
+        return ""
+    if idx >= len(cells):
+        return ""
+    return cells[idx]
 
 
 def _optional_nonempty(s: str) -> str | None:
@@ -89,26 +102,26 @@ def _sheet_cell_truthy_done(raw: str) -> bool:
 
 
 def _task_row_active_item(
-    cells: list[str], sheet_row: int
+    cells: list[str], sheet_row: int, col_map: dict[str, int]
 ) -> ChecklistItem | None:
-    title = _task_cell_str(cells, "업무명").strip()
+    title = _task_cell_str(cells, "업무명", col_map).strip()
     if not title:
         return None
-    if _sheet_cell_truthy_done(_task_cell_str(cells, "완료")):
+    if _sheet_cell_truthy_done(_task_cell_str(cells, "완료", col_map)):
         return None
     return ChecklistItem(
         id=_sheet_row_id(sheet_row),
         title=title,
         note=None,
-        due_date=_optional_nonempty(_task_cell_str(cells, "마감일")),
-        platform=_optional_nonempty(_task_cell_str(cells, "관련플랫폼")),
-        category=_optional_nonempty(_task_cell_str(cells, "분류")),
-        priority=_optional_nonempty(_task_cell_str(cells, "우선순위")),
-        quantification=_optional_nonempty(_task_cell_str(cells, "정량화")),
-        difficulty=_optional_nonempty(_task_cell_str(cells, "난이도")),
-        fatigue=_optional_nonempty(_task_cell_str(cells, "피로도")),
-        work_status=_optional_nonempty(_task_cell_str(cells, "상태")),
-        memo=_optional_nonempty(_task_cell_str(cells, "메모")),
+        due_date=_optional_nonempty(_task_cell_str(cells, "마감일", col_map)),
+        platform=_optional_nonempty(_task_cell_str(cells, "관련플랫폼", col_map)),
+        category=_optional_nonempty(_task_cell_str(cells, "분류", col_map)),
+        priority=_optional_nonempty(_task_cell_str(cells, "우선순위", col_map)),
+        quantification=_optional_nonempty(_task_cell_str(cells, "정량화", col_map)),
+        difficulty=_optional_nonempty(_task_cell_str(cells, "난이도", col_map)),
+        fatigue=_optional_nonempty(_task_cell_str(cells, "피로도", col_map)),
+        work_status=_optional_nonempty(_task_cell_str(cells, "상태", col_map)),
+        memo=_optional_nonempty(_task_cell_str(cells, "메모", col_map)),
     )
 
 
@@ -192,20 +205,23 @@ def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
 
-    range_a1 = _data_range_a2(settings)
-    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
     items: list[ChecklistItem] = []
     if _uses_tasks_layout(settings):
-        for i, row in enumerate(rows):
+        col_map, width, _, data_rows = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        for i, row in enumerate(data_rows):
             sheet_row = i + 2
             cells = padded_row_cells(
-                list(row) if isinstance(row, list) else [], _TASK_COLS
+                list(row) if isinstance(row, list) else [], width
             )
-            it = _task_row_active_item(cells, sheet_row)
+            it = _task_row_active_item(cells, sheet_row, col_map)
             if it:
                 items.append(it)
         return items
 
+    range_a1 = _data_range_a2(settings)
+    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
     for i, row in enumerate(rows):
         sheet_row = i + 2
         cells = _pad_checklist_cells(list(row))
@@ -257,24 +273,32 @@ def fetch_checklist_for_briefing(
         )
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
-    range_a1 = _data_range_a2(settings)
-    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
 
     out: list[tuple[ChecklistItem, int]] = []
     warnings: list[str] = []
+    if _uses_tasks_layout(settings):
+        col_map, width, _, data_rows = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        rw = width
+        for i, row in enumerate(data_rows):
+            sheet_row = i + 2
+            if _checklist_row_all_blank(row, rw):
+                continue
+            cells = padded_row_cells(
+                list(row) if isinstance(row, list) else [], width
+            )
+            it = _task_row_active_item(cells, sheet_row, col_map)
+            if it:
+                out.append((it, sheet_row))
+        return out, warnings
+
+    range_a1 = _data_range_a2(settings)
+    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
     rw = _row_width(settings)
     for i, row in enumerate(rows):
         sheet_row = i + 2
         if _checklist_row_all_blank(row, rw):
-            continue
-
-        if _uses_tasks_layout(settings):
-            cells = padded_row_cells(
-                list(row) if isinstance(row, list) else [], _TASK_COLS
-            )
-            it = _task_row_active_item(cells, sheet_row)
-            if it:
-                out.append((it, sheet_row))
             continue
 
         cells = _pad_checklist_cells(list(row))
@@ -322,20 +346,30 @@ def _build_id_to_sheet_row(settings: Settings) -> tuple[Path, str, dict[str, int
         )
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
-    range_a1 = _data_range_a2(settings)
-    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
 
     id_to_row: dict[str, int] = {}
+    if _uses_tasks_layout(settings):
+        col_map, width, _, data_rows = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        for i, row in enumerate(data_rows):
+            sheet_row = i + 2
+            cells = padded_row_cells(
+                list(row) if isinstance(row, list) else [], width
+            )
+            title = _task_cell_str(cells, "업무명", col_map).strip()
+            if not title:
+                continue
+            item_id = _sheet_row_id(sheet_row)
+            id_to_row[item_id] = sheet_row
+        return cred_path, spreadsheet_id, id_to_row
+
+    range_a1 = _data_range_a2(settings)
+    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        if _uses_tasks_layout(settings):
-            cells = padded_row_cells(
-                list(row) if isinstance(row, list) else [], _TASK_COLS
-            )
-            title = _task_cell_str(cells, "업무명").strip()
-        else:
-            cells = _pad_checklist_cells(list(row))
-            title = _title_cell(cells)
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
         if not title:
             continue
         item_id = _sheet_row_id(sheet_row)
@@ -359,28 +393,36 @@ def _build_id_to_sheet_row_active(settings: Settings) -> tuple[Path, str, dict[s
         )
 
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
-    range_a1 = _data_range_a2(settings)
-    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
 
     id_to_row: dict[str, int] = {}
+    if _uses_tasks_layout(settings):
+        col_map, width, _, data_rows = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        for i, row in enumerate(data_rows):
+            sheet_row = i + 2
+            cells = padded_row_cells(
+                list(row) if isinstance(row, list) else [], width
+            )
+            title = _task_cell_str(cells, "업무명", col_map).strip()
+            if not title:
+                continue
+            if _sheet_cell_truthy_done(_task_cell_str(cells, "완료", col_map)):
+                continue
+            item_id = _sheet_row_id(sheet_row)
+            id_to_row[item_id] = sheet_row
+        return cred_path, spreadsheet_id, id_to_row
+
+    range_a1 = _data_range_a2(settings)
+    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
     for i, row in enumerate(rows):
         sheet_row = i + 2
-        if _uses_tasks_layout(settings):
-            cells = padded_row_cells(
-                list(row) if isinstance(row, list) else [], _TASK_COLS
-            )
-            title = _task_cell_str(cells, "업무명").strip()
-            if not title:
-                continue
-            if _sheet_cell_truthy_done(_task_cell_str(cells, "완료")):
-                continue
-        else:
-            cells = _pad_checklist_cells(list(row))
-            title = _title_cell(cells)
-            if not title:
-                continue
-            if _row_status_f(cells) == _STATUS_DONE:
-                continue
+        cells = _pad_checklist_cells(list(row))
+        title = _title_cell(cells)
+        if not title:
+            continue
+        if _row_status_f(cells) == _STATUS_DONE:
+            continue
         item_id = _sheet_row_id(sheet_row)
         id_to_row[item_id] = sheet_row
 
@@ -411,7 +453,19 @@ def update_checklist_item_in_sheet(
 
     row_num = id_to_row[oid]
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    col = "H" if _uses_tasks_layout(settings) else "E"
+    if _uses_tasks_layout(settings):
+        col_map, _, _, _ = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        um = col_map.get("업무명")
+        if um is None:
+            logger.warning(
+                "[체크리스트] 업무정리 레이아웃에서 '업무명' 헤더 열을 찾지 못했습니다.",
+            )
+            raise SheetsParseError("[파싱] 시트에 '업무명' 열 헤더가 없습니다.")
+        col = _col_index_to_a1_letters_zero_based(um)
+    else:
+        col = "E"
     data = [{"range": f"'{tab_esc}'!{col}{row_num}", "values": [[title]]}]
     batch_update_sheet_values(cred_path, spreadsheet_id, data)
 
@@ -437,9 +491,19 @@ def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
 
     tab_esc = settings.google_checklist_tab.replace("'", "''")
     if _uses_tasks_layout(settings):
+        col_map, _, _, _ = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        wdone = col_map.get("완료")
+        if wdone is None:
+            logger.warning(
+                "[체크리스트] 업무정리 레이아웃에서 '완료' 헤더 열을 찾지 못했습니다.",
+            )
+            raise SheetsParseError("[파싱] 시트에 '완료' 열 헤더가 없습니다.")
+        col_letter = _col_index_to_a1_letters_zero_based(wdone)
         data = [
             {
-                "range": f"'{tab_esc}'!C{id_to_row[lid]}",
+                "range": f"'{tab_esc}'!{col_letter}{id_to_row[lid]}",
                 "values": [["TRUE"]],
             }
             for lid in ids
@@ -488,9 +552,19 @@ def create_checklist_item_in_sheet(
 
     tab_esc = settings.google_checklist_tab.replace("'", "''")
     if _uses_tasks_layout(settings):
-        range_a1 = f"'{tab_esc}'!A:U"
-        row = [""] * _TASK_COLS
-        row[_TASK_IDX["업무명"]] = t
+        col_map, width, _, _ = read_tasks_header_column_map(
+            cred_path, spreadsheet_id, settings.google_checklist_tab
+        )
+        um = col_map.get("업무명")
+        if um is None:
+            logger.warning(
+                "[체크리스트] 업무정리 레이아웃에서 '업무명' 헤더 열을 찾지 못했습니다.",
+            )
+            raise SheetsParseError("[파싱] 시트에 '업무명' 열 헤더가 없습니다.")
+        row = [""] * width
+        row[um] = t
+        end_letter = _col_index_to_a1_letters_zero_based(width - 1)
+        range_a1 = f"'{tab_esc}'!A:{end_letter}"
         updated_range = append_rows_to_sheet_range(
             cred_path,
             spreadsheet_id,

@@ -24,7 +24,7 @@ type UploadRow = {
   런칭일: string;
   마지막업로드일: string;
   다음업로드일: string;
-  다음업로드회수: string;
+  // 다음업로드회수: string; — 시트에 열 없고 API도 빈 문자열만 줘 죽은 필드라 타입에서 제거
   원고준비: string;
   업로드링크: string;
   마지막업로드회수: string;
@@ -51,7 +51,7 @@ const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[]
   { key: "런칭일", label: "런칭일" },
   { key: "마지막업로드일", label: "마지막업로드일" },
   { key: "다음업로드일", label: "다음업로드일" },
-  { key: "다음업로드회수", label: "다음업로드회수" },
+  // { key: "다음업로드회수", label: "다음업로드회수" }, — 시트 미대응·미사용이라 폼 항목 제거
   { key: "원고준비", label: "원고준비" },
   { key: "업로드링크", label: "업로드링크/제출처" },
   { key: "마지막업로드회수", label: "마지막업로드회수" },
