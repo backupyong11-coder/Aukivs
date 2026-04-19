@@ -215,19 +215,19 @@ function RemainingTasksPanel(props: {
   const summaryLine =
     props.variant === "today" && props.todayYmd
       ? (
-          <>
-            마감일 <span className="font-mono">{props.todayYmd}</span>
-            {" "}
-            · <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-            건 · F열 분류로 필터
-          </>
-        )
+        <>
+          마감일 <span className="font-mono">{props.todayYmd}</span>
+          {" "}
+          · <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
+          건 · F열 분류로 필터
+        </>
+      )
       : (
-          <>
-            미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-            건 · F열 분류로 필터
-          </>
-        );
+        <>
+          미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
+          건 · F열 분류로 필터
+        </>
+      );
 
   return (
     <div className="space-y-2">
@@ -1024,8 +1024,8 @@ export function ControlRoomHomeClient() {
         const msg = errType === "overloaded_error"
           ? "AI 서버가 일시적으로 과부하 상태예요. 잠시 후 다시 시도해주세요."
           : errType === "invalid_request_error"
-          ? "요청 데이터가 너무 커요. 질문을 더 구체적으로 해주세요."
-          : "AI 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+            ? "요청 데이터가 너무 커요. 질문을 더 구체적으로 해주세요."
+            : "AI 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
         openPanel({ kind: "error", message: msg }); return;
       }
       openPanel({ kind: "render", title: "AI 답변", node: <div className="whitespace-pre-wrap text-sm leading-relaxed">{data.answer}</div> });
@@ -1172,9 +1172,13 @@ export function ControlRoomHomeClient() {
                       <p className="text-xs font-semibold text-zinc-500">업무 ({allTasksOnDay.length}건)</p>
                       {allTasksOnDay.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{allTasksOnDay.map((it, i) => (
                         <li key={i} className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                          {it["분류"] ? <span className="mr-1 font-medium text-zinc-700">[{it["분류"]}]</span> : null}
-                          {it["관련플랫폼"] ? <span className="mr-1 text-zinc-500">[{it["관련플랫폼"]}]</span> : null}
-                          <span>{it["업무명"] ?? ""}</span>
+                          {(it["분류"] ?? "").trim() ? (
+                            <span className="mr-1 font-medium text-zinc-700">{(it["분류"] ?? "").trim()}</span>
+                          ) : null}
+                          {(it["관련플랫폼"] ?? "").trim() ? (
+                            <span className="mr-1 text-zinc-500">{(it["관련플랫폼"] ?? "").trim()}</span>
+                          ) : null}
+                          <span>{(it["업무명"] ?? "").trim()}</span>
                         </li>
                       ))}</ul>}
                     </div>
@@ -1206,8 +1210,10 @@ export function ControlRoomHomeClient() {
                         <p className="text-xs font-semibold text-red-500">🚀 런칭일 ({launchesOnDay.length}건)</p>
                         <ul className="mt-1 space-y-1">{launchesOnDay.map((it, i) => (
                           <li key={i} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs">
-                            {it["플랫폼명"] ? <span className="mr-1 font-medium text-red-700">[{it["플랫폼명"]}]</span> : null}
-                            <span>{it["작품명"] ?? ""}</span>
+                            {(it["플랫폼명"] ?? "").trim() ? (
+                              <span className="mr-1 font-medium text-red-700">{(it["플랫폼명"] ?? "").trim()}</span>
+                            ) : null}
+                            <span>{(it["작품명"] ?? "").trim()}</span>
                           </li>
                         ))}</ul>
                       </div>
@@ -1369,9 +1375,13 @@ function TaskList({ items, color = "zinc" }: { items: Record<string, string>[]; 
     <ul className="max-h-80 space-y-1 overflow-y-auto">
       {items.length === 0 ? <li className="text-zinc-500 text-sm">없음</li> : items.map((t, i) => (
         <li key={i} className={`rounded border px-2 py-1 text-xs ${cls}`}>
-          {t["마감일"] ? <span className="mr-1 text-zinc-400">{t["마감일"]}</span> : null}
-          {t["분류"] ? <span className="mr-1 text-zinc-500">[{t["분류"]}]</span> : null}
-          <span className="font-medium">{t["업무명"] ?? ""}</span>
+          {(t["마감일"] ?? "").trim() ? (
+            <span className="mr-1 text-zinc-400">{(t["마감일"] ?? "").trim()}</span>
+          ) : null}
+          {(t["분류"] ?? "").trim() ? (
+            <span className="mr-1 text-zinc-500">{(t["분류"] ?? "").trim()}</span>
+          ) : null}
+          <span className="font-medium">{(t["업무명"] ?? "").trim()}</span>
         </li>
       ))}
     </ul>
