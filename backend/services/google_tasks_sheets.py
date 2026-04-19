@@ -197,14 +197,30 @@ def fetch_tasks(settings: Settings) -> list[dict]:
     col_map = build_tasks_column_map_from_header(header_strs)
     width = len(all_rows[0])
     out = []
+    _debug_first_valid = True
     for i, row in enumerate(all_rows[1:], start=2):
         cells = padded_row_cells(row if isinstance(row, list) else [], width)
         title = _c(cells, "업무명", col_map).strip()
         if not title:
             continue
+        if _debug_first_valid:
+            _debug_first_valid = False
+            logger.info(
+                "[업무정리][debug] first_valid_row sheet_row=%s cells=%s "
+                "업무명=%r 우선순위=%r 완료=%r 마감일=%r 분야=%r 분류=%r 상태=%r",
+                i,
+                list(cells),
+                title,
+                _c(cells, "우선순위", col_map),
+                _c(cells, "완료", col_map),
+                _c(cells, "마감일", col_map),
+                _c(cells, "분야", col_map),
+                _c(cells, "분류", col_map),
+                _c(cells, "상태", col_map),
+            )
         out.append({
             "id": _row_id(i),
-            "sheet_row": i + 2,
+            "sheet_row": i,
             "날짜그룹": _c(cells, "날짜그룹", col_map),
             "우선순위": _c(cells, "우선순위", col_map),
             "완료": _c(cells, "완료", col_map),

@@ -133,16 +133,44 @@ def _row_id(sheet_row: int) -> str:
 
 
 def fetch_upload_rows(settings: Settings) -> list[dict]:
-    _, _, _, header_strs, width, data_rows, col_map = _upload_sheet_read_state(settings)
+    _, _, tab, header_strs, width, data_rows, col_map = _upload_sheet_read_state(settings)
+    # 임시: Fly logs에서 업로드정리 탭 1행 헤더·열 매핑 확인용 — 확인 후 제거
+    logger.info(
+        "[업로드정리][debug] fetch_upload_rows tab=%r width=%s row1_headers=%s",
+        tab,
+        width,
+        header_strs,
+    )
+    logger.info(
+        "[업로드정리][debug] fetch_upload_rows col_map=%s",
+        {k: header_strs[v] if v < len(header_strs) else v for k, v in col_map.items()},
+    )
     if col_map.get("작품명") is None:
         logger.warning("[업로드정리] '작품명' 헤더가 없어 목록을 비웁니다.")
         return []
     out = []
+    _debug_first_valid = True
     for sheet_row, row in enumerate(data_rows, start=2):
         cells = padded_row_cells(row if isinstance(row, list) else [], width)
         작품명 = _uc(cells, col_map, "작품명").strip()
         if not 작품명:
             continue
+        if _debug_first_valid:
+            _debug_first_valid = False
+            logger.info(
+                "[업로드정리][debug] first_valid_row sheet_row=%s row1_headers=%s col_map=%s raw_cells=%s "
+                "mapped 작품명=%r 업로드일=%r 업로드방식=%r 런칭일=%r 마지막업로드일=%r 다음업로드일=%r",
+                sheet_row,
+                header_strs,
+                col_map,
+                list(cells),
+                작품명,
+                _uc(cells, col_map, "업로드일"),
+                _uc(cells, col_map, "업로드방식"),
+                _uc(cells, col_map, "런칭일"),
+                _uc(cells, col_map, "마지막업로드일"),
+                _uc(cells, col_map, "다음업로드일"),
+            )
         out.append({
             "id": _row_id(sheet_row),
             "sheet_row": sheet_row,
