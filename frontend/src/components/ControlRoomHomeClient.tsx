@@ -68,7 +68,9 @@ function isUploadToday(iso: string): boolean {
 }
 
 function normalizeSheetDateYmd(raw: string): string | null {
-  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
+  // 구버전: 점/슬래시만 하이픈으로 치환 → "2026. 3. 9" 가 "2026- 3- 9" 로 남아 정규식이 매칭 실패(null)
+  // const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
+  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-").replace(/\s+/g, "");
   const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (!m) return null;
   return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
