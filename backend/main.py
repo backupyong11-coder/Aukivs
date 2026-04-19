@@ -82,6 +82,7 @@ from services.google_upload_rows_sheets import (
     delete_upload_row,
 )
 from services.google_platform_rows_sheets import (
+    create_platform_row,
     fetch_platforms,
     update_platform,
 )
@@ -564,6 +565,19 @@ def get_platform_rows():
         raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception:
         return []
+
+
+@app.post("/platform-rows/create")
+def post_platform_rows_create(body: dict[str, Any] = Body(...)):
+    settings = load_settings()
+    try:
+        return create_platform_row(settings, body)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.post("/platform-rows/update")
