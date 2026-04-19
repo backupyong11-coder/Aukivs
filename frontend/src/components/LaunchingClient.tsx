@@ -8,7 +8,6 @@ type UploadRow = Record<string, string> & { id: string; sheet_row: string | numb
 /** GET /upload-rows 가 내려주는 논리 필드명(백엔드 fetch_upload_rows 조립 순서와 무관하게 key로 직접 접근) */
 const DISPLAY_FIELDS = [
   "런칭일",
-  "업로드일",
   "플랫폼명",
   "작품명",
   "업로드화수",
