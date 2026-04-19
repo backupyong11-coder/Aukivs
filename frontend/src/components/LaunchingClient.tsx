@@ -14,9 +14,20 @@ const DISPLAY_FIELDS = [
   "남은업로드화수",
   "업로드완료여부",
 ] as const;
+type LaunchSortField = (typeof DISPLAY_FIELDS)[number];
 
 function cell(row: UploadRow, key: string): string {
   return String(row[key] ?? "").trim();
+}
+
+function cmpLocaleKoEmptyLast(a: string, b: string, dir: "asc" | "desc"): number {
+  const ea = !String(a ?? "").trim();
+  const eb = !String(b ?? "").trim();
+  if (ea && eb) return 0;
+  if (ea) return 1;
+  if (eb) return -1;
+  const c = String(a).trim().localeCompare(String(b).trim(), "ko");
+  return dir === "asc" ? c : -c;
 }
 
 async function apiFetch(path: string) {
@@ -43,6 +54,8 @@ export function LaunchingClient() {
     { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: UploadRow[] }
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sortKey, setSortKey] = useState<LaunchSortField>("런칭일");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -65,7 +78,29 @@ export function LaunchingClient() {
     );
   }, [state]);
 
-  const th = "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const sortedRows = useMemo(
+    () =>
+      [...rows].sort((a, b) =>
+        cmpLocaleKoEmptyLast(cell(a, sortKey), cell(b, sortKey), sortDir),
+      ),
+    [rows, sortKey, sortDir],
+  );
+
+  const handleSort = (key: LaunchSortField) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: LaunchSortField }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thSort =
+    "cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
   const showTable = state.kind === "ready" && state.items.length > 0;
 
   return (
@@ -102,21 +137,22 @@ export function LaunchingClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 {DISPLAY_FIELDS.map((name) => (
-                  <th key={name} className={th}>
+                  <th key={name} className={thSort} onClick={() => handleSort(name)}>
                     {name}
+                    <SortIcon col={name} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {sortedRows.length === 0 ? (
                 <tr>
                   <td colSpan={DISPLAY_FIELDS.length} className="px-3 py-8 text-center text-zinc-500">
                     항목이 없습니다
                   </td>
                 </tr>
               ) : (
-                rows.map((item) => (
+                sortedRows.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"

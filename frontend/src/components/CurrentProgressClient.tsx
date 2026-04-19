@@ -31,6 +31,16 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function cmpLocaleKoEmptyLast(a: string, b: string, dir: "asc" | "desc"): number {
+  const ea = !String(a ?? "").trim();
+  const eb = !String(b ?? "").trim();
+  if (ea && eb) return 0;
+  if (ea) return 1;
+  if (eb) return -1;
+  const c = String(a).trim().localeCompare(String(b).trim(), "ko");
+  return dir === "asc" ? c : -c;
+}
+
 function isTrueCell(v: unknown): boolean {
   if (v === true) return true;
   const s = String(v ?? "").trim().toUpperCase();
@@ -39,6 +49,7 @@ function isTrueCell(v: unknown): boolean {
 
 /** 플랫폼정리 시트 열 문자 순서(원문): N → C → B → R → M → O → P → Q */
 const DISPLAY_LETTERS = ["N", "C", "B", "R", "M", "O", "P", "Q"] as const;
+type ProgressSortCol = (typeof DISPLAY_LETTERS)[number];
 
 /** 탭별 필터 열(원문): 불가 G / 예정 H / 진행중 I / 완료 J */
 const TAB_CONFIG = [
@@ -74,6 +85,8 @@ export function CurrentProgressClient() {
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<ProgressTabId>("running");
+  const [sortKey, setSortKey] = useState<ProgressSortCol>("N");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const loggedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -126,7 +139,29 @@ export function CurrentProgressClient() {
     });
   }, [state, sample, columnMeta, filterColKey]);
 
-  const th = "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const sortedRows = useMemo(() => {
+    const meta = columnMeta.find((m) => m.letter === sortKey);
+    const sk = meta?.key ?? "";
+    return [...rows].sort((a, b) =>
+      cmpLocaleKoEmptyLast(sk ? cell(a, sk) : "", sk ? cell(b, sk) : "", sortDir),
+    );
+  }, [rows, columnMeta, sortKey, sortDir]);
+
+  const handleSort = (key: ProgressSortCol) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: ProgressSortCol }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thSort =
+    "cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
   const tabBtnActive =
     "rounded-t-md border border-b-0 border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50";
   const tabBtnIdle =
@@ -181,21 +216,22 @@ export function CurrentProgressClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 {columnMeta.map(({ letter, label }) => (
-                  <th key={letter} className={th}>
+                  <th key={letter} className={thSort} onClick={() => handleSort(letter)}>
                     {label}
+                    <SortIcon col={letter} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {sortedRows.length === 0 ? (
                 <tr>
                   <td colSpan={columnMeta.length || 8} className="px-3 py-8 text-center text-zinc-500">
                     항목이 없습니다
                   </td>
                 </tr>
               ) : (
-                rows.map((item) => (
+                sortedRows.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"

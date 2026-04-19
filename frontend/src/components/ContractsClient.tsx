@@ -38,11 +38,22 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function cmpLocaleKoEmptyLast(a: string, b: string, dir: "asc" | "desc"): number {
+  const ea = !String(a ?? "").trim();
+  const eb = !String(b ?? "").trim();
+  if (ea && eb) return 0;
+  if (ea) return 1;
+  if (eb) return -1;
+  const c = String(a).trim().localeCompare(String(b).trim(), "ko");
+  return dir === "asc" ? c : -c;
+}
+
 const CONTRACT_TABS = ["계약완료", "계약진행중", "계약미정", "계약불가", "추후접촉"] as const;
 type ContractTab = (typeof CONTRACT_TABS)[number];
 
 /** 표시 열 순서: 계약 → 발표일 → 회사명 → 플랫폼명 (헤더는 응답 key) */
 const DISPLAY_LETTERS: ("K" | "C" | "B" | "R")[] = ["K", "C", "B", "R"];
+type ContractSortCol = (typeof DISPLAY_LETTERS)[number];
 
 async function apiFetch(path: string) {
   const base = getApiBaseUrl();
@@ -69,6 +80,8 @@ export function ContractsClient() {
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<ContractTab>(CONTRACT_TABS[0]);
+  const [sortKey, setSortKey] = useState<ContractSortCol>("K");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -118,7 +131,29 @@ export function ContractsClient() {
     });
   }, [sample, keys]);
 
-  const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const sortedFiltered = useMemo(() => {
+    const meta = columnMeta.find((m) => m.letter === sortKey);
+    const sk = meta?.key ?? "";
+    return [...filtered].sort((a, b) =>
+      cmpLocaleKoEmptyLast(sk ? cell(a, sk) : "", sk ? cell(b, sk) : "", sortDir),
+    );
+  }, [filtered, columnMeta, sortKey, sortDir]);
+
+  const handleSort = (key: ContractSortCol) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: ContractSortCol }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thSort =
+    "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
 
   return (
     <div className="space-y-3">
@@ -171,21 +206,26 @@ export function ContractsClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 {columnMeta.map(({ letter, label }) => (
-                  <th key={letter} className={th}>
+                  <th
+                    key={letter}
+                    className={thSort}
+                    onClick={() => handleSort(letter)}
+                  >
                     {label}
+                    <SortIcon col={letter} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {sortedFiltered.length === 0 ? (
                 <tr>
                   <td colSpan={columnMeta.length || 4} className="px-3 py-8 text-center text-zinc-500">
                     해당 상태의 항목이 없습니다
                   </td>
                 </tr>
               ) : (
-                filtered.map((item) => (
+                sortedFiltered.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"

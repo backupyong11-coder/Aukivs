@@ -31,8 +31,19 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function cmpLocaleKoEmptyLast(a: string, b: string, dir: "asc" | "desc"): number {
+  const ea = !String(a ?? "").trim();
+  const eb = !String(b ?? "").trim();
+  if (ea && eb) return 0;
+  if (ea) return 1;
+  if (eb) return -1;
+  const c = String(a).trim().localeCompare(String(b).trim(), "ko");
+  return dir === "asc" ? c : -c;
+}
+
 /** 플랫폼정리 시트 열 문자 순서(원문): D → C → B → M → N → O */
 const DISPLAY_LETTERS = ["D", "C", "B", "M", "N", "O"] as const;
+type AnnounceSortCol = (typeof DISPLAY_LETTERS)[number];
 
 async function apiFetch(path: string) {
   const base = getApiBaseUrl();
@@ -58,6 +69,8 @@ export function AnnouncementDateClient() {
     { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: PlatformRow[] }
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sortKey, setSortKey] = useState<AnnounceSortCol>("D");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const loggedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -98,7 +111,29 @@ export function AnnouncementDateClient() {
     return state.items.filter((row) => columnMeta.some(({ key }) => cell(row, key)));
   }, [state, sample, columnMeta]);
 
-  const th = "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const sortedRows = useMemo(() => {
+    const meta = columnMeta.find((m) => m.letter === sortKey);
+    const sk = meta?.key ?? "";
+    return [...rows].sort((a, b) =>
+      cmpLocaleKoEmptyLast(sk ? cell(a, sk) : "", sk ? cell(b, sk) : "", sortDir),
+    );
+  }, [rows, columnMeta, sortKey, sortDir]);
+
+  const handleSort = (key: AnnounceSortCol) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: AnnounceSortCol }) => {
+    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
+    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const thSort =
+    "cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
 
   return (
     <div className="space-y-3">
@@ -134,21 +169,22 @@ export function AnnouncementDateClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 {columnMeta.map(({ letter, label }) => (
-                  <th key={letter} className={th}>
+                  <th key={letter} className={thSort} onClick={() => handleSort(letter)}>
                     {label}
+                    <SortIcon col={letter} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {sortedRows.length === 0 ? (
                 <tr>
                   <td colSpan={columnMeta.length || 6} className="px-3 py-8 text-center text-zinc-500">
                     항목이 없습니다
                   </td>
                 </tr>
               ) : (
-                rows.map((item) => (
+                sortedRows.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"
