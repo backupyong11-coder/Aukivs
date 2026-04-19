@@ -1155,7 +1155,6 @@ export function ControlRoomHomeClient() {
             <CalendarSection hub={hub} onDayClick={(ymd) => {
               if (hub.kind !== "ready") return;
               const [y, m, d] = ymd.split("-").map(Number);
-              const uploads = hub.uploads.items.filter((it) => isUploadOnSeoulDay(it.uploaded_at, ymd));
               const uploadRowsOnDay = hub.uploadRows.filter(
                 (it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd,
               );
@@ -1180,21 +1179,7 @@ export function ControlRoomHomeClient() {
                       ))}</ul>}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-zinc-500">업로드 ({uploads.length}건)</p>
-                      {uploads.length === 0 ? <p className="text-zinc-500">없음</p> : <ul className="mt-1 space-y-1">{uploads.map((it) => {
-                        const statusLabel = it.status ?? "업로드 예정";
-                        const isComplete = statusLabel === "업로드 완료";
-                        return (
-                          <li key={it.uid} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-                            <span className="font-medium text-zinc-800 dark:text-zinc-200">[{statusLabel}]</span>
-                            {it.file_name && it.file_name !== "(파일명 미입력)" ? <span className="mx-1 text-zinc-500">[{it.file_name}]</span> : " "}
-                            <span>{it.title}</span>
-                          </li>
-                        );
-                      })}</ul>}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-zinc-500">업로드정리 업로드 ({uploadRowsOnDay.length}건)</p>
+                      <p className="text-xs font-semibold text-zinc-500">업로드 ({uploadRowsOnDay.length}건)</p>
                       {uploadRowsOnDay.length === 0 ? (
                         <p className="text-zinc-500">없음</p>
                       ) : (
@@ -1459,7 +1444,7 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
               {(hasUpload || hasTask || hasLaunch) && (
                 <span className="absolute bottom-0.5 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden>
                   {hasTask && <span className="h-1 w-1 rounded-full bg-zinc-800 dark:bg-zinc-200" />}
-                  {hasUpload && <span className="h-1 w-1 rounded-full bg-zinc-500 dark:bg-zinc-400" />}
+                  {hasUpload && <span className="h-1 w-1 rounded-full bg-green-500 dark:bg-green-400" />}
                   {hasLaunch && <span className="h-1 w-1 rounded-full bg-red-500" />}
                 </span>
               )}
