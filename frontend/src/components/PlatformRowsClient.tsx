@@ -8,10 +8,10 @@ type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 type SortKey = "발표일" | "플랫폼명";
 type SortDir = "asc" | "desc";
 
-/** 시트 B열·P열 (백엔드 google_platform_rows_sheets.py 주석과 동일) */
+/** 시트 C열·Q열 (백엔드 google_platform_rows_sheets.py 주석과 동일) */
 const TABLE_COLS: { key: string; label: string; sortKey: SortKey; width: string }[] = [
-  { key: "발표일", label: "발표일 (B)", sortKey: "발표일", width: "w-40" },
-  { key: "플랫폼명", label: "플랫폼명 (P)", sortKey: "플랫폼명", width: "min-w-[14rem]" },
+  { key: "발표일", label: "발표일 (C)", sortKey: "발표일", width: "w-40" },
+  { key: "플랫폼명", label: "플랫폼명 (Q)", sortKey: "플랫폼명", width: "min-w-[14rem]" },
 ];
 
 const STATUS_KEY_CANDIDATES = ["마지막상황", "마지막 상황", "최근상황", "최근 상황", "상황"];
@@ -23,12 +23,13 @@ function findStatusKey(item: PlatformRow): string {
 }
 
 const MODAL_FIELDS: { key: string; label: string }[] = [
-  { key: "현재단계", label: "현재단계" },
-  { key: "마지막상황", label: "마지막상황" },
-  { key: "대기사유", label: "대기사유" },
-  { key: "다음액션", label: "다음액션" },
-  { key: "우선순위", label: "우선순위" },
-  { key: "비고", label: "비고" },
+  { key: "분류", label: "분류 (B)" },
+  { key: "현재단계", label: "현재단계 (L)" },
+  { key: "마지막상황", label: "마지막 상황 (N)" },
+  { key: "대기사유", label: "대기사유 (O)" },
+  { key: "다음액션", label: "다음액션 (P)" },
+  { key: "우선순위", label: "우선순위 (R)" },
+  { key: "비고", label: "비고 (AO)" },
 ];
 
 async function apiFetch(path: string, body?: object) {
@@ -91,7 +92,8 @@ export function PlatformRowsClient() {
         it =>
           (it["발표일"] ?? "").includes(filterText) ||
           (it["플랫폼명"] ?? "").includes(filterText) ||
-          (it["회사명"] ?? "").includes(filterText),
+          (it["회사명"] ?? "").includes(filterText) ||
+          (it["분류"] ?? "").includes(filterText),
       );
     }
     return [...items].sort((a, b) => {
@@ -185,7 +187,7 @@ export function PlatformRowsClient() {
           type="text"
           value={filterText}
           onChange={e => setFilterText(e.target.value)}
-          placeholder="발표일·플랫폼명·회사명 검색"
+          placeholder="발표일·플랫폼명·회사명·분류 검색"
           className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
         />
         <button
@@ -195,7 +197,7 @@ export function PlatformRowsClient() {
         >
           새로고침
         </button>
-        <span className="text-xs text-zinc-400">B열·P열 셀 클릭으로 바로 수정 · 수정 버튼으로 나머지 항목</span>
+        <span className="text-xs text-zinc-400">C열·Q열 셀 클릭으로 바로 수정 · 수정 버튼으로 나머지 항목</span>
       </div>
 
       {actionError && !modalItem && (

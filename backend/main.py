@@ -118,7 +118,7 @@ app.add_middleware(
 
 @app.get("/platform-master", response_model=MasterTabItemsResponse)
 def get_platform_master() -> MasterTabItemsResponse:
-    """플랫폼마스터 탭 전체(헤더 1행 = 키)."""
+    """플랫폼정리 등 GOOGLE_PLATFORM_TAB 탭 전체(헤더 1행 = 키)."""
     settings = load_settings()
     try:
         items = fetch_master_tab_keyed_rows(settings, settings.google_platform_tab)
@@ -131,7 +131,7 @@ def get_platform_master() -> MasterTabItemsResponse:
 
 @app.get("/works-master", response_model=MasterTabItemsResponse)
 def get_works_master() -> MasterTabItemsResponse:
-    """작품마스터 탭 전체(헤더 1행 = 키)."""
+    """작품정리 탭(GOOGLE_WORKS_TAB) 전체(헤더 1행 = 키)."""
     settings = load_settings()
     try:
         items = fetch_master_tab_keyed_rows(settings, settings.google_works_tab)

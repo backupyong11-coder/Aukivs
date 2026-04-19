@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class MasterTabItemsResponse(BaseModel):
-    """GET /platform-master, GET /works-master: 1행 헤더 기준 행 단위 dict 목록."""
+    """GET /platform-master, GET /works-master: 1행 헤더 기준 행 단위 dict 목록(플랫폼정리·작품정리 탭은 헤더 문자열이 곧 키)."""
 
     model_config = ConfigDict(extra="forbid")
 

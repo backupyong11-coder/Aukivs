@@ -75,7 +75,7 @@ def load_settings() -> Settings:
     uploads_tab = os.getenv("GOOGLE_UPLOADS_TAB", "업로드운영").strip() or "업로드운영"
     memo_tab = os.getenv("GOOGLE_MEMO_TAB", "메모장").strip() or "메모장"
     platform_tab = os.getenv("GOOGLE_PLATFORM_TAB", "플랫폼마스터").strip() or "플랫폼마스터"
-    works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품마스터").strip() or "작품마스터"
+    works_tab = os.getenv("GOOGLE_WORKS_TAB", "작품정리").strip() or "작품정리"
     tasks_tab = os.getenv("GOOGLE_TASKS_TAB", "업무정리").strip() or "업무정리"
     upload_rows_tab = (os.getenv("GOOGLE_UPLOAD_ROWS_TAB") or "").strip() or "업로드정리"
     # 미설정 시 업무정리 탭과 동일(체크리스트 전용 탭을 쓰려면 GOOGLE_CHECKLIST_TAB=체크리스트 로 명시)

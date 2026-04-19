@@ -85,18 +85,21 @@ function isTrue(v: unknown): boolean {
   return v === true || String(v).trim().toUpperCase() === "TRUE";
 }
 
-/** 플랫폼정리 시트: G(진행중) 또는 H(완료) 체크된 행만 */
+/** 플랫폼정리 시트: H(진행중) 또는 I(완료) 체크된 행만 */
 function platformRowGhChecked(p: PlatformMasterItem): boolean {
   return isTrue(p["진행중"]) || isTrue(p["완료"]);
 }
 
-/** D열 성인웹툰(구 헤더명 일반계약) 체크 + G|H — 시트 헤더 변경 전후 모두 허용 */
+/** B열 분류·E열 일반계약 등 + H|I — 레거시 전용 열명도 허용 */
 function platformAdultWebtoonRow(p: PlatformMasterItem): boolean {
-  const dChecked = isTrue(p["성인웹툰"]) || isTrue(p["일반계약"]);
-  return dChecked && platformRowGhChecked(p);
+  const byCategory = (p["분류"] ?? "").includes("성인웹툰");
+  const byLegacyCol = isTrue(p["성인웹툰"]) || isTrue(p["성인웹툰(구 일반계약)"]);
+  const byContract = isTrue(p["일반계약"]);
+  const adult = byCategory || byLegacyCol || byContract;
+  return adult && platformRowGhChecked(p);
 }
 
-/** C열 지원사업 체크 + G|H */
+/** D열 지원사업 체크 + H|I */
 function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
 }
@@ -262,14 +265,14 @@ function RemainingTasksPanel(props: {
   );
 }
 
-/** K열 우선, 비어 있으면 회사명 */
+/** L열(현재단계) 우선, 비어 있으면 회사명 */
 function platformOngoingMainTitle(p: PlatformMasterItem): string {
   const stage = (p["현재단계"] ?? "").trim();
   if (stage) return stage;
   return (p["회사명"] ?? "").trim();
 }
 
-/** I → L → M → N → O (계약, 마지막업데이트, 마지막 상황, 대기사유, 다음액션) */
+/** J·M·N·O·P (계약, 마지막업데이트, 마지막 상황, 대기사유, 다음액션) */
 function platformOngoingProjectSubLines(p: PlatformMasterItem): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
   const push = (label: string, raw: string | undefined) => {
@@ -287,6 +290,44 @@ function platformOngoingProjectSubLines(p: PlatformMasterItem): { label: string;
   return rows;
 }
 
+/** 작품정리 시트 열 순(시트 1행 헤더와 동일한 키) */
+function worksRowSubLines(w: WorksMasterItem): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  const push = (label: string, key: string) => {
+    const v = (w[key] ?? "").trim();
+    if (v) rows.push({ label, value: v });
+  };
+  push("제작완료", "제작완료");
+  push("글작가", "글작가");
+  push("그림작가", "그림작가");
+  push("분류", "분류(일반/성인)");
+  push("형식", "형식(웹툰/웹소설 등)");
+  push("현재상태", "현재상태");
+  push("업로드해야 하는 사이트", "업로드해야 하는 사이트");
+  push("런칭된 사이트", "런칭된 사이트");
+  push("대기중 사이트", "대기중 사이트");
+  push("계약된 사이트", "계약된 사이트");
+  push("총화수/시즌", "총화수/시즌정보");
+  push("줄거리", "줄거리");
+  push("캐릭터", "캐릭터");
+  push("카피라이트", "카피라이트");
+  push("UCI", "UCI (구 ISBN)");
+  push("태그", "태그");
+  push("보유에셋/비고", "보유에셋/비고");
+  push("스태프", "스태프");
+  push("연령등급", "연령등급");
+  push("첫 공급 일정", "첫 공급 일정");
+  push("연재요일", "연재요일");
+  push("연재중인 곳 갯수", "연재중인 곳 갯수");
+  push("연재중인 사이트", "연재중인 사이트");
+  return rows;
+}
+
+function worksFirstSupplyYmd(w: WorksMasterItem): string {
+  const raw = w["첫 공급 일정"] ?? w["첫공급일정"] ?? "";
+  return normalizeSheetDateYmd(raw) ?? "";
+}
+
 function PlatformOngoingProjectPanel(props: {
   adultRows: PlatformMasterItem[];
   subsidyRows: PlatformMasterItem[];
@@ -300,8 +341,8 @@ function PlatformOngoingProjectPanel(props: {
     "border-transparent bg-zinc-100/80 text-zinc-500 hover:bg-zinc-100 dark:bg-zinc-800/80 dark:text-zinc-400 dark:hover:bg-zinc-800";
   const emptyHint =
     tab === "adult"
-      ? "성인웹툰(D)·진행중/완료(G·H) 조건에 맞는 행이 없습니다."
-      : "지원사업(C)·진행중/완료(G·H) 조건에 맞는 행이 없습니다.";
+      ? "분류·일반계약(E)·진행중/완료(H·I) 조건에 맞는 행이 없습니다."
+      : "지원사업(D)·진행중/완료(H·I) 조건에 맞는 행이 없습니다.";
 
   return (
     <div className="space-y-2">
@@ -937,7 +978,18 @@ export function ControlRoomHomeClient() {
         연락수단연락처: p["연락수단/연락처"] || p["연락수단연락처"],
         우선순위: p["우선순위"], 다음액션: p["다음액션"],
       }));
-      const trimWorks = hub.worksMaster.slice(0, 50).map(w => ({ 작품명: w["작품명"] }));
+      const trimWorks = hub.worksMaster.slice(0, 50).map((w) => ({
+        작품명: w["작품명"] ?? "",
+        글작가: w["글작가"] ?? "",
+        그림작가: w["그림작가"] ?? "",
+        "분류(일반/성인)": w["분류(일반/성인)"] ?? "",
+        현재상태: w["현재상태"] ?? "",
+        연령등급: w["연령등급"] ?? "",
+        "UCI (구 ISBN)": w["UCI (구 ISBN)"] ?? "",
+        태그: w["태그"] ?? "",
+        "연재중인 사이트": w["연재중인 사이트"] ?? "",
+        "첫 공급 일정": w["첫 공급 일정"] ?? "",
+      }));
       const trimMemos = hub.memos.slice(0, 30).map(m => ({ content: m.content, category: m.category }));
       const res = await fetch("/api/ops/ask", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1084,6 +1136,9 @@ export function ControlRoomHomeClient() {
               const memos = hub.memos.filter((memo) => normalizeSheetDateYmd(memo.memo_date ?? "") === ymd);
               const allTasksOnDay = hub.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
               const launchesOnDay = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
+              const worksFirstSupplyOnDay = hub.worksMaster.filter(
+                (w) => worksFirstSupplyYmd(w) === ymd,
+              );
               openPanel({
                 kind: "render", title: `${y}년 ${m}월 ${d}일 일정`,
                 node: (
@@ -1121,6 +1176,33 @@ export function ControlRoomHomeClient() {
                             <span>{it["작품명"] ?? ""}</span>
                           </li>
                         ))}</ul>
+                      </div>
+                    )}
+                    {worksFirstSupplyOnDay.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          작품정리 · 첫 공급 일정 ({worksFirstSupplyOnDay.length}건)
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {worksFirstSupplyOnDay.map((w, i) => {
+                            const subs = worksRowSubLines(w).slice(0, 4);
+                            return (
+                              <li
+                                key={`works-fs-${i}-${(w["작품명"] ?? "").slice(0, 20)}`}
+                                className="rounded border border-emerald-200 bg-emerald-50/90 px-2 py-1 text-xs dark:border-emerald-900/40 dark:bg-emerald-950/30"
+                              >
+                                <span className="font-medium text-emerald-900 dark:text-emerald-100">{w["작품명"] ?? ""}</span>
+                                {subs.length > 0 ? (
+                                  <ul className="mt-0.5 space-y-0.5 text-[11px] text-emerald-800/90 dark:text-emerald-200/90">
+                                    {subs.map((s, j) => (
+                                      <li key={j}><span className="text-emerald-600 dark:text-emerald-400">{s.label}</span> {s.value}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
                       </div>
                     )}
                     <div>

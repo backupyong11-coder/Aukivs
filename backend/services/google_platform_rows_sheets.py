@@ -20,27 +20,34 @@ from .sheets_errors import (
 
 _SEOUL = ZoneInfo("Asia/Seoul")
 
-# 현재 플랫폼정리 열 구조:
-# A=회사명, B=발표일, C=지원사업, D=성인웹툰(구 일반계약), E=불가, F=예정, G=진행중, H=완료,
-# I=계약, J=미팅, K=현재단계, L=마지막업데이트날짜(자동), M=마지막상황,
-# N=대기사유, O=다음액션, P=플랫폼명, Q=우선순위,
-# R=담당자명, S=담당자이메일, T=연락수단/연락처, ...AD=비고
+# 현재 플랫폼정리 열 구조 (A~AO):
+# A=회사명, B=분류, C=발표일, D=지원사업, E=일반계약, F=불가, G=예정, H=진행중, I=완료,
+# J=계약, K=미팅, L=현재단계, M=마지막업데이트날짜(자동), N=마지막 상황,
+# O=대기사유, P=다음액션, Q=플랫폼명, R=우선순위,
+# S=담당자명, T=담당자이메일, U=연락수단/연락처, V=업로드방식, W=업로드주기,
+# X=원고 규격, Y=썸네일규격, Z=배너 규격,
+# AA=업로드마감시각, AB=업로드요일, AC=업체별 소장코인, AD=업체별 대여코인,
+# AE=오픈회차, AF=무료회차, AG=아이디, AH=비번, AI=정산방식, AJ=정산주기상세,
+# AK=정산일/입금일, AL=세금계산서/정산서 필요, AM=런칭일,
+# AN=FTP/관리자페이지 정보, AO=비고
 
-_COLS = 32  # 넉넉하게
+_COLS = 41  # A~AO
 
 _EDITABLE_COL_MAP = {
-    "발표일": "B",
-    "플랫폼명": "P",
-    "현재단계": "K",
-    "마지막업데이트날짜": "L",
-    "마지막상황": "M",
-    "대기사유": "N",
-    "다음액션": "O",
-    "우선순위": "Q",
-    "비고": "AD",
+    "분류": "B",
+    "발표일": "C",
+    "플랫폼명": "Q",
+    "현재단계": "L",
+    "마지막업데이트날짜": "M",
+    "마지막상황": "N",
+    "마지막 상황": "N",
+    "대기사유": "O",
+    "다음액션": "P",
+    "우선순위": "R",
+    "비고": "AO",
 }
 
-_READ_RANGE_END = "AD"
+_READ_RANGE_END = "AO"
 
 
 def _tab_esc(tab: str) -> str:
@@ -102,22 +109,26 @@ def _find_row(settings: Settings) -> tuple[Path, str, str, dict[str, int]]:
 
 
 def update_platform(settings: Settings, platform_id: str, fields: dict) -> None:
-    """핵심 필드 수정 + L열(마지막업데이트날짜) 자동 기록."""
+    """핵심 필드 수정 + M열(마지막업데이트날짜) 자동 기록."""
     cred, sid, tab, id_to_row = _find_row(settings)
     if platform_id not in id_to_row:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {platform_id}")
     row_num = id_to_row[platform_id]
     esc = _tab_esc(tab)
 
-    data = []
+    col_writes: dict[str, str] = {}
     for key, col in _EDITABLE_COL_MAP.items():
         if key == "마지막업데이트날짜":
             continue  # 자동 처리
         if key in fields:
-            data.append({"range": f"'{esc}'!{col}{row_num}", "values": [[str(fields[key])]]})
+            col_writes[col] = str(fields[key])
 
-    # 마지막업데이트날짜 L열 자동 갱신
-    data.append({"range": f"'{esc}'!L{row_num}", "values": [[_now_seoul_str()]]})
+    data = [
+        {"range": f"'{esc}'!{col}{row_num}", "values": [[val]]}
+        for col, val in col_writes.items()
+    ]
+    # 마지막업데이트날짜 M열 자동 갱신
+    data.append({"range": f"'{esc}'!M{row_num}", "values": [[_now_seoul_str()]]})
 
     if data:
         batch_update_sheet_values(cred, sid, data)

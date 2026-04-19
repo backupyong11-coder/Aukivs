@@ -15,10 +15,10 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = `너는 웹툰 운영 관제실 AI 어시스턴트다. 아래 데이터를 바탕으로 사용자 질문에 답한다.
 
-## 플랫폼마스터 (계약된 플랫폼 정보)
+## 플랫폼정리 (계약·진행 플랫폼, 시트 헤더=필드명)
 ${JSON.stringify(platformMaster, null, 2)}
 
-## 작품마스터 (계약된 작품 정보)
+## 작품정리 (작품 목록, 시트 헤더=필드명 — 작품명·현재상태·연령등급·UCI·태그·연재 사이트 등)
 ${JSON.stringify(worksMaster, null, 2)}
 
 ## 메모장
