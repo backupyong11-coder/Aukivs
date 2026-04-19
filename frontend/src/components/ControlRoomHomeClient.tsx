@@ -101,7 +101,7 @@ function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
 }
 
-/** 업무정리 D열(분류) 값으로 탭 구분 — '전체'는 필터 없음, 나머지는 '나머지업무' 등으로 귀속 */
+/** 업무정리 F열(분류) 값으로 탭 구분 — '전체'는 필터 없음, 나머지는 '나머지업무' 등으로 귀속 */
 type TaskFilterTab =
   | "전체"
   | "유통관련"
@@ -140,20 +140,31 @@ function bucketFromClassification(d: string): Exclude<TaskFilterTab, "전체"> {
   return "나머지업무";
 }
 
-/** 시트 E→D→C→G→H→I→J */
+/** 보조 줄: 시트 열 이름 순 (우선순위·분야·분류·플랫폼·정량화 관련·시간 등) */
 function taskRowSubLines(t: TaskSheetRow): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
   const push = (label: string, key: string) => {
     const v = (t[key] ?? "").trim();
     if (v) rows.push({ label, value: v });
   };
+  push("날짜그룹", "날짜그룹");
   push("우선순위", "우선순위");
+  push("분야", "분야");
   push("분류", "분류");
   push("관련플랫폼", "관련플랫폼");
+  push("정량화 분", "정량화 분");
   push("정량화", "정량화");
+  push("정량화 구분", "정량화 구분");
+  push("시간", "시간");
+  push("시간변환", "시간변환");
+  push("세부수치", "세부수치");
+  push("세부단위", "세부단위");
+  push("관련작품", "관련작품");
   push("난이도", "난이도");
   push("피로도", "피로도");
   push("상태", "상태");
+  push("담당자", "담당자");
+  push("메모", "메모");
   return rows;
 }
 
@@ -184,13 +195,13 @@ function RemainingTasksPanel(props: {
             마감일 <span className="font-mono">{props.todayYmd}</span>
             {" "}
             · <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-            건 · D열 분류로 필터
+            건 · F열 분류로 필터
           </>
         )
       : (
           <>
             미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-            건 · D열 분류로 필터
+            건 · F열 분류로 필터
           </>
         );
 

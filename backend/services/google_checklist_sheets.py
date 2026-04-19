@@ -27,27 +27,35 @@ _STATUS_DONE = "완료"
 _CHECKLIST_COLS = 11  # A2:K (완료, 마감, 플랫폼, 분류, 업무명, 작품, 빈칸, 상태, …)
 
 # GOOGLE_CHECKLIST_TAB 이 GOOGLE_TASKS_TAB 과 같을 때(예: 둘 다 "업무정리"):
-# google_tasks_sheets 와 동일한 열 — A=완료, B=마감일, …, E=우선순위, F=업무명, G=정량화, …, M=메모
-_TASK_COLS = 13
+# google_tasks_sheets 와 동일한 열 — A~U (업무명=H, 완료=C, 관련플랫폼=M)
+_TASK_COLS = 21
 _TASK_IDX: dict[str, int] = {
-    "완료": 0,
-    "마감일": 1,
-    "관련플랫폼": 2,
-    "분류": 3,
-    "우선순위": 4,
-    "업무명": 5,
-    "정량화": 6,
-    "난이도": 7,
-    "피로도": 8,
-    "상태": 9,
-    "담당자": 10,
-    "관련작품": 11,
-    "메모": 12,
+    "날짜그룹": 0,
+    "우선순위": 1,
+    "완료": 2,
+    "마감일": 3,
+    "분야": 4,
+    "분류": 5,
+    "정량화 분": 6,
+    "업무명": 7,
+    "정량화": 8,
+    "정량화 구분": 9,
+    "시간": 10,
+    "시간변환": 11,
+    "관련플랫폼": 12,
+    "세부수치": 13,
+    "세부단위": 14,
+    "관련작품": 15,
+    "난이도": 16,
+    "피로도": 17,
+    "상태": 18,
+    "담당자": 19,
+    "메모": 20,
 }
 
 
 def _uses_tasks_layout(settings: Settings) -> bool:
-    """체크리스트가 업무정리 열 구조(A~M, F=업무명)를 쓰는 경우."""
+    """체크리스트가 업무정리 열 구조(A~U, H=업무명)를 쓰는 경우."""
     ct = settings.google_checklist_tab.strip()
     if ct == settings.google_tasks_tab.strip():
         return True
@@ -58,7 +66,7 @@ def _uses_tasks_layout(settings: Settings) -> bool:
 def _data_range_a2(settings: Settings) -> str:
     escaped = settings.google_checklist_tab.replace("'", "''")
     if _uses_tasks_layout(settings):
-        return f"'{escaped}'!A2:M"
+        return f"'{escaped}'!A2:U"
     return f"'{escaped}'!A2:K"
 
 
@@ -165,7 +173,7 @@ def _parse_sheet_row_from_append_updated_range(updated_range: str | None) -> int
 def fetch_checklist_from_google_sheets(settings: Settings) -> list[ChecklistItem]:
     """
     레거시 체크리스트 탭: A2:K, E=업무명, H=상태 '완료' 제외.
-    업무정리 탭과 동일 이름으로 연동 시: A2:M, F=업무명, A열 체크 완료 제외.
+    업무정리 탭과 동일 이름으로 연동 시: A2:U, H=업무명, C열 완료 체크 제외.
     id는 항상 sheet-row-<행번호>, note는 응답에서 항상 None.
     """
     if not settings.google_service_account_file or not settings.google_sheet_url:
@@ -337,7 +345,7 @@ def _build_id_to_sheet_row(settings: Settings) -> tuple[Path, str, dict[str, int
 
 
 def _build_id_to_sheet_row_active(settings: Settings) -> tuple[Path, str, dict[str, int]]:
-    """GET /checklist 에 노출되는 행만 — 레거시: 제목 있음·H≠완료 / 업무정리: 제목 있음·A 미체크."""
+    """GET /checklist 에 노출되는 행만 — 레거시: 제목 있음·H≠완료 / 업무정리: 제목 있음·C 미체크."""
     if not settings.google_service_account_file or not settings.google_sheet_url:
         raise SheetsConfigurationError(
             "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
@@ -387,7 +395,7 @@ def update_checklist_item_in_sheet(
 ) -> None:
     """
     활성 행(미완료) 중 item_id에 해당하는 업무명 열만 갱신합니다.
-    레거시: E열 / 업무정리 연동: F열.
+    레거시: E열 / 업무정리 연동: H열.
     note 인자는 API 호환용이며 시트 신규 열 구조에서는 사용하지 않습니다.
     """
     _ = note
@@ -403,7 +411,7 @@ def update_checklist_item_in_sheet(
 
     row_num = id_to_row[oid]
     tab_esc = settings.google_checklist_tab.replace("'", "''")
-    col = "F" if _uses_tasks_layout(settings) else "E"
+    col = "H" if _uses_tasks_layout(settings) else "E"
     data = [{"range": f"'{tab_esc}'!{col}{row_num}", "values": [[title]]}]
     batch_update_sheet_values(cred_path, spreadsheet_id, data)
 
@@ -411,7 +419,7 @@ def update_checklist_item_in_sheet(
 def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     """
     레거시: H열(상태)을 '완료'로 설정.
-    업무정리 연동: A열(완료 체크박스)을 TRUE 로 설정.
+    업무정리 연동: C열(완료 체크박스)을 TRUE 로 설정.
     id는 GET /checklist 와 동일한 규칙(sheet-row-N)과 매칭됩니다.
     """
     if not ids:
@@ -431,7 +439,7 @@ def complete_checklist_items_by_ids(settings: Settings, ids: list[str]) -> int:
     if _uses_tasks_layout(settings):
         data = [
             {
-                "range": f"'{tab_esc}'!A{id_to_row[lid]}",
+                "range": f"'{tab_esc}'!C{id_to_row[lid]}",
                 "values": [["TRUE"]],
             }
             for lid in ids
@@ -456,7 +464,7 @@ def create_checklist_item_in_sheet(
     """
     체크리스트 탭 맨 아래에 행 1개를 추가합니다.
     레거시: E=업무명, A2:K.
-    업무정리 연동: F=업무명, A2:M.
+    업무정리 연동: H=업무명, A2:U.
     id는 sheet-row-<추가된 행>.
     """
     _ = note
@@ -480,7 +488,7 @@ def create_checklist_item_in_sheet(
 
     tab_esc = settings.google_checklist_tab.replace("'", "''")
     if _uses_tasks_layout(settings):
-        range_a1 = f"'{tab_esc}'!A:M"
+        range_a1 = f"'{tab_esc}'!A:U"
         row = [""] * _TASK_COLS
         row[_TASK_IDX["업무명"]] = t
         updated_range = append_rows_to_sheet_range(

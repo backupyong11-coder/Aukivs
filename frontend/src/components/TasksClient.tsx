@@ -13,21 +13,37 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 type TaskRow = {
   id: string;
   sheet_row: string;
+  날짜그룹: string;
+  우선순위: string;
   완료: string;
   마감일: string;
-  관련플랫폼: string;
+  분야: string;
   분류: string;
-  우선순위: string;
+  "정량화 분": string;
   업무명: string;
+  정량화: string;
+  "정량화 구분": string;
+  시간: string;
+  시간변환: string;
+  관련플랫폼: string;
+  세부수치: string;
+  세부단위: string;
+  관련작품: string;
   난이도: string;
   피로도: string;
   상태: string;
   담당자: string;
-  관련작품: string;
   메모: string;
 };
 
-type SortKey = "마감일" | "관련플랫폼" | "분류" | "우선순위" | "업무명" | "상태" | "피로도";
+type SortKey =
+  | "마감일"
+  | "관련플랫폼"
+  | "분류"
+  | "분야"
+  | "우선순위"
+  | "업무명"
+  | "시간";
 type SortDir = "asc" | "desc";
 type TabType = "미완료" | "완료" | "전체";
 
@@ -37,21 +53,50 @@ type ViewState =
   | { kind: "ready"; items: TaskRow[] };
 
 const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
-  완료: "", 마감일: "", 관련플랫폼: "", 분류: "", 우선순위: "",
-  업무명: "", 난이도: "", 피로도: "", 상태: "", 담당자: "", 관련작품: "", 메모: "",
+  날짜그룹: "",
+  우선순위: "",
+  완료: "",
+  마감일: "",
+  분야: "",
+  분류: "",
+  "정량화 분": "",
+  업무명: "",
+  정량화: "",
+  "정량화 구분": "",
+  시간: "",
+  시간변환: "",
+  관련플랫폼: "",
+  세부수치: "",
+  세부단위: "",
+  관련작품: "",
+  난이도: "",
+  피로도: "",
+  상태: "",
+  담당자: "",
+  메모: "",
 };
 
 const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: boolean }[] = [
   { key: "업무명", label: "업무명", required: true },
-  { key: "마감일", label: "마감일" },
-  { key: "관련플랫폼", label: "관련플랫폼" },
-  { key: "분류", label: "분류" },
+  { key: "날짜그룹", label: "날짜그룹 (A열)" },
   { key: "우선순위", label: "우선순위" },
+  { key: "완료", label: "완료 (TRUE/빈칸)" },
+  { key: "마감일", label: "마감일" },
+  { key: "분야", label: "분야" },
+  { key: "분류", label: "분류" },
+  { key: "정량화 분", label: "정량화 분" },
+  { key: "정량화", label: "정량화" },
+  { key: "정량화 구분", label: "정량화 구분" },
+  { key: "시간", label: "시간" },
+  { key: "시간변환", label: "시간변환" },
+  { key: "관련플랫폼", label: "관련플랫폼" },
+  { key: "세부수치", label: "세부수치 (N열)" },
+  { key: "세부단위", label: "세부단위 (O열, 분·컷 등)" },
+  { key: "관련작품", label: "관련작품" },
   { key: "난이도", label: "난이도" },
   { key: "피로도", label: "피로도" },
   { key: "상태", label: "상태" },
   { key: "담당자", label: "담당자/요청주체" },
-  { key: "관련작품", label: "관련작품" },
   { key: "메모", label: "메모" },
 ];
 
@@ -162,12 +207,31 @@ export function TasksClient() {
     } catch { /* ignore */ }
     return new Set<string>();
   });
+  const [hiddenFields, setHiddenFields] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("tasks.hiddenFields");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
+  const [fieldFilterOpen, setFieldFilterOpen] = useState(false);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      const items = await apiFetch("/tasks");
-      setState({ kind: "ready", items: items as TaskRow[] });
+      const raw = await apiFetch("/tasks");
+      const arr = Array.isArray(raw) ? raw : [];
+      const items: TaskRow[] = arr.map((row) => {
+        const r = row as TaskRow;
+        return {
+          ...EMPTY_FORM,
+          ...r,
+          id: String(r.id ?? ""),
+          sheet_row: String(r.sheet_row ?? ""),
+        };
+      });
+      setState({ kind: "ready", items });
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
@@ -205,6 +269,11 @@ export function TasksClient() {
   const allPriorities = useMemo(() => {
     if (state.kind !== "ready") return [];
     return sortedKeys(state.items.map(it => (it.우선순위 ?? "").trim()));
+  }, [state]);
+
+  const allFields = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return sortedKeys(state.items.map(it => (it.분야 ?? "").trim()));
   }, [state]);
 
   const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
@@ -245,6 +314,18 @@ export function TasksClient() {
     try { window.localStorage.setItem("tasks.hiddenPriorities", JSON.stringify([...next])); } catch { /* ignore */ }
     setHiddenPriorities(next);
   };
+  const toggleField = (key: string) => {
+    setHiddenFields(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("tasks.hiddenFields", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const setHiddenFieldsSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("tasks.hiddenFields", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenFields(next);
+  };
 
   const visible = useMemo(() => {
     if (state.kind !== "ready") return [];
@@ -252,10 +333,26 @@ export function TasksClient() {
     if (tab === "미완료") items = items.filter(it => !isDone(it));
     else if (tab === "완료") items = items.filter(isDone);
     if (filterText) {
-      items = items.filter(it =>
-        it.업무명.includes(filterText) || it.관련플랫폼.includes(filterText) ||
-        it.분류.includes(filterText) || it.메모.includes(filterText)
-      );
+      const q = filterText;
+      const hay = (it: TaskRow) =>
+        (it.날짜그룹 ?? "").includes(q)
+        || (it.업무명 ?? "").includes(q)
+        || (it.관련플랫폼 ?? "").includes(q)
+        || (it.분류 ?? "").includes(q)
+        || (it.분야 ?? "").includes(q)
+        || (it["정량화 분"] ?? "").includes(q)
+        || (it.정량화 ?? "").includes(q)
+        || (it["정량화 구분"] ?? "").includes(q)
+        || (it.세부수치 ?? "").includes(q)
+        || (it.세부단위 ?? "").includes(q)
+        || (it.관련작품 ?? "").includes(q)
+        || (it.난이도 ?? "").includes(q)
+        || (it.피로도 ?? "").includes(q)
+        || (it.상태 ?? "").includes(q)
+        || (it.담당자 ?? "").includes(q)
+        || (it.메모 ?? "").includes(q)
+        || (it.마감일 ?? "").includes(q);
+      items = items.filter(hay);
     }
     if (hiddenPlatforms.size > 0) {
       items = items.filter(it => !hiddenPlatforms.has((it.관련플랫폼 ?? "").trim()));
@@ -266,12 +363,15 @@ export function TasksClient() {
     if (hiddenPriorities.size > 0) {
       items = items.filter(it => !hiddenPriorities.has((it.우선순위 ?? "").trim()));
     }
+    if (hiddenFields.size > 0) {
+      items = items.filter(it => !hiddenFields.has((it.분야 ?? "").trim()));
+    }
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, sortKey, sortDir]);
+  }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, hiddenFields, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -281,9 +381,29 @@ export function TasksClient() {
   const openEdit = (item: TaskRow) => {
     setActionError(null);
     setEditItem(item);
-    setForm({ 완료: item.완료, 마감일: item.마감일, 관련플랫폼: item.관련플랫폼, 분류: item.분류,
-              우선순위: item.우선순위, 업무명: item.업무명, 난이도: item.난이도, 피로도: item.피로도,
-              상태: item.상태, 담당자: item.담당자, 관련작품: item.관련작품, 메모: item.메모 });
+    setForm({
+      날짜그룹: item.날짜그룹 ?? "",
+      우선순위: item.우선순위 ?? "",
+      완료: item.완료 ?? "",
+      마감일: item.마감일 ?? "",
+      분야: item.분야 ?? "",
+      분류: item.분류 ?? "",
+      "정량화 분": item["정량화 분"] ?? "",
+      업무명: item.업무명 ?? "",
+      정량화: item.정량화 ?? "",
+      "정량화 구분": item["정량화 구분"] ?? "",
+      시간: item.시간 ?? "",
+      시간변환: item.시간변환 ?? "",
+      관련플랫폼: item.관련플랫폼 ?? "",
+      세부수치: item.세부수치 ?? "",
+      세부단위: item.세부단위 ?? "",
+      관련작품: item.관련작품 ?? "",
+      난이도: item.난이도 ?? "",
+      피로도: item.피로도 ?? "",
+      상태: item.상태 ?? "",
+      담당자: item.담당자 ?? "",
+      메모: item.메모 ?? "",
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -332,7 +452,7 @@ export function TasksClient() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="업무명·플랫폼·분류·메모 검색"
+          placeholder="업무명·플랫폼·분야·분류·정량화·마감일 등 검색"
           className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
         <button onClick={() => { setActionError(null); setNewForm(EMPTY_FORM); setCreateOpen(true); }}
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
@@ -443,6 +563,41 @@ export function TasksClient() {
           )}
         </div>
 
+        <div className="relative">
+          <button type="button" onClick={() => setFieldFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            분야 필터
+            {hiddenFields.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenFields.size}</span>
+            )}
+            <span className="text-[10px]">{fieldFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {fieldFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분야</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenFieldsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenFieldsSave(new Set(allFields))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allFields.map(key => (
+                  <li key={key || "__fld__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenFields.has(key)} onChange={() => toggleField(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setFieldFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
@@ -485,26 +640,38 @@ export function TasksClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[1280px] text-xs">
+          <table className="w-full min-w-[2600px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thCls}>수정</th>
+                <th className={thCls}>날짜그룹</th>
                 <th className={thCls}>완료</th>
-                <th className={thSort} onClick={() => handleSort("마감일")}>마감일<SortIcon col="마감일"/></th>
-                <th className={thSort} onClick={() => handleSort("관련플랫폼")}>플랫폼<SortIcon col="관련플랫폼"/></th>
-                <th className={thSort} onClick={() => handleSort("분류")}>분류<SortIcon col="분류"/></th>
                 <th className={thSort} onClick={() => handleSort("우선순위")}>우선순위<SortIcon col="우선순위"/></th>
+                <th className={thSort} onClick={() => handleSort("마감일")}>마감일<SortIcon col="마감일"/></th>
+                <th className={thSort} onClick={() => handleSort("분야")}>분야<SortIcon col="분야"/></th>
+                <th className={thSort} onClick={() => handleSort("분류")}>분류<SortIcon col="분류"/></th>
                 <th className={thSort} onClick={() => handleSort("업무명")}>업무명<SortIcon col="업무명"/></th>
-                <th className={thSort} onClick={() => handleSort("상태")}>상태<SortIcon col="상태"/></th>
-                <th className={thSort} onClick={() => handleSort("피로도")}>피로도<SortIcon col="피로도"/></th>
+                <th className={thCls}>정량화 분</th>
+                <th className={thCls}>정량화</th>
+                <th className={thCls}>정량화 구분</th>
+                <th className={thSort} onClick={() => handleSort("시간")}>시간<SortIcon col="시간"/></th>
+                <th className={thCls}>시간변환</th>
+                <th className={thSort} onClick={() => handleSort("관련플랫폼")}>관련플랫폼<SortIcon col="관련플랫폼"/></th>
+                <th className={thCls}>세부수치</th>
+                <th className={thCls}>세부단위</th>
+                <th className={thCls}>관련작품</th>
+                <th className={thCls}>난이도</th>
+                <th className={thCls}>피로도</th>
+                <th className={thCls}>상태</th>
+                <th className={thCls}>담당자</th>
                 <th className={thCls}>메모</th>
                 <th className={thCls}>삭제</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={11} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0
+                <tr><td colSpan={23} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0 || hiddenFields.size > 0
                     ? "조건에 맞는 항목이 없습니다"
                     : `${tab} 업무가 없습니다`}
                 </td></tr>
@@ -517,21 +684,31 @@ export function TasksClient() {
                       수정
                     </button>
                   </td>
+                  <td className="max-w-[6rem] truncate px-3 py-1.5 text-zinc-500">{item.날짜그룹}</td>
                   <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
                     {isDone(item) ? "✓" : ""}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.마감일}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.관련플랫폼}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.분류}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.우선순위}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.마감일}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.분야}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.분류}</td>
                   <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
                     <span className="block max-w-[320px] truncate">{item.업무명}</span>
                   </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item["정량화 분"]}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.정량화}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item["정량화 구분"]}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{item.시간}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.시간변환}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.관련플랫폼}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.세부수치}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.세부단위}</td>
+                  <td className="max-w-[8rem] truncate px-3 py-1.5">{item.관련작품}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.난이도}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">{item.피로도}</td>
                   <td className="whitespace-nowrap px-3 py-1.5">{item.상태}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.피로도}</td>
-                  <td className="px-3 py-1.5">
-                    <span className="block max-w-[14rem] truncate text-zinc-400">{item.메모}</span>
-                  </td>
+                  <td className="max-w-[8rem] truncate px-3 py-1.5">{item.담당자}</td>
+                  <td className="max-w-[12rem] truncate px-3 py-1.5 text-zinc-600 dark:text-zinc-400">{item.메모}</td>
                   <td className="px-2 py-1.5">
                     <button type="button" onClick={() => void handleDelete(item)}
                       className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">

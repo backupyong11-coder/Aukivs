@@ -15,44 +15,44 @@ class ChecklistItem(BaseModel):
     id: str = Field(..., description="항목 식별자 (시트 행 기준 sheet-row-N)")
     title: str = Field(
         ...,
-        description="업무명(레거시 체크리스트 탭: E열 / 업무정리 탭: F열)",
+        description="업무명(레거시 체크리스트 탭: E열 / 업무정리 탭: H열)",
     )
     note: str | None = Field(None, description="부가 설명(레거시·생성 API 호환, 시트 신규 구조에서는 미사용)")
     due_date: str | None = Field(
         default=None,
-        description="마감일(B열) 문자열, 비어 있으면 null",
+        description="마감일(레거시: B열 / 업무정리: D열) 문자열, 비어 있으면 null",
     )
     platform: str | None = Field(
         default=None,
-        description="관련플랫폼(C열), 비어 있으면 null",
+        description="관련플랫폼(레거시: C열 / 업무정리: M열), 비어 있으면 null",
     )
     category: str | None = Field(
         default=None,
-        description="분류(D열), 비어 있으면 null",
+        description="분류(레거시: D열 / 업무정리: F열), 비어 있으면 null",
     )
     priority: str | None = Field(
         default=None,
-        description="우선순위(E열, 업무정리 탭 연동 시), 비어 있으면 null",
+        description="우선순위(레거시: E열 / 업무정리: B열), 비어 있으면 null",
     )
     quantification: str | None = Field(
         default=None,
-        description="정량화(G열, 업무정리 탭 연동 시), 비어 있으면 null",
+        description="정량화(레거시: 미사용 / 업무정리: I열), 비어 있으면 null",
     )
     difficulty: str | None = Field(
         default=None,
-        description="난이도(H열, 업무정리 탭 연동 시)",
+        description="난이도(레거시: 미사용 / 업무정리: Q열), 비어 있으면 null",
     )
     fatigue: str | None = Field(
         default=None,
-        description="피로도(I열, 업무정리 탭 연동 시)",
+        description="피로도(레거시: 미사용 / 업무정리: R열), 비어 있으면 null",
     )
     work_status: str | None = Field(
         default=None,
-        description="상태(J열, 업무정리 탭 연동 시)",
+        description="상태(레거시: 미사용 / 업무정리: S열), 비어 있으면 null",
     )
     memo: str | None = Field(
         default=None,
-        description="메모(M열, 업무정리 탭 연동 시), 비어 있으면 null",
+        description="메모(레거시: 미사용 / 업무정리: U열), 비어 있으면 null",
     )
 
 

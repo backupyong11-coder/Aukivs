@@ -7,17 +7,17 @@ export type ChecklistItem = {
   due_date?: string | null;
   platform?: string | null;
   category?: string | null;
-  /** 업무정리 시트 E열 */
+  /** 업무정리 시트 B열 */
   priority?: string | null;
-  /** 업무정리 시트 G열 */
-  quantification?: string | null;
-  /** 업무정리 시트 H열 */
-  difficulty?: string | null;
   /** 업무정리 시트 I열 */
+  quantification?: string | null;
+  /** 업무정리 시트 Q열 */
+  difficulty?: string | null;
+  /** 업무정리 시트 R열 */
   fatigue?: string | null;
-  /** 업무정리 시트 J열 */
+  /** 업무정리 시트 S열 */
   work_status?: string | null;
-  /** 업무정리 시트 M열 */
+  /** 업무정리 시트 U열 */
   memo?: string | null;
 };
 
