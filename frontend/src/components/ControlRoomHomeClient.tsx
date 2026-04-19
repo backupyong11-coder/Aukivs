@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -125,7 +126,7 @@ function platformSubsidyBizRow(p: PlatformMasterItem): boolean {
   return isTrue(p["지원사업"]) && platformRowGhChecked(p);
 }
 
-/** 업무정리 F열(분류) 값으로 탭 구분 — '전체'는 필터 없음, 나머지는 '나머지업무' 등으로 귀속 */
+/** 업무정리 분야(row["분야"]) 값으로 탭 구분 — '전체'는 필터 없음, 나머지는 '나머지업무' 등으로 귀속 */
 type TaskFilterTab =
   | "전체"
   | "유통관련"
@@ -151,8 +152,8 @@ const TASK_CATEGORY_TABS: { id: TaskFilterTab; label: string }[] = [
   { id: "나머지업무", label: "나머지업무" },
 ];
 
-function bucketFromClassification(d: string): Exclude<TaskFilterTab, "전체"> {
-  const t = d.trim();
+function bucketTaskTabFromBunya(bunya: string): Exclude<TaskFilterTab, "전체"> {
+  const t = bunya.trim();
   if (t.includes("유통관련")) return "유통관련";
   if (t.includes("작품제작")) return "작품제작";
   if (t.includes("업무미팅")) return "업무미팅";
@@ -199,10 +200,23 @@ function RemainingTasksPanel(props: {
   todayYmd?: string;
 }) {
   const [tab, setTab] = useState<TaskFilterTab>("전체");
+  /** 임시: 동일 items 집합에 대해 unique 분야 로그 1회만 — 확인 후 제거 */
+  const bunyaDebugSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    const raw = props.items.map((row) => (row["분야"] ?? "").trim());
+    const unique = [...new Set(raw)]
+      .filter((s) => s.length > 0)
+      .sort((a, b) => a.localeCompare(b, "ko"));
+    const sig = unique.join("\u0001");
+    if (sig === bunyaDebugSigRef.current) return;
+    bunyaDebugSigRef.current = sig;
+    console.log("[분야 debug] unique bunya values =", unique);
+  }, [props.items]);
+
   const filtered = useMemo(() => {
     if (tab === "전체") return props.items;
     return props.items.filter(
-      (row) => bucketFromClassification(row["분류"] ?? "") === tab,
+      (row) => bucketTaskTabFromBunya(row["분야"] ?? "") === tab,
     );
   }, [props.items, tab]);
 
@@ -219,13 +233,13 @@ function RemainingTasksPanel(props: {
           마감일 <span className="font-mono">{props.todayYmd}</span>
           {" "}
           · <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-          건 · F열 분류로 필터
+          건 · 분야로 필터
         </>
       )
       : (
         <>
           미완료 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{props.items.length}</span>
-          건 · F열 분류로 필터
+          건 · 분야로 필터
         </>
       );
 
@@ -247,7 +261,7 @@ function RemainingTasksPanel(props: {
       <ul className="grid max-h-[min(70vh,26rem)] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
         {filtered.length === 0 ? (
           <li className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">
-            {tab === "전체" ? "표시할 항목이 없습니다." : "이 분류에 해당하는 항목이 없습니다."}
+            {tab === "전체" ? "표시할 항목이 없습니다." : "이 분야에 해당하는 항목이 없습니다."}
           </li>
         ) : (
           filtered.map((row, i) => {
