@@ -31,8 +31,23 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function isTrueCell(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? "").trim().toUpperCase();
+  return s === "TRUE" || s === "1" || s === "YES" || s === "Y" || s === "O" || s === "✓";
+}
+
 /** 플랫폼정리 시트 열 문자 순서(원문): N → C → B → R → M → O → P → Q */
 const DISPLAY_LETTERS = ["N", "C", "B", "R", "M", "O", "P", "Q"] as const;
+
+/** 탭별 필터 열(원문): 불가 G / 예정 H / 진행중 I / 완료 J */
+const TAB_CONFIG = [
+  { id: "running" as const, label: "현재진행", letter: "I" },
+  { id: "scheduled" as const, label: "예정", letter: "H" },
+  { id: "blocked" as const, label: "불가", letter: "G" },
+  { id: "done" as const, label: "완료", letter: "J" },
+];
+type ProgressTabId = (typeof TAB_CONFIG)[number]["id"];
 
 async function apiFetch(path: string) {
   const base = getApiBaseUrl();
@@ -58,6 +73,7 @@ export function CurrentProgressClient() {
     { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: PlatformRow[] }
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<ProgressTabId>("running");
   const loggedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -79,10 +95,13 @@ export function CurrentProgressClient() {
   useEffect(() => {
     if (!sample || loggedRef.current) return;
     loggedRef.current = true;
-    const map = Object.fromEntries(
+    const displayMap = Object.fromEntries(
       DISPLAY_LETTERS.map((L) => [L, headerKeyAtLetter(sample, L)]),
     );
-    console.log("[current-progress] 열 문자 → 필드 key (첫 행 기준)", map);
+    console.log("[current-progress] 열 문자 → 필드 key (첫 행 기준)", displayMap);
+    const tabLetters = ["G", "H", "I", "J"] as const;
+    const tabsMap = Object.fromEntries(tabLetters.map((L) => [L, headerKeyAtLetter(sample, L)]));
+    console.log("[current-progress-tabs] G/H/I/J 열 문자 → 필드 key (첫 행 기준)", tabsMap);
   }, [sample]);
 
   const columnMeta = useMemo(() => {
@@ -93,12 +112,25 @@ export function CurrentProgressClient() {
     });
   }, [sample]);
 
+  const filterColKey = useMemo(() => {
+    if (!sample) return "";
+    const letter = TAB_CONFIG.find((t) => t.id === activeTab)?.letter ?? "I";
+    return headerKeyAtLetter(sample, letter);
+  }, [sample, activeTab]);
+
   const rows = useMemo(() => {
-    if (state.kind !== "ready" || !sample || columnMeta.length === 0) return [];
-    return state.items.filter((row) => columnMeta.some(({ key }) => cell(row, key)));
-  }, [state, sample, columnMeta]);
+    if (state.kind !== "ready" || !sample || columnMeta.length === 0 || !filterColKey) return [];
+    return state.items.filter((row) => {
+      if (!columnMeta.some(({ key }) => cell(row, key))) return false;
+      return isTrueCell((row as Record<string, unknown>)[filterColKey]);
+    });
+  }, [state, sample, columnMeta, filterColKey]);
 
   const th = "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const tabBtnActive =
+    "rounded-t-md border border-b-0 border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50";
+  const tabBtnIdle =
+    "rounded-t-md border border-transparent px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900";
 
   return (
     <div className="space-y-3">
@@ -111,6 +143,21 @@ export function CurrentProgressClient() {
           새로고침
         </button>
       </div>
+
+      {state.kind === "ready" && sample && (
+        <div className="flex flex-wrap gap-1 border-b border-zinc-200 pb-px dark:border-zinc-700">
+          {TAB_CONFIG.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              className={activeTab === id ? tabBtnActive : tabBtnIdle}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {state.kind === "loading" && (
         <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
