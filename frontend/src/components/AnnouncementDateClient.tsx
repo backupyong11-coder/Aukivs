@@ -30,6 +30,12 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+/** D열(발표일) — 일정으로 보지 않는 값은 목록에서 제외 */
+function isExcludedAnnouncementDate(v: string): boolean {
+  const t = v.trim();
+  return t === "" || t === "-" || t === "없음";
+}
+
 function cmpLocaleKoEmptyLast(a: string, b: string, dir: "asc" | "desc"): number {
   const ea = !String(a ?? "").trim();
   const eb = !String(b ?? "").trim();
@@ -124,10 +130,15 @@ export function AnnouncementDateClient() {
     });
   }, [sample]);
 
+  const dColumnKey = useMemo(() => (sample ? headerKeyAtLetter(sample, "D") : ""), [sample]);
+
   const rows = useMemo(() => {
     if (state.kind !== "ready" || !sample || columnMeta.length === 0) return [];
-    return state.items.filter((row) => columnMeta.some(({ key }) => cell(row, key)));
-  }, [state, sample, columnMeta]);
+    return state.items.filter((row) => {
+      if (dColumnKey && isExcludedAnnouncementDate(cell(row, dColumnKey))) return false;
+      return columnMeta.some(({ key }) => cell(row, key));
+    });
+  }, [state, sample, columnMeta, dColumnKey]);
 
   const sortedRows = useMemo(() => {
     const meta = columnMeta.find((m) => m.letter === sortKey);
