@@ -10,7 +10,7 @@ import {
 } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
-type UploadRow = {
+export type UploadRow = {
   id: string;
   sheet_row: string;
   완료: string;
@@ -40,7 +40,7 @@ type ViewState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: UploadRow[] };
 
-const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
+export const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
   { key: "작품명", label: "작품명", required: true },
   { key: "업로드일", label: "업로드일" },
   { key: "플랫폼명", label: "플랫폼명" },
@@ -58,7 +58,7 @@ const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[]
   { key: "비고", label: "비고" },
 ];
 
-type FormType = Partial<Record<keyof UploadRow, string>>;
+export type FormType = Partial<Record<keyof UploadRow, string>>;
 
 function isDone(item: UploadRow) {
   return (
@@ -84,7 +84,7 @@ async function apiFetch(path: string, body?: object) {
 }
 
 /** 컴포넌트 본문 안에 모달을 정의하면 매 렌더마다 타입이 바뀌어 입력 포커스가 끊깁니다. */
-function UploadRowFormModal(props: {
+export function UploadRowFormModal(props: {
   title: string;
   fields: FormType;
   setFields: Dispatch<SetStateAction<FormType>>;

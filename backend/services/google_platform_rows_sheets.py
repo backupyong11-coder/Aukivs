@@ -12,7 +12,9 @@ from config import Settings
 from .google_sheets import (
     append_rows_to_sheet_range,
     batch_update_sheet_values,
+    get_worksheet_id_by_title,
     spreadsheet_id_from_url,
+    spreadsheets_batch_update,
 )
 from .google_tasks_sheets import (
     _col_index_to_a1_letters_zero_based,
@@ -267,3 +269,28 @@ def update_platform(settings: Settings, platform_id: str, fields: dict) -> None:
 
     if data:
         batch_update_sheet_values(cred, sid, data)
+
+
+def delete_platform_row(settings: Settings, platform_id: str) -> None:
+    """플랫폼정리 탭에서 해당 id 행을 삭제(deleteDimension ROWS)."""
+    cred, sid, tab, id_to_row, _, _ = _find_row(settings)
+    if platform_id not in id_to_row:
+        raise SheetsNotFoundError(f"[찾을수없음] id 없음: {platform_id}")
+    sheet_row = id_to_row[platform_id]
+    worksheet_id = get_worksheet_id_by_title(cred, sid, tab)
+    spreadsheets_batch_update(
+        cred,
+        sid,
+        [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": worksheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": sheet_row - 1,
+                        "endIndex": sheet_row,
+                    }
+                }
+            }
+        ],
+    )

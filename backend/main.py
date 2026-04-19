@@ -83,6 +83,7 @@ from services.google_upload_rows_sheets import (
 )
 from services.google_platform_rows_sheets import (
     create_platform_row,
+    delete_platform_row,
     fetch_platforms,
     update_platform,
 )
@@ -589,6 +590,23 @@ def post_platform_rows_update(body: dict):
     try:
         update_platform(settings, platform_id, body)
         return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/platform-rows/delete")
+def post_platform_rows_delete(body: dict[str, Any] = Body(...)):
+    settings = load_settings()
+    platform_id = str(body.get("id", "")).strip()
+    if not platform_id:
+        raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    try:
+        delete_platform_row(settings, platform_id)
+        return {"deleted": True}
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SheetsNotFoundError as e:

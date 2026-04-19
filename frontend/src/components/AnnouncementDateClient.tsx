@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
-
-type PlatformRow = Record<string, string> & { id: string; sheet_row: string | number };
+import { PlatformRowEditModal, type PlatformRow } from "@/components/PlatformRowEditModal";
 
 function colLettersToZeroBased(letters: string): number {
   const s = letters.toUpperCase();
@@ -64,6 +63,24 @@ async function apiFetch(path: string) {
   return JSON.parse(text) as unknown;
 }
 
+async function apiPost(path: string, body: object) {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    try {
+      const j = JSON.parse(text) as { detail?: string };
+      throw new Error(j.detail ?? text);
+    } catch {
+      throw new Error(text);
+    }
+  }
+}
+
 export function AnnouncementDateClient() {
   const [state, setState] = useState<
     { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: PlatformRow[] }
@@ -71,6 +88,7 @@ export function AnnouncementDateClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [sortKey, setSortKey] = useState<AnnounceSortCol>("D");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [editItem, setEditItem] = useState<PlatformRow | null>(null);
   const loggedRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -134,6 +152,19 @@ export function AnnouncementDateClient() {
 
   const thSort =
     "cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
+  const thAction =
+    "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+
+  const handleDelete = async (row: PlatformRow) => {
+    const name = String(row["회사명"] ?? "").trim() || row.id;
+    if (!window.confirm(`이 행을 삭제할까요? (${name})`)) return;
+    try {
+      await apiPost("/platform-rows/delete", { id: row.id });
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "삭제 실패");
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -165,21 +196,23 @@ export function AnnouncementDateClient() {
 
       {state.kind === "ready" && sample && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[720px] text-xs">
+          <table className="w-full min-w-[800px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+                <th className={thAction}>수정</th>
                 {columnMeta.map(({ letter, label }) => (
                   <th key={letter} className={thSort} onClick={() => handleSort(letter)}>
                     {label}
                     <SortIcon col={letter} />
                   </th>
                 ))}
+                <th className={thAction}>삭제</th>
               </tr>
             </thead>
             <tbody>
               {sortedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={columnMeta.length || 6} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={(columnMeta.length || 6) + 2} className="px-3 py-8 text-center text-zinc-500">
                     항목이 없습니다
                   </td>
                 </tr>
@@ -189,11 +222,29 @@ export function AnnouncementDateClient() {
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"
                   >
+                    <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                      <button
+                        type="button"
+                        onClick={() => setEditItem(item)}
+                        className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                      >
+                        수정
+                      </button>
+                    </td>
                     {columnMeta.map(({ letter, key }) => (
                       <td key={letter} className="max-w-[14rem] px-2 py-1.5 align-top text-zinc-800 dark:text-zinc-200">
                         <span className="line-clamp-3 break-words">{cell(item, key) || "—"}</span>
                       </td>
                     ))}
+                    <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(item)}
+                        className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
+                      >
+                        삭제
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -201,6 +252,12 @@ export function AnnouncementDateClient() {
           </table>
         </div>
       )}
+
+      <PlatformRowEditModal
+        item={editItem}
+        onClose={() => setEditItem(null)}
+        onSaved={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
