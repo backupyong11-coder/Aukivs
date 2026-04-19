@@ -5,7 +5,7 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string | number };
 
-/** 시트 열 문자 → 0-based 인덱스 (플랫폼정리 시트 기준 C=발표일, K=계약, R=우선순위) */
+/** 시트 열 문자 → 0-based 인덱스 (플랫폼정리: B=회사명, C=발표일, K=계약, R=플랫폼명, S=우선순위) */
 function colLettersToZeroBased(letters: string): number {
   const s = letters.toUpperCase();
   let n = 0;
@@ -41,8 +41,8 @@ function cell(row: PlatformRow, key: string): string {
 const CONTRACT_TABS = ["계약완료", "계약진행중", "계약미정", "계약불가", "추후접촉"] as const;
 type ContractTab = (typeof CONTRACT_TABS)[number];
 
-/** 표시 열 순서: K → C → R (헤더 라벨은 시트 1행 문자열) */
-const DISPLAY_LETTERS: ("K" | "C" | "R")[] = ["K", "C", "R"];
+/** 표시 열 순서: 계약 → 발표일 → 회사명 → 플랫폼명 (헤더는 응답 key) */
+const DISPLAY_LETTERS: ("K" | "C" | "B" | "R")[] = ["K", "C", "B", "R"];
 
 async function apiFetch(path: string) {
   const base = getApiBaseUrl();
@@ -87,11 +87,12 @@ export function ContractsClient() {
   const sample = state.kind === "ready" && state.items.length > 0 ? state.items[0] : null;
 
   const keys = useMemo(() => {
-    if (!sample) return { contract: "", date: "", priority: "" };
+    if (!sample) return { contract: "", date: "", company: "", platform: "" };
     return {
       contract: fieldKey(sample, "계약", "K"),
       date: fieldKey(sample, "발표일", "C"),
-      priority: fieldKey(sample, "우선순위", "R"),
+      company: fieldKey(sample, "회사명", "B"),
+      platform: fieldKey(sample, "플랫폼명", "R"),
     };
   }, [sample]);
 
@@ -105,7 +106,13 @@ export function ContractsClient() {
     if (!sample) return [];
     return DISPLAY_LETTERS.map((letter) => {
       const key =
-        letter === "K" ? keys.contract : letter === "C" ? keys.date : keys.priority;
+        letter === "K"
+          ? keys.contract
+          : letter === "C"
+            ? keys.date
+            : letter === "B"
+              ? keys.company
+              : keys.platform;
       const label = key || letter;
       return { letter, key, label };
     });
@@ -160,11 +167,11 @@ export function ContractsClient() {
 
       {state.kind === "ready" && sample && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[480px] text-xs">
+          <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-                {columnMeta.map(({ key, label }) => (
-                  <th key={key || label} className={th}>
+                {columnMeta.map(({ letter, label }) => (
+                  <th key={letter} className={th}>
                     {label}
                   </th>
                 ))}
@@ -173,7 +180,7 @@ export function ContractsClient() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={columnMeta.length || 3} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={columnMeta.length || 4} className="px-3 py-8 text-center text-zinc-500">
                     해당 상태의 항목이 없습니다
                   </td>
                 </tr>
@@ -183,8 +190,8 @@ export function ContractsClient() {
                     key={item.id}
                     className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"
                   >
-                    {columnMeta.map(({ key }) => (
-                      <td key={key} className="max-w-[20rem] px-3 py-2 align-top text-zinc-800 dark:text-zinc-200">
+                    {columnMeta.map(({ letter, key }) => (
+                      <td key={letter} className="max-w-[20rem] px-3 py-2 align-top text-zinc-800 dark:text-zinc-200">
                         <span className="line-clamp-3 break-words">{cell(item, key) || "—"}</span>
                       </td>
                     ))}
