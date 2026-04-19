@@ -76,6 +76,25 @@ function normalizeSheetDateYmd(raw: string): string | null {
   return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
 }
 
+/** GET /tasks → 허브 state용: 값 trim */
+function normalizeTaskSheetRow(row: TaskSheetRow): TaskSheetRow {
+  const out: TaskSheetRow = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = (v ?? "").trim();
+  }
+  return out;
+}
+
+/** GET /upload-rows 한 행: 키·값 문자열 trim */
+function normalizeUploadRowFromApi(row: unknown): Record<string, string> {
+  if (!row || typeof row !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+    out[k] = v == null ? "" : String(v).trim();
+  }
+  return out;
+}
+
 function uploadLooksIncomplete(status: string | null): boolean {
   if (!status || !status.trim()) return true;
   const s = status.trim().toLowerCase();
@@ -514,15 +533,15 @@ export function ControlRoomHomeClient() {
     (async () => {
       setHub({ kind: "loading" });
       try {
-        const [b, u, m, c, pm, wm, tasksRaw, uploadRowsRaw, platformRowsRaw] = await Promise.all([
+        const [b, u, m, c, pm, wm, tr, uploadRowsRaw, platformRowsRaw] = await Promise.all([
           fetchBriefingToday({ signal: ac.signal }),
           fetchUploads({ signal: ac.signal }),
           fetchMemos({ signal: ac.signal }),
           fetchChecklist().catch(() => ({ ok: false as const, message: "체크리스트 로드 실패", items: [] })),
           fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
           fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
-          fetch(`${getApiBaseUrl()}/tasks`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
-          fetch(`${getApiBaseUrl()}/upload-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
+          fetchTasks(),
+          fetch(`${getApiBaseUrl()}/upload-rows`).then(r => r.json()).catch(() => []) as Promise<unknown[]>,
           fetch(`${getApiBaseUrl()}/platform-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
         ]);
         if (ac.signal.aborted) return;
@@ -538,8 +557,10 @@ export function ControlRoomHomeClient() {
           checklistError: c.ok ? null : c.message,
           platformMaster: pm.ok ? pm.items : [],
           worksMaster: wm.ok ? wm.items : [],
-          allTasks: Array.isArray(tasksRaw) ? tasksRaw : [],
-          uploadRows: Array.isArray(uploadRowsRaw) ? uploadRowsRaw : [],
+          allTasks: tr.ok ? tr.items.map(normalizeTaskSheetRow) : [],
+          uploadRows: Array.isArray(uploadRowsRaw)
+            ? uploadRowsRaw.map(normalizeUploadRowFromApi)
+            : [],
           platformRows: Array.isArray(platformRowsRaw) ? platformRowsRaw : [],
         });
       } catch (e: unknown) {
@@ -1135,6 +1156,9 @@ export function ControlRoomHomeClient() {
               if (hub.kind !== "ready") return;
               const [y, m, d] = ymd.split("-").map(Number);
               const uploads = hub.uploads.items.filter((it) => isUploadOnSeoulDay(it.uploaded_at, ymd));
+              const uploadRowsOnDay = hub.uploadRows.filter(
+                (it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd,
+              );
               const memos = hub.memos.filter((memo) => normalizeSheetDateYmd(memo.memo_date ?? "") === ymd);
               const allTasksOnDay = hub.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
               const launchesOnDay = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
@@ -1168,6 +1192,29 @@ export function ControlRoomHomeClient() {
                           </li>
                         );
                       })}</ul>}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-500">업로드정리 업로드 ({uploadRowsOnDay.length}건)</p>
+                      {uploadRowsOnDay.length === 0 ? (
+                        <p className="text-zinc-500">없음</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1">
+                          {uploadRowsOnDay.map((it, i) => (
+                            <li
+                              key={it.id ? String(it.id) : `uo-day-${i}`}
+                              className="rounded border border-zinc-200 bg-zinc-50/90 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+                            >
+                              <span className="font-medium text-zinc-900 dark:text-zinc-100">{it["작품명"] ?? ""}</span>
+                              {it["플랫폼명"] ? (
+                                <span className="ml-1 text-zinc-500">({it["플랫폼명"]})</span>
+                              ) : null}
+                              <span className="ml-2 tabular-nums text-zinc-700 dark:text-zinc-300">
+                                {safeInt(it["업로드화수"])}화
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     {launchesOnDay.length > 0 && (
                       <div>
@@ -1357,8 +1404,8 @@ function CalendarSection({ hub, onDayClick }: { hub: HubLoadState; onDayClick: (
     if (hub.kind !== "ready") return new Map<string, { uploads: number; tasks: number; launches: number }>();
     const map = new Map<string, { uploads: number; tasks: number; launches: number }>();
     const def = () => ({ uploads: 0, tasks: 0, launches: 0 });
-    for (const it of hub.uploads.items) {
-      const ymd = formatSeoulYmd(new Date(Date.parse(it.uploaded_at)));
+    for (const it of hub.uploadRows) {
+      const ymd = normalizeSheetDateYmd(it["업로드일"] ?? "");
       if (!ymd) continue;
       const cur = map.get(ymd) ?? def();
       map.set(ymd, { ...cur, uploads: cur.uploads + 1 });
