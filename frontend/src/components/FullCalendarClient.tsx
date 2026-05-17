@@ -6,6 +6,7 @@ import { DayAgendaDetail } from "@/components/DayAgendaDetail";
 import { useControlRoomHub } from "@/hooks/useControlRoomHub";
 import type { HubLoadState } from "@/lib/controlRoomHub";
 import { formatCalendarTaskTitle } from "@/lib/formatCalendarTaskTitle";
+import { isCalendarRestDay } from "@/lib/calendarRestDay";
 import {
   addCalendarDays,
   normalizeSheetDateYmd,
@@ -216,7 +217,8 @@ export function FullCalendarClient() {
       </div>
 
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        관제실 미니 달력과 동일한 데이터(업무 마감일, 업로드·런칭일, 메모, 작품 첫 공급 일정)를 사용합니다. 표시 타임존은 서울 기준입니다.
+        관제실 미니 달력과 동일한 데이터(업무 마감일, 업로드·런칭일, 메모, 작품 첫 공급 일정)를 사용합니다. 표시 타임존은 서울 기준이며,{" "}
+        <span className="font-medium text-zinc-600 dark:text-zinc-300">회색 칸은 토·일·공휴일·대체공휴일</span>입니다.
       </p>
 
       {hub.kind === "error" && (
@@ -247,8 +249,11 @@ export function FullCalendarClient() {
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
           <div className="min-w-[720px] p-3 sm:p-4">
             <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-                <div key={d} className="py-2">
+              {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+                <div
+                  key={d}
+                  className={`rounded py-2 ${i === 0 || i === 6 ? "bg-zinc-100 dark:bg-zinc-800/60" : ""}`}
+                >
                   {d}
                 </div>
               ))}
@@ -263,16 +268,32 @@ export function FullCalendarClient() {
                 const hasLaunch = (act?.launches ?? 0) > 0;
                 const isToday = ymd === todayYmd;
                 const sel = ymd === selectedYmd;
+                const rest = isCalendarRestDay(monthGrid.vy, monthGrid.vm, d);
+                const restBg = rest
+                  ? isToday
+                    ? "bg-zinc-200/90 dark:bg-zinc-700/45"
+                    : "bg-zinc-100 dark:bg-zinc-800/70"
+                  : isToday
+                    ? "bg-zinc-900/5 dark:bg-zinc-100/5"
+                    : "";
+                const restHover =
+                  sel || !rest
+                    ? ""
+                    : "hover:bg-zinc-200/95 dark:hover:bg-zinc-700/85";
+                const workHover =
+                  sel || rest
+                    ? ""
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-900";
                 return (
                   <button
                     key={`${ymd}-${i}`}
                     type="button"
                     onClick={() => setSelectedYmd(ymd)}
-                    className={`flex min-h-[5rem] flex-col rounded-lg border p-2 text-left text-sm transition-colors ${
+                    className={`flex min-h-[5rem] flex-col rounded-lg border p-2 text-left text-sm transition-colors ${restBg} ${
                       sel
                         ? "border-zinc-900 ring-2 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
-                        : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                    } ${isToday ? "bg-zinc-900/5 dark:bg-zinc-100/5" : ""}`}
+                        : `border-zinc-200 dark:border-zinc-700 ${restHover} ${workHover}`
+                    }`}
                   >
                     <span
                       className={`text-base font-semibold tabular-nums ${isToday ? "text-zinc-900 dark:text-zinc-50" : "text-zinc-800 dark:text-zinc-200"}`}
@@ -307,6 +328,7 @@ export function FullCalendarClient() {
               const ymd = ymdFromParts(y, m, d);
               const isToday = ymd === todayYmd;
               const sel = ymd === selectedYmd;
+              const rest = isCalendarRestDay(y, m, d);
               const uploads = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd);
               const tasks = hub.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
               const launches = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
@@ -315,18 +337,37 @@ export function FullCalendarClient() {
               return (
                 <div
                   key={ymd}
-                  className={`flex min-h-[22rem] flex-col ${sel ? "bg-zinc-50 dark:bg-zinc-900/50" : ""}`}
+                  className={`flex min-h-[22rem] flex-col ${
+                    sel
+                      ? "bg-zinc-50 dark:bg-zinc-900/50"
+                      : rest
+                        ? "bg-zinc-100/90 dark:bg-zinc-800/55"
+                        : ""
+                  }`}
                 >
                   <button
                     type="button"
                     onClick={() => setSelectedYmd(ymd)}
-                    className={`border-b border-zinc-200 px-2 py-3 text-left dark:border-zinc-800 ${isToday ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : ""}`}
+                    className={`border-b border-zinc-200 px-2 py-3 text-left dark:border-zinc-800 ${
+                      isToday
+                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        : rest
+                          ? "bg-zinc-200/80 text-zinc-900 dark:bg-zinc-700/80 dark:text-zinc-50"
+                          : ""
+                    }`}
                   >
                     <p className="text-lg font-bold tabular-nums">{d}</p>
-                    <p className={`text-xs ${isToday ? "text-zinc-200 dark:text-zinc-700" : "text-zinc-500 dark:text-zinc-400"}`}>
+                    <p
+                      className={`text-xs ${
+                        isToday
+                          ? "text-zinc-200 dark:text-zinc-700"
+                          : rest
+                            ? "text-zinc-600 dark:text-zinc-300"
+                            : "text-zinc-500 dark:text-zinc-400"
+                      }`}
+                    >
                       {weekdayShortKo(y, m, d)}요일
-                    </p>
-                  </button>
+                    </p>                  </button>
                   <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 text-[11px]">
                     {tasks.length > 0 && (
                       <div>
@@ -410,7 +451,13 @@ export function FullCalendarClient() {
 
       {ready && view === "day" && (
         <div className="grid gap-4 lg:grid-cols-12">
-          <section className="rounded-xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-6 dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950 lg:col-span-4">
+          <section
+            className={`rounded-xl border border-zinc-200 bg-gradient-to-b p-6 dark:border-zinc-800 lg:col-span-4 ${
+              isCalendarRestDay(cursor.y, cursor.m, cursor.d)
+                ? "from-zinc-200/70 to-zinc-100 dark:from-zinc-800/90 dark:to-zinc-950"
+                : "from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950"
+            }`}
+          >
             <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">일간</p>
             <p className="mt-2 text-4xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">{cursor.d}</p>
             <p className="mt-1 text-lg text-zinc-600 dark:text-zinc-400">
