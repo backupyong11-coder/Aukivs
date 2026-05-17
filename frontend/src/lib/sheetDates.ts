@@ -1,15 +1,28 @@
-/** 서울(Asia/Seoul) 기준 YYYY-MM-DD */
+/** 서울(Asia/Seoul) 기준 YYYY-MM-DD — Intl만 사용(로케일 문자열을 Date로 다시 파싱하지 않음) */
 export function formatSeoulYmd(date: Date): string {
-  const seoul = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  const y = seoul.getFullYear();
-  const m = String(seoul.getMonth() + 1).padStart(2, "0");
-  const d = String(seoul.getDate()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const m = parts.find((p) => p.type === "month")?.value ?? "01";
+  const d = parts.find((p) => p.type === "day")?.value ?? "01";
   return `${y}-${m}-${d}`;
 }
 
 export function seoulYmdPartsNow(): { year: number; month: number; day: number } {
-  const seoul = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  return { year: seoul.getFullYear(), month: seoul.getMonth() + 1, day: seoul.getDate() };
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const y = Number(parts.find((p) => p.type === "year")?.value ?? 0);
+  const m = Number(parts.find((p) => p.type === "month")?.value ?? 0);
+  const d = Number(parts.find((p) => p.type === "day")?.value ?? 0);
+  return { year: y, month: m, day: d };
 }
 
 export function seoulCalendarYearMonthNow(): { year: number; month: number } {

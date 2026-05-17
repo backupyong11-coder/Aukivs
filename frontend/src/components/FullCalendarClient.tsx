@@ -101,10 +101,15 @@ export function FullCalendarClient() {
 
   function changeView(next: CalendarView) {
     setView(next);
+    const parts = selectedYmd.split("-").map(Number);
+    const [yy, mm, dd] = parts;
+    if (parts.length !== 3 || !yy || !mm || !dd) return;
     if (next === "day") {
-      const parts = selectedYmd.split("-").map(Number);
-      const [yy, mm, dd] = parts;
-      if (parts.length === 3 && yy && mm && dd) setCursor({ y: yy, m: mm, d: dd });
+      setCursor({ y: yy, m: mm, d: dd });
+    } else if (next === "week") {
+      setCursor({ y: yy, m: mm, d: dd });
+    } else if (next === "month") {
+      setCursor({ y: yy, m: mm, d: 1 });
     }
   }
 
@@ -112,8 +117,11 @@ export function FullCalendarClient() {
     if (view === "month") {
       const n = addMonths(cursor.y, cursor.m, -1);
       setCursor({ y: n.y, m: n.m, d: 1 });
+      setSelectedYmd(ymdFromParts(n.y, n.m, 1));
     } else if (view === "week") {
-      setCursor(addCalendarDays(cursor.y, cursor.m, cursor.d, -7));
+      const n = addCalendarDays(cursor.y, cursor.m, cursor.d, -7);
+      setCursor(n);
+      setSelectedYmd(ymdFromParts(n.y, n.m, n.d));
     } else {
       const n = addCalendarDays(cursor.y, cursor.m, cursor.d, -1);
       setCursor(n);
@@ -125,8 +133,11 @@ export function FullCalendarClient() {
     if (view === "month") {
       const n = addMonths(cursor.y, cursor.m, 1);
       setCursor({ y: n.y, m: n.m, d: 1 });
+      setSelectedYmd(ymdFromParts(n.y, n.m, 1));
     } else if (view === "week") {
-      setCursor(addCalendarDays(cursor.y, cursor.m, cursor.d, 7));
+      const n = addCalendarDays(cursor.y, cursor.m, cursor.d, 7);
+      setCursor(n);
+      setSelectedYmd(ymdFromParts(n.y, n.m, n.d));
     } else {
       const n = addCalendarDays(cursor.y, cursor.m, cursor.d, 1);
       setCursor(n);
@@ -213,6 +224,17 @@ export function FullCalendarClient() {
           {hub.message}
         </div>
       )}
+
+      {ready && hub.briefingLoadError ? (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
+          role="status"
+        >
+          <p className="font-medium">관제실 브리핑만 실패했습니다</p>
+          <p className="mt-1 text-xs opacity-90">{hub.briefingLoadError}</p>
+          <p className="mt-1 text-xs text-amber-900/85 dark:text-amber-200/85">캘린더 일정(업무·업로드·메모 등)은 그대로 불러옵니다.</p>
+        </div>
+      ) : null}
 
       {hub.kind === "loading" && (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400" role="status">

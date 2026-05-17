@@ -1017,6 +1017,18 @@ export function ControlRoomHomeClient() {
         </aside>
 
         <main className="space-y-4 lg:col-span-7">
+          {hub.kind === "ready" && hub.briefingLoadError ? (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
+              role="status"
+            >
+              <p className="font-medium">브리핑만 불러오지 못했습니다</p>
+              <p className="mt-1 text-xs opacity-90">{hub.briefingLoadError}</p>
+              <p className="mt-1 text-xs text-amber-900/85 dark:text-amber-200/85">
+                미니 달력·집계 등 다른 데이터는 아래와 같이 표시됩니다.
+              </p>
+            </div>
+          ) : null}
           <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
             <CalendarSection hub={hub} onDayClick={(ymd) => {
               if (hub.kind !== "ready") return;

@@ -8,11 +8,26 @@ import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMast
 import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
 import { userFacingListError } from "@/lib/userFacingErrors";
 
+/** 브리핑만 실패했을 때 캘린더·업무 등은 계속 쓸 수 있게 쓰는 빈 페이로드 */
+const EMPTY_BRIEFING: BriefingTodayPayload = {
+  briefing_text: "",
+  summary: {
+    today_checklist_count: 0,
+    overdue_checklist_count: 0,
+    today_upload_count: 0,
+    overdue_upload_count: 0,
+  },
+  urgent_items: [],
+  warnings: [],
+};
+
 export type HubLoadState =
   | { kind: "loading" }
   | {
       kind: "ready";
       briefing: BriefingTodayPayload;
+      /** 브리핑 API 실패 시에만(나머지 데이터는 로드됨) */
+      briefingLoadError: string | null;
       uploads: { items: UploadListItem[]; issues: UploadListIssue[] };
       memos: MemoItem[];
       memosError: string | null;
@@ -45,6 +60,20 @@ function normalizeUploadRowFromApi(row: unknown): Record<string, string> {
   return out;
 }
 
+async function fetchJsonArray(path: string, signal: AbortSignal): Promise<unknown[]> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}${path}`, {
+      signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchControlRoomHub(signal: AbortSignal): Promise<HubLoadState> {
   try {
     const [b, u, m, c, pm, wm, tr, uploadRowsRaw, platformRowsRaw] = await Promise.all([
@@ -55,18 +84,16 @@ export async function fetchControlRoomHub(signal: AbortSignal): Promise<HubLoadS
       fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
       fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
       fetchTasks(),
-      fetch(`${getApiBaseUrl()}/upload-rows`).then((r) => r.json()).catch(() => []) as Promise<unknown[]>,
-      fetch(`${getApiBaseUrl()}/platform-rows`).then((r) => r.json()).catch(() => []) as Promise<
-        Record<string, string>[]
-      >,
+      fetchJsonArray("/upload-rows", signal),
+      fetchJsonArray("/platform-rows", signal),
     ]);
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (!b.ok) {
-      return { kind: "error", message: userFacingListError("briefing", b.message) };
-    }
+    const briefingLoadError = !b.ok ? userFacingListError("briefing", b.message) : null;
+    const briefingPayload = b.ok ? b.payload : EMPTY_BRIEFING;
     return {
       kind: "ready",
-      briefing: b.payload,
+      briefing: briefingPayload,
+      briefingLoadError,
       uploads: u.ok ? { items: u.items, issues: u.issues } : { items: [], issues: [] },
       memos: m.ok ? m.items : [],
       memosError: m.ok ? null : userFacingListError("memos", m.message),
@@ -75,8 +102,8 @@ export async function fetchControlRoomHub(signal: AbortSignal): Promise<HubLoadS
       platformMaster: pm.ok ? pm.items : [],
       worksMaster: wm.ok ? wm.items : [],
       allTasks: tr.ok ? tr.items.map(normalizeTaskSheetRow) : [],
-      uploadRows: Array.isArray(uploadRowsRaw) ? uploadRowsRaw.map(normalizeUploadRowFromApi) : [],
-      platformRows: Array.isArray(platformRowsRaw) ? platformRowsRaw : [],
+      uploadRows: uploadRowsRaw.map(normalizeUploadRowFromApi),
+      platformRows: platformRowsRaw.map(normalizeUploadRowFromApi),
     };
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") throw e;

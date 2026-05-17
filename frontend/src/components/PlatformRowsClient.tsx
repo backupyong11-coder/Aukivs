@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
@@ -70,6 +70,38 @@ const PLATFORM_DISPLAY_LETTERS = [
 ] as const;
 
 type SortId = "attr" | (typeof PLATFORM_DISPLAY_LETTERS)[number];
+type PlatformColLetter = (typeof PLATFORM_DISPLAY_LETTERS)[number];
+
+/** C·D·속성 뒤에 오는 열만 좌우 이동(플랫폼·메모 열이 함께 움직임) */
+const REORDERABLE_PLATFORM_LETTERS = PLATFORM_DISPLAY_LETTERS.slice(
+  2,
+) as PlatformColLetter[];
+
+const PLATFORM_COL_ORDER_STORAGE_KEY = "platform_rows_reorderable_letters_v1";
+
+function loadPlatformColOrder(): PlatformColLetter[] {
+  if (typeof window === "undefined") return [...REORDERABLE_PLATFORM_LETTERS];
+  try {
+    const raw = localStorage.getItem(PLATFORM_COL_ORDER_STORAGE_KEY);
+    if (!raw) return [...REORDERABLE_PLATFORM_LETTERS];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== REORDERABLE_PLATFORM_LETTERS.length) {
+      return [...REORDERABLE_PLATFORM_LETTERS];
+    }
+    const allowed = new Set(REORDERABLE_PLATFORM_LETTERS);
+    for (const x of parsed) {
+      if (typeof x !== "string" || !allowed.has(x as PlatformColLetter)) {
+        return [...REORDERABLE_PLATFORM_LETTERS];
+      }
+    }
+    for (const x of REORDERABLE_PLATFORM_LETTERS) {
+      if (!parsed.includes(x)) return [...REORDERABLE_PLATFORM_LETTERS];
+    }
+    return parsed as PlatformColLetter[];
+  } catch {
+    return [...REORDERABLE_PLATFORM_LETTERS];
+  }
+}
 
 const STATUS_KEY_CANDIDATES = ["마지막상황", "마지막 상황", "최근상황", "최근 상황", "상황"];
 function findStatusKey(item: PlatformRow): string {
@@ -143,6 +175,37 @@ export function PlatformRowsClient() {
   const [createForm, setCreateForm] = useState<Record<string, string>>(emptyCreateForm);
   const [savingCreate, setSavingCreate] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [platformLetterOrder, setPlatformLetterOrder] = useState<PlatformColLetter[]>(() => [
+    ...REORDERABLE_PLATFORM_LETTERS,
+  ]);
+
+  useLayoutEffect(() => {
+    setPlatformLetterOrder(loadPlatformColOrder());
+  }, []);
+
+  const persistPlatformColOrder = useCallback((next: PlatformColLetter[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(PLATFORM_COL_ORDER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const movePlatformColumn = useCallback((letter: PlatformColLetter, dir: -1 | 1) => {
+    setPlatformLetterOrder((prev) => {
+      const i = prev.indexOf(letter);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      persistPlatformColOrder(next);
+      return next;
+    });
+  }, [persistPlatformColOrder]);
+
+  const resetPlatformColumnOrder = useCallback(() => {
+    const next = [...REORDERABLE_PLATFORM_LETTERS];
+    persistPlatformColOrder(next);
+    setPlatformLetterOrder(next);
+  }, [persistPlatformColOrder]);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -274,6 +337,11 @@ export function PlatformRowsClient() {
     return name ? `${name} (${letter})` : `${letter}`;
   };
 
+  const thColMoveBtn =
+    "rounded border border-zinc-200 bg-white px-1 py-0.5 text-[11px] leading-none text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800";
+
+  const dataColCount = platformLetterOrder.length;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -291,6 +359,14 @@ export function PlatformRowsClient() {
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300"
           >
             새로고침
+          </button>
+          <button
+            type="button"
+            onClick={resetPlatformColumnOrder}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+            title="플랫폼 열(C·D·속성 뒤) 순서를 시트 기본으로"
+          >
+            플랫폼 열 순서 초기화
           </button>
         </div>
         <button
@@ -340,68 +416,46 @@ export function PlatformRowsClient() {
                   속성
                   <SortIcon col="attr" />
                 </th>
-                <th className={thSort} onClick={() => handleSort("B")}>
-                  {headerLabelForLetter("B")}
-                  <SortIcon col="B" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("K")}>
-                  {headerLabelForLetter("K")}
-                  <SortIcon col="K" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("L")}>
-                  {headerLabelForLetter("L")}
-                  <SortIcon col="L" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("H")}>
-                  {headerLabelForLetter("H")}
-                  <SortIcon col="H" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("U")}>
-                  {headerLabelForLetter("U")}
-                  <SortIcon col="U" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("V")}>
-                  {headerLabelForLetter("V")}
-                  <SortIcon col="V" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("W")}>
-                  {headerLabelForLetter("W")}
-                  <SortIcon col="W" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("Y")}>
-                  {headerLabelForLetter("Y")}
-                  <SortIcon col="Y" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("Z")}>
-                  {headerLabelForLetter("Z")}
-                  <SortIcon col="Z" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("AA")}>
-                  {headerLabelForLetter("AA")}
-                  <SortIcon col="AA" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("AH")}>
-                  {headerLabelForLetter("AH")}
-                  <SortIcon col="AH" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("AI")}>
-                  {headerLabelForLetter("AI")}
-                  <SortIcon col="AI" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("AL")}>
-                  {headerLabelForLetter("AL")}
-                  <SortIcon col="AL" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("AP")}>
-                  {headerLabelForLetter("AP")}
-                  <SortIcon col="AP" />
-                </th>
+                {platformLetterOrder.map((letter, idx) => (
+                  <th key={letter} className="min-w-[6rem] align-top">
+                    <div className="flex items-stretch gap-0 border-b-0">
+                      <button
+                        type="button"
+                        className={`${thSort} flex-1 text-left`}
+                        onClick={() => handleSort(letter)}
+                      >
+                        {headerLabelForLetter(letter)}
+                        <SortIcon col={letter} />
+                      </button>
+                      <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
+                        <button
+                          type="button"
+                          className={thColMoveBtn}
+                          aria-label={`${headerLabelForLetter(letter)} 열을 왼쪽으로`}
+                          disabled={idx === 0}
+                          onClick={() => movePlatformColumn(letter, -1)}
+                        >
+                          ◀
+                        </button>
+                        <button
+                          type="button"
+                          className={thColMoveBtn}
+                          aria-label={`${headerLabelForLetter(letter)} 열을 오른쪽으로`}
+                          disabled={idx === platformLetterOrder.length - 1}
+                          onClick={() => movePlatformColumn(letter, 1)}
+                        >
+                          ▶
+                        </button>
+                      </div>
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={4 + dataColCount} className="px-3 py-8 text-center text-zinc-500">
                     {filterText ? "조건에 맞는 항목이 없습니다" : "항목이 없습니다"}
                   </td>
                 </tr>
@@ -432,7 +486,7 @@ export function PlatformRowsClient() {
                       <td className="max-w-[8rem] whitespace-nowrap px-2 py-1.5 align-top text-zinc-700 dark:text-zinc-300">
                         {attr || "—"}
                       </td>
-                      {PLATFORM_DISPLAY_LETTERS.slice(2).map((letter) => (
+                      {platformLetterOrder.map((letter) => (
                         <td key={letter} className="max-w-[12rem] px-2 py-1.5 align-top">
                           <span className="line-clamp-3 break-words text-zinc-800 dark:text-zinc-200">
                             {valueAtColumnLetter(item, sample, letter) || "—"}
