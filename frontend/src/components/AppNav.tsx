@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { SidebarMemoPad } from "@/components/SidebarMemoPad";
 
 const links = [
   { href: "/", label: "관제실", title: "PC 관제판(첫 화면)" },
   { href: "/chatbot", label: "챗봇", title: "데이터 자연어 질의(/api/ops/ask)" },
+  { href: "/memo", label: "메모", title: "메모장 시트 목록·추가" },
   { href: "/calendar", label: "캘린더", title: "월·주·일 일정(시트 연동)" },
   { href: "/platform-matrix", label: "플랫폼", title: "작품×플랫폼 연동 매트릭스" },
   { href: "/personnel", label: "인물별", title: "인물×제작·유통 표(로컬 저장)" },
@@ -79,11 +79,6 @@ export function AppNav({ showDemoLogout = false }: AppNavProps) {
               >
                 {label}
               </Link>
-              {href === "/" ? (
-                <div className="mt-2 hidden md:block">
-                  <SidebarMemoPad />
-                </div>
-              ) : null}
             </li>
           );
         })}
