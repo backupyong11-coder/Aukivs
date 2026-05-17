@@ -1,0 +1,506 @@
+"""DATA_BACKEND=supabase 일 때 public.tasks + 체크리스트 API 호환."""
+
+from __future__ import annotations
+
+import re
+from datetime import date
+from typing import Any
+
+from config import Settings
+from schemas import ChecklistItem
+from services.supabase_client import SupabaseRestClient
+from services.sheets_errors import SheetsNotFoundError, SheetsParseError
+
+_SELECT_TASKS = (
+    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
+    "domain,category,quantification_minutes,title,quantification,quantification_type,"
+    "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
+    "difficulty,fatigue,status,assignee,memo"
+)
+
+_KOREAN_TO_DB: dict[str, str] = {
+    "날짜그룹": "date_group",
+    "우선순위": "priority",
+    "완료": "completed",
+    "마감일": "due_date",
+    "분야": "domain",
+    "분류": "category",
+    "정량화 분": "quantification_minutes",
+    "업무명": "title",
+    "정량화": "quantification",
+    "정량화 구분": "quantification_type",
+    "시간": "time_raw",
+    "시간변환": "time_converted",
+    "관련플랫폼": "platform",
+    "세부수치": "detail_value",
+    "세부단위": "detail_unit",
+    "관련작품": "related_work",
+    "난이도": "difficulty",
+    "피로도": "fatigue",
+    "상태": "status",
+    "담당자": "assignee",
+    "메모": "memo",
+}
+
+_CREATE_RESPONSE_KEYS: tuple[str, ...] = (
+    "날짜그룹",
+    "우선순위",
+    "완료",
+    "마감일",
+    "분야",
+    "분류",
+    "정량화 분",
+    "정량화",
+    "정량화 구분",
+    "시간",
+    "시간변환",
+    "관련플랫폼",
+    "세부수치",
+    "세부단위",
+    "관련작품",
+    "난이도",
+    "피로도",
+    "상태",
+    "담당자",
+    "메모",
+)
+
+
+def _client(settings: Settings) -> SupabaseRestClient:
+    return SupabaseRestClient(
+        settings.supabase_url or "",
+        settings.supabase_service_role_key or "",
+    )
+
+
+def _truthy_cell(v: object) -> bool:
+    s = str(v).strip().upper()
+    return s in ("TRUE", "1", "YES", "Y", "완료", "✓")
+
+
+def _completed_to_cell(val: bool) -> str:
+    return "TRUE" if val else ""
+
+
+def _bool_from_sheet_val(v: object) -> bool | None:
+    if v is None or (isinstance(v, str) and not str(v).strip()):
+        return None
+    if isinstance(v, bool):
+        return v
+    return _truthy_cell(v)
+
+
+def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
+    sr = row.get("sheet_row")
+    sheet_row = int(sr) if isinstance(sr, int) else 0
+    if sheet_row < 2:
+        lid = row.get("legacy_id")
+        m = re.match(r"^task-row-(\d+)$", str(lid or ""), flags=re.I)
+        if m:
+            sheet_row = max(2, int(m.group(1)))
+
+    def opt_str(col: str) -> str:
+        v = row.get(col)
+        if v is None:
+            return ""
+        if isinstance(v, date):
+            return v.isoformat()
+        return str(v).strip()
+
+    due = row.get("due_date")
+    due_s = due.isoformat() if isinstance(due, date) else opt_str("due_date")
+    if not due_s and row.get("due_date_raw"):
+        due_s = str(row["due_date_raw"]).strip()
+
+    completed = bool(row.get("completed"))
+    comp_cell = "TRUE" if completed else ""
+
+    return {
+        "id": f"task-row-{sheet_row}" if sheet_row >= 2 else str(row.get("legacy_id") or ""),
+        "sheet_row": sheet_row if sheet_row >= 2 else None,
+        "날짜그룹": opt_str("date_group"),
+        "우선순위": opt_str("priority"),
+        "완료": comp_cell,
+        "마감일": due_s,
+        "분야": opt_str("domain"),
+        "분류": opt_str("category"),
+        "정량화 분": opt_str("quantification_minutes"),
+        "업무명": opt_str("title"),
+        "정량화": opt_str("quantification"),
+        "정량화 구분": opt_str("quantification_type"),
+        "시간": opt_str("time_raw"),
+        "시간변환": opt_str("time_converted"),
+        "관련플랫폼": opt_str("platform"),
+        "세부수치": opt_str("detail_value"),
+        "세부단위": opt_str("detail_unit"),
+        "관련작품": opt_str("related_work"),
+        "난이도": opt_str("difficulty"),
+        "피로도": opt_str("fatigue"),
+        "상태": opt_str("status"),
+        "담당자": opt_str("assignee"),
+        "메모": opt_str("memo"),
+    }
+
+
+def _db_row_to_checklist_item(row: dict[str, Any]) -> ChecklistItem | None:
+    title = str(row.get("title") or "").strip()
+    if not title:
+        return None
+    if bool(row.get("completed")):
+        return None
+    sr = row.get("sheet_row")
+    sheet_n = int(sr) if isinstance(sr, int) and sr >= 2 else None
+    if sheet_n is None:
+        lid = str(row.get("legacy_id") or "")
+        m = re.match(r"^task-row-(\d+)$", lid, flags=re.I)
+        sheet_n = int(m.group(1)) if m else 2
+    cid = f"sheet-row-{sheet_n}"
+
+    def opt(col: str) -> str | None:
+        s = str(row.get(col) or "").strip()
+        return s if s else None
+
+    due = row.get("due_date")
+    if isinstance(due, date):
+        due_s = due.isoformat()
+    else:
+        due_s = opt("due_date")
+    if not due_s:
+        dr = row.get("due_date_raw")
+        if dr is not None and str(dr).strip():
+            due_s = str(dr).strip()
+
+    return ChecklistItem(
+        id=cid,
+        title=title,
+        note=None,
+        due_date=due_s,
+        platform=opt("platform"),
+        category=opt("category"),
+        priority=opt("priority"),
+        quantification=opt("quantification"),
+        difficulty=opt("difficulty"),
+        fatigue=opt("fatigue"),
+        work_status=opt("status"),
+        memo=opt("memo"),
+    )
+
+
+def _get_task_by_client_id(cli: SupabaseRestClient, client_id: str) -> dict[str, Any] | None:
+    cid = (client_id or "").strip()
+    if not cid:
+        return None
+
+    def one(extra: dict[str, Any]) -> dict[str, Any] | None:
+        params = {
+            **extra,
+            "select": _SELECT_TASKS,
+            "limit": "1",
+        }
+        rows = cli.get_json("/tasks", params=params)
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows[0]
+        return None
+
+    row = one({"legacy_id": f"eq.{cid}"})
+    if row:
+        return row
+    sm = re.match(r"^sheet-row-(\d+)$", cid, flags=re.I)
+    if sm:
+        n = int(sm.group(1))
+        row = one({"sheet_row": f"eq.{n}"})
+        if row:
+            return row
+        row = one({"legacy_id": f"eq.task-row-{n}"})
+        if row:
+            return row
+    return None
+
+
+def _next_sheet_row(cli: SupabaseRestClient) -> int:
+    got = cli.get_json(
+        "/tasks",
+        params={
+            "select": "sheet_row",
+            "sheet_row": "not.is.null",
+            "order": "sheet_row.desc.nullslast",
+            "limit": "1",
+        },
+    )
+    if isinstance(got, list) and got and isinstance(got[0], dict):
+        m = got[0].get("sheet_row")
+        if isinstance(m, int) and m >= 2:
+            return m + 1
+    return 2
+
+
+def list_tasks(settings: Settings) -> list[dict[str, Any]]:
+    cli = _client(settings)
+    rows = cli.get_json(
+        "/tasks",
+        params={"select": _SELECT_TASKS, "order": "sheet_row.asc.nullslast"},
+    )
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        d = _db_row_to_task_dict(row)
+        if (d.get("업무명") or "").strip():
+            out.append(d)
+    return out
+
+
+def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
+    title = str(fields.get("업무명", "")).strip()
+    if not title:
+        raise SheetsParseError("[파싱] 업무명은 비울 수 없습니다.")
+    cli = _client(settings)
+    sheet_row = _next_sheet_row(cli)
+    legacy_id = f"task-row-{sheet_row}"
+
+    insert: dict[str, Any] = {
+        "legacy_id": legacy_id,
+        "sheet_row": sheet_row,
+        "title": title,
+        "completed": False,
+    }
+    wb = _bool_from_sheet_val(fields.get("완료"))
+    if wb is not None:
+        insert["completed"] = wb
+
+    for kr, dbk in _KOREAN_TO_DB.items():
+        if kr in ("업무명", "완료"):
+            continue
+        if kr not in fields:
+            continue
+        raw = fields[kr]
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            continue
+        if dbk == "due_date":
+            s = str(raw).strip()
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+                insert["due_date"] = s
+            else:
+                insert["due_date_raw"] = s
+        else:
+            insert[dbk] = str(raw).strip()
+
+    cli.post_json("/tasks", [insert], prefer="return=minimal")
+
+    out: dict[str, Any] = {
+        "id": legacy_id,
+        "sheet_row": sheet_row,
+        "업무명": title,
+    }
+    for k in _CREATE_RESPONSE_KEYS:
+        if k == "업무명":
+            continue
+        out[k] = str(fields.get(k, "")).strip()
+    out["업무명"] = title
+    out["완료"] = _completed_to_cell(bool(insert.get("completed")))
+    if "due_date" in insert:
+        out["마감일"] = str(insert["due_date"])
+    elif "due_date_raw" in insert:
+        out["마감일"] = str(insert["due_date_raw"])
+    return out
+
+
+def _patch_body_from_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    patch: dict[str, Any] = {}
+    for kr, dbk in _KOREAN_TO_DB.items():
+        if kr not in fields:
+            continue
+        raw = fields[kr]
+        if dbk == "completed":
+            b = _bool_from_sheet_val(raw)
+            if b is not None:
+                patch["completed"] = b
+            continue
+        if dbk == "due_date":
+            s = "" if raw is None else str(raw).strip()
+            if not s:
+                patch["due_date"] = None
+                patch["due_date_raw"] = None
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+                patch["due_date"] = s
+                patch["due_date_raw"] = None
+            else:
+                patch["due_date"] = None
+                patch["due_date_raw"] = s
+            continue
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            patch[dbk] = None
+        else:
+            patch[dbk] = str(raw).strip()
+    return patch
+
+
+def update_task(settings: Settings, task_id: str, fields: dict[str, Any]) -> None:
+    cli = _client(settings)
+    row = _get_task_by_client_id(cli, task_id)
+    if not row:
+        raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
+    tid = row.get("id")
+    if not tid:
+        raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
+    patch = _patch_body_from_fields(fields)
+    if not patch:
+        return
+    cli.patch_json("/tasks", params={"id": f"eq.{tid}"}, body=patch)
+
+
+def delete_task(settings: Settings, task_id: str) -> None:
+    cli = _client(settings)
+    row = _get_task_by_client_id(cli, task_id)
+    if not row:
+        raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
+    tid = row.get("id")
+    if not tid:
+        raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
+    cli.delete_json("/tasks", params={"id": f"eq.{tid}"})
+
+
+def fetch_checklist_from_supabase(settings: Settings) -> list[ChecklistItem]:
+    cli = _client(settings)
+    rows = cli.get_json(
+        "/tasks",
+        params={
+            "select": _SELECT_TASKS,
+            "completed": "eq.false",
+            "order": "sheet_row.asc.nullslast",
+        },
+    )
+    if not isinstance(rows, list):
+        return []
+    out: list[ChecklistItem] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        it = _db_row_to_checklist_item(row)
+        if it:
+            out.append(it)
+    return out
+
+
+def fetch_checklist_for_briefing_supabase(
+    settings: Settings,
+) -> tuple[list[tuple[ChecklistItem, int]], list[str]]:
+    cli = _client(settings)
+    rows = cli.get_json(
+        "/tasks",
+        params={
+            "select": _SELECT_TASKS,
+            "completed": "eq.false",
+            "order": "sheet_row.asc.nullslast",
+        },
+    )
+    if not isinstance(rows, list):
+        return [], []
+    out: list[tuple[ChecklistItem, int]] = []
+    warnings: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        it = _db_row_to_checklist_item(row)
+        if not it:
+            continue
+        sr = row.get("sheet_row")
+        sheet_n = int(sr) if isinstance(sr, int) and sr >= 2 else None
+        if sheet_n is None:
+            m = re.match(r"^sheet-row-(\d+)$", it.id, flags=re.I)
+            sheet_n = int(m.group(1)) if m else 0
+        out.append((it, sheet_n))
+    return out, warnings
+
+
+def create_checklist_item_in_supabase(
+    settings: Settings,
+    title: str,
+    note: str | None,
+) -> ChecklistItem:
+    _ = note
+    t = str(title).strip()
+    if not t:
+        raise SheetsParseError("[파싱] title이 비어 있습니다.")
+    created = create_task(settings, {"업무명": t})
+    cli = _client(settings)
+    row = _get_task_by_client_id(cli, str(created.get("id", "")))
+    if not row:
+        raise SheetsParseError("[파싱] 생성된 행을 읽을 수 없습니다.")
+    it = _db_row_to_checklist_item(row)
+    if not it:
+        raise SheetsParseError("[파싱] 생성된 항목 형식이 올바르지 않습니다.")
+    return it
+
+
+def complete_checklist_items_by_ids_supabase(settings: Settings, ids: list[str]) -> int:
+    if not ids:
+        raise SheetsParseError("[파싱] 완료할 id가 없습니다.")
+    cli = _client(settings)
+    missing: list[str] = []
+    patches: list[tuple[str, dict[str, Any]]] = []
+    for raw_id in ids:
+        oid = (raw_id or "").strip()
+        if not oid:
+            missing.append("(빈 id)")
+            continue
+        row = _get_task_by_client_id(cli, oid)
+        if not row or not row.get("id"):
+            missing.append(oid)
+            continue
+        patches.append((str(row["id"]), {"completed": True}))
+    if missing:
+        shown = missing[:15]
+        suffix = " …" if len(missing) > len(shown) else ""
+        raise SheetsNotFoundError(
+            "[찾을수없음] 시트에 없는 id: " + ", ".join(shown) + suffix
+        )
+    for tid, body in patches:
+        cli.patch_json("/tasks", params={"id": f"eq.{tid}"}, body=body)
+    return len(patches)
+
+
+def update_checklist_item_in_supabase(
+    settings: Settings,
+    item_id: str,
+    title: str,
+    note: str | None,
+) -> None:
+    _ = note
+    t = str(title).strip()
+    if not t:
+        raise SheetsParseError("[파싱] title이 비어 있습니다.")
+    cli = _client(settings)
+    row = _get_task_by_client_id(cli, item_id.strip())
+    if not row or not row.get("id"):
+        raise SheetsNotFoundError(
+            f"[찾을수없음] 시트에 없거나 이미 완료된 id입니다: {item_id.strip()}"
+        )
+    if bool(row.get("completed")):
+        raise SheetsNotFoundError(
+            f"[찾을수없음] 시트에 없거나 이미 완료된 id입니다: {item_id.strip()}"
+        )
+    cli.patch_json(
+        "/tasks",
+        params={"id": f"eq.{row['id']}"},
+        body={"title": t},
+    )
+
+
+def delete_checklist_row_by_id_supabase(settings: Settings, item_id: str) -> None:
+    oid = (item_id or "").strip()
+    if not oid:
+        raise SheetsParseError("[파싱] id가 비어 있습니다.")
+    cli = _client(settings)
+    row = _get_task_by_client_id(cli, oid)
+    if not row or not row.get("id"):
+        raise SheetsNotFoundError(
+            f"[찾을수없음] 목록에 없거나 이미 완료된 id입니다: {oid}"
+        )
+    if bool(row.get("completed")):
+        raise SheetsNotFoundError(
+            f"[찾을수없음] 목록에 없거나 이미 완료된 id입니다: {oid}"
+        )
+    cli.delete_json("/tasks", params={"id": f"eq.{row['id']}"})

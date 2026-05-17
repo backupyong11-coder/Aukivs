@@ -1,4 +1,5 @@
 # 프로덕션 배포용 (Railway/Render build). 테스트는 requirements-dev.txt
+# Pydantic 등은 FastAPI 의존성으로 함께 설치됨.
 fastapi>=0.115.0,<1
 uvicorn[standard]>=0.32.0,<1
 google-api-python-client>=2.150.0,<3

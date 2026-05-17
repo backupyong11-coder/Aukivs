@@ -155,8 +155,14 @@ def suggest_checklist_ai(
     settings: Settings,
     mode: Literal["prioritize", "draft"],
     extra_prompt: str | None,
+    *,
+    checklist_items: list[ChecklistItem] | None = None,
 ) -> ChecklistSuggestResponse:
-    items = fetch_checklist_from_google_sheets(settings)
+    items = (
+        list(checklist_items)
+        if checklist_items is not None
+        else fetch_checklist_from_google_sheets(settings)
+    )
 
     if mode == "prioritize" and not items:
         return ChecklistSuggestResponse(

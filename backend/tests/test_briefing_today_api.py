@@ -157,3 +157,53 @@ def test_briefing_200_when_all_rows_unusable_but_no_system_error(
     assert data["warnings"] == []
     assert data["urgent_items"] == []
     assert data["summary"]["today_upload_count"] == 0
+
+
+def test_briefing_supabase_upload_axis_uses_upload_rows_repo(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DATA_BACKEND=supabase 일 때 브리핑 업로드 축이 upload_rows(업로드정리) 어댑터를 탄다."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
+    monkeypatch.setenv("DATA_BACKEND", "supabase")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", "x.json")
+    monkeypatch.setenv(
+        "GOOGLE_SHEET_URL",
+        "https://docs.google.com/spreadsheets/d/x/edit",
+    )
+
+    monkeypatch.setattr(
+        main_module.tasks_repo,
+        "fetch_checklist_for_briefing_supabase",
+        lambda _s: ([], []),
+    )
+    monkeypatch.setattr(
+        main_module.upload_rows_repo,
+        "fetch_upload_rows_for_briefing_supabase",
+        lambda _s: (
+            [
+                (
+                    UploadItem(
+                        id="upload-row-3",
+                        title="작품A",
+                        file_name="네이버",
+                        uploaded_at=f"{today}T00:00:00+09:00",
+                        note=None,
+                        status=None,
+                    ),
+                    3,
+                )
+            ],
+            [],
+        ),
+    )
+
+    r = client.get("/briefing/today")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["summary"]["today_checklist_count"] == 0
+    assert data["summary"]["today_upload_count"] == 1

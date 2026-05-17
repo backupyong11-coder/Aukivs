@@ -16,7 +16,8 @@ from services.google_memo_sheets import (
 
 
 @pytest.fixture()
-def client() -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("DATA_BACKEND", "sheets")
     return TestClient(app)
 
 
@@ -40,7 +41,10 @@ def test_memos_200_empty_when_parse_error_not_502(
     assert r.json() == []
 
 
-def test_memos_503_when_google_env_missing(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_memos_503_when_google_env_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATA_BACKEND", "sheets")
     monkeypatch.delenv("GOOGLE_SERVICE_ACCOUNT_FILE", raising=False)
     monkeypatch.delenv("GOOGLE_SHEET_URL", raising=False)
     r = client.get("/memos")
@@ -102,6 +106,9 @@ def test_memos_append_calls_append(monkeypatch: pytest.MonkeyPatch, tmp_path) ->
         fake_append,
     )
     settings = Settings(
+        data_backend="sheets",
+        supabase_url=None,
+        supabase_service_role_key=None,
         google_service_account_file=str(creds),
         google_sheet_url="https://docs.google.com/spreadsheets/d/abc123/edit",
         google_checklist_tab="체크리스트",
@@ -163,6 +170,9 @@ def test_fetch_memos_accepts_category_header_bunryu(monkeypatch: pytest.MonkeyPa
         ],
     )
     settings = Settings(
+        data_backend="sheets",
+        supabase_url=None,
+        supabase_service_role_key=None,
         google_service_account_file=str(creds),
         google_sheet_url="https://docs.google.com/spreadsheets/d/z/edit",
         google_checklist_tab="체크리스트",
@@ -194,6 +204,9 @@ def test_fetch_memos_reordered_columns(monkeypatch: pytest.MonkeyPatch, tmp_path
         ],
     )
     settings = Settings(
+        data_backend="sheets",
+        supabase_url=None,
+        supabase_service_role_key=None,
         google_service_account_file=str(creds),
         google_sheet_url="https://docs.google.com/spreadsheets/d/z/edit",
         google_checklist_tab="체크리스트",

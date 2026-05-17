@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -23,6 +24,14 @@ from .sheets_errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _sheets_verbose_debug() -> bool:
+    return (os.getenv("SHEETS_VERBOSE_DEBUG") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 # --- 구버전: 고정 인덱스(A~U) 매핑 (롤백·비교용, 런타임 미사용) ---
 # # 업무정리 탭 열 매핑 (A~U):
@@ -205,19 +214,20 @@ def fetch_tasks(settings: Settings) -> list[dict]:
             continue
         if _debug_first_valid:
             _debug_first_valid = False
-            logger.info(
-                "[업무정리][debug] first_valid_row sheet_row=%s cells=%s "
-                "업무명=%r 우선순위=%r 완료=%r 마감일=%r 분야=%r 분류=%r 상태=%r",
-                i,
-                list(cells),
-                title,
-                _c(cells, "우선순위", col_map),
-                _c(cells, "완료", col_map),
-                _c(cells, "마감일", col_map),
-                _c(cells, "분야", col_map),
-                _c(cells, "분류", col_map),
-                _c(cells, "상태", col_map),
-            )
+            if _sheets_verbose_debug():
+                logger.info(
+                    "[업무정리][debug] first_valid_row sheet_row=%s cells=%s "
+                    "업무명=%r 우선순위=%r 완료=%r 마감일=%r 분야=%r 분류=%r 상태=%r",
+                    i,
+                    list(cells),
+                    title,
+                    _c(cells, "우선순위", col_map),
+                    _c(cells, "완료", col_map),
+                    _c(cells, "마감일", col_map),
+                    _c(cells, "분야", col_map),
+                    _c(cells, "분류", col_map),
+                    _c(cells, "상태", col_map),
+                )
         out.append({
             "id": _row_id(i),
             "sheet_row": i,

@@ -1,0 +1,143 @@
+"""DATA_BACKEND=supabase 일 때 public.works → GET /works-master 시트 호환 dict."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from config import Settings
+from services.supabase_client import SupabaseRestClient
+from services.sheets_errors import SheetsParseError
+
+# google_master_sheets 주석 A~X 열 순서 + migrate_scripts 의 DB 컬럼명 (표준 헤더 문자열)
+_WORKS_HEADER_ORDER: tuple[tuple[str, str], ...] = (
+    ("제작완료", "production_done"),
+    ("작품명", "title"),
+    ("글작가", "writer"),
+    ("그림작가", "artist"),
+    ("분류(일반/성인)", "category"),
+    ("형식(웹툰/웹소설 등)", "format"),
+    ("현재상태", "current_status"),
+    ("업로드해야 하는 사이트", "sites_to_upload"),
+    ("런칭된 사이트", "launched_sites"),
+    ("대기중 사이트", "pending_sites"),
+    ("계약된 사이트", "contracted_sites"),
+    ("총화수/시즌정보", "episode_info"),
+    ("줄거리", "synopsis"),
+    ("캐릭터", "characters"),
+    ("카피라이트", "copyright"),
+    ("UCI (구 ISBN)", "uci"),
+    ("태그", "tags"),
+    ("보유에셋/비고", "assets_note"),
+    ("스태프", "staff"),
+    ("연령등급", "age_rating"),
+    ("첫 공급 일정", "first_supply_schedule"),
+    ("연재요일", "serialization_weekday"),
+    ("연재중인 곳 갯수", "active_site_count"),
+    ("연재중인 사이트", "active_sites"),
+)
+
+_CANONICAL_HEADERS: frozenset[str] = frozenset(h for h, _ in _WORKS_HEADER_ORDER)
+
+_SELECT = (
+    "production_done,title,writer,artist,category,format,current_status,"
+    "sites_to_upload,launched_sites,pending_sites,contracted_sites,episode_info,"
+    "synopsis,characters,copyright,uci,tags,assets_note,staff,age_rating,"
+    "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
+)
+
+
+def _client(settings: Settings) -> SupabaseRestClient:
+    return SupabaseRestClient(
+        settings.supabase_url or "",
+        settings.supabase_service_role_key or "",
+    )
+
+
+def _api_cell(v: object) -> Any:
+    """google_master_sheets._cell_to_json 과 유사하게 빈 값은 null."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return None if not v.strip() else v.strip()
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v) if v.is_integer() else v
+    if isinstance(v, dict):
+        return v if v else None
+    if isinstance(v, list):
+        return v if v else None
+    s = str(v).strip()
+    return None if not s else s
+
+
+def _row_to_master_dict(row: dict[str, Any]) -> dict[str, Any]:
+    title = str(row.get("title") or "").strip()
+    if not title:
+        raise ValueError("empty title")
+
+    out: dict[str, Any] = {}
+    for hdr, col in _WORKS_HEADER_ORDER:
+        raw = row.get(col)
+        if col == "production_done":
+            out[hdr] = bool(raw) if raw is not None else False
+        else:
+            out[hdr] = _api_cell(raw)
+
+    extra = row.get("extra") or {}
+    if not isinstance(extra, dict):
+        extra = {}
+
+    for k in sorted(extra.keys(), key=lambda x: str(x)):
+        key = str(k)
+        if key in out:
+            continue
+        if key in _CANONICAL_HEADERS:
+            continue
+        v = extra[k]
+        if v is None:
+            out[key] = None
+        elif isinstance(v, dict):
+            out[key] = v if v else None
+        elif isinstance(v, list):
+            out[key] = v if v else None
+        elif isinstance(v, str):
+            out[key] = None if not v.strip() else v.strip()
+        elif isinstance(v, (int, float, bool)):
+            out[key] = v
+        else:
+            s = str(v).strip()
+            out[key] = None if not s else s
+
+    return out
+
+
+def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
+    rows = _client(settings).get_json(
+        "/works",
+        params={
+            "select": _SELECT,
+            "order": "sheet_row.asc.nullslast,title.asc",
+        },
+    )
+    if not isinstance(rows, list):
+        raise SheetsParseError("Supabase works 응답 형식 오류")
+
+    items: list[dict[str, Any]] = []
+    seen_titles: set[str] = set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        tkey = str(r.get("title") or "").strip()
+        if not tkey:
+            continue
+        if tkey in seen_titles:
+            continue
+        seen_titles.add(tkey)
+        try:
+            items.append(_row_to_master_dict(r))
+        except ValueError:
+            continue
+    return items

@@ -60,6 +60,10 @@ from services.google_memo_sheets import (
     append_memo_row_to_google_sheets,
     fetch_memos_from_google_sheets,
 )
+from services.supabase_client import SupabaseConfigurationError, SupabaseRequestError
+from repositories.memos_repo import create_memo as create_memo_supabase
+from repositories.memos_repo import list_memos as list_memos_supabase
+from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from services.google_uploads_sheets import (
     advance_upload_next_episode,
     create_upload_item_in_sheet,
@@ -94,6 +98,12 @@ from services.sheets_errors import (
     SheetsNotFoundError,
     SheetsParseError,
 )
+
+
+def _uploads_legacy_sheet_unreadable(exc: SheetsFetchError) -> bool:
+    """레거시 '업로드운영' 탭 없음·범위 오류 등 → 목록 비움(관제판 전체 실패 방지)."""
+    msg = str(exc).lower()
+    return "unable to parse range" in msg or "requested writing within range" in msg
 
 app = FastAPI(title="Operations Assistant API")
 
@@ -135,6 +145,17 @@ def get_platform_master() -> MasterTabItemsResponse:
 def get_works_master() -> MasterTabItemsResponse:
     """작품정리 탭(GOOGLE_WORKS_TAB) 전체(헤더 1행 = 키)."""
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            items = works_repo.list_works_master_items(settings)
+            return MasterTabItemsResponse(items=items)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
     try:
         items = fetch_master_tab_keyed_rows(settings, settings.google_works_tab)
         return MasterTabItemsResponse(items=items)
@@ -153,6 +174,14 @@ def health() -> dict[str, str]:
 @app.get("/checklist", response_model=list[ChecklistItem])
 def get_checklist() -> list[ChecklistItem]:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return tasks_repo.fetch_checklist_from_supabase(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         return fetch_checklist_from_google_sheets(settings)
     except SheetsConfigurationError as e:
@@ -168,6 +197,18 @@ def get_checklist() -> list[ChecklistItem]:
 @app.post("/checklist/create", response_model=ChecklistItem)
 def post_checklist_create(body: ChecklistCreateRequest) -> ChecklistItem:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return tasks_repo.create_checklist_item_in_supabase(
+                settings, body.title, body.note
+            )
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         return create_checklist_item_in_sheet(settings, body.title, body.note)
     except SheetsConfigurationError as e:
@@ -181,8 +222,22 @@ def post_checklist_create(body: ChecklistCreateRequest) -> ChecklistItem:
 @app.post("/ai/checklist/suggest", response_model=ChecklistSuggestResponse)
 def post_ai_checklist_suggest(body: ChecklistSuggestRequest) -> ChecklistSuggestResponse:
     settings = load_settings()
+    checklist_items = None
+    if settings.data_backend == "supabase":
+        try:
+            checklist_items = tasks_repo.fetch_checklist_from_supabase(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
-        return suggest_checklist_ai(settings, body.mode, body.prompt)
+        return suggest_checklist_ai(
+            settings,
+            body.mode,
+            body.prompt,
+            checklist_items=checklist_items,
+        )
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SheetsFetchError as e:
@@ -222,6 +277,19 @@ def post_ai_uploads_suggest(
 @app.post("/checklist/complete", response_model=ChecklistCompleteResponse)
 def post_checklist_complete(body: ChecklistCompleteRequest) -> ChecklistCompleteResponse:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            n = tasks_repo.complete_checklist_items_by_ids_supabase(settings, body.ids)
+            return ChecklistCompleteResponse(completed=n)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         n = complete_checklist_items_by_ids(settings, body.ids)
         return ChecklistCompleteResponse(completed=n)
@@ -238,6 +306,24 @@ def post_checklist_complete(body: ChecklistCompleteRequest) -> ChecklistComplete
 @app.post("/checklist/update", response_model=ChecklistUpdateResponse)
 def post_checklist_update(body: ChecklistUpdateRequest) -> ChecklistUpdateResponse:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            tasks_repo.update_checklist_item_in_supabase(
+                settings,
+                body.id,
+                body.title,
+                body.note,
+            )
+            return ChecklistUpdateResponse()
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         update_checklist_item_in_sheet(
             settings,
@@ -259,6 +345,19 @@ def post_checklist_update(body: ChecklistUpdateRequest) -> ChecklistUpdateRespon
 @app.post("/checklist/delete", response_model=ChecklistDeleteResponse)
 def post_checklist_delete(body: ChecklistDeleteRequest) -> ChecklistDeleteResponse:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            tasks_repo.delete_checklist_row_by_id_supabase(settings, body.id)
+            return ChecklistDeleteResponse()
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         delete_checklist_row_by_id(settings, body.id)
         return ChecklistDeleteResponse()
@@ -280,6 +379,8 @@ def get_uploads() -> UploadListResponse:
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SheetsFetchError as e:
+        if _uploads_legacy_sheet_unreadable(e):
+            return UploadListResponse(items=[], issues=[])
         raise HTTPException(status_code=502, detail=str(e)) from e
     except SheetsParseError:
         return UploadListResponse(items=[], issues=[])
@@ -363,6 +464,14 @@ def post_uploads_next_episode(body: UploadNextEpisodeRequest) -> UploadNextEpiso
 @app.get("/memos", response_model=list[MemoItem])
 def get_memos() -> list[MemoItem]:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return list_memos_supabase(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         return fetch_memos_from_google_sheets(settings)
     except SheetsConfigurationError as e:
@@ -378,6 +487,17 @@ def get_memos() -> list[MemoItem]:
 @app.post("/memos/append", response_model=MemoAppendResponse)
 def post_memos_append(body: MemoAppendRequest) -> MemoAppendResponse:
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            create_memo_supabase(settings, body.content, body.category)
+            return MemoAppendResponse()
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         append_memo_row_to_google_sheets(
             settings,
@@ -405,24 +525,38 @@ def get_briefing_today() -> BriefingTodayResponse:
     upload_rows: list = []
     up_warnings: list[str] = []
     try:
-        checklist_rows, cl_warnings = fetch_checklist_for_briefing(settings)
+        if settings.data_backend == "supabase":
+            checklist_rows, cl_warnings = (
+                tasks_repo.fetch_checklist_for_briefing_supabase(settings)
+            )
+        else:
+            checklist_rows, cl_warnings = fetch_checklist_for_briefing(settings)
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=f"[브리핑] {e}") from e
-    except (SheetsFetchError, SheetsParseError, Exception):
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=f"[브리핑] {e}") from e
+    except (SheetsFetchError, SheetsParseError, SupabaseRequestError, Exception):
         checklist_rows, cl_warnings = [], []
         cl_warnings = [
             "[브리핑] 체크리스트 시트를 읽지 못해 집계에서 제외했습니다. "
             "(시트·권한·네트워크를 확인하세요.)"
         ]
     try:
-        upload_rows, up_warnings = fetch_uploads_for_briefing(settings)
+        if settings.data_backend == "supabase":
+            upload_rows, up_warnings = (
+                upload_rows_repo.fetch_upload_rows_for_briefing_supabase(settings)
+            )
+        else:
+            upload_rows, up_warnings = fetch_uploads_for_briefing(settings)
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=f"[브리핑] {e}") from e
-    except (SheetsFetchError, SheetsParseError, Exception):
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=f"[브리핑] {e}") from e
+    except (SheetsFetchError, SheetsParseError, SupabaseRequestError, Exception):
         upload_rows, up_warnings = [], []
         up_warnings = [
-            "[브리핑] 업로드 시트를 읽지 못해 집계에서 제외했습니다. "
-            "(시트·권한·네트워크를 확인하세요.)"
+            "[브리핑] 업로드 데이터(레거시 시트 또는 Supabase)를 읽지 못해 집계에서 제외했습니다. "
+            "(시트·Supabase 설정·권한·네트워크를 확인하세요.)"
         ]
     merged_warnings = [*cl_warnings, *up_warnings]
     return aggregate_briefing_today(
@@ -436,6 +570,14 @@ def get_briefing_today() -> BriefingTodayResponse:
 @app.get("/tasks")
 def get_tasks():
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return tasks_repo.list_tasks(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         return fetch_tasks(settings)
     except SheetsConfigurationError as e:
@@ -449,6 +591,16 @@ def get_tasks():
 @app.post("/tasks/create")
 def post_tasks_create(body: dict[str, Any] = Body(...)):
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return tasks_repo.create_task(settings, body)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         return create_task(settings, body)
     except SheetsConfigurationError as e:
@@ -465,6 +617,17 @@ def post_tasks_update(body: dict[str, Any] = Body(...)):
     task_id = str(body.pop("id", "")).strip()
     if not task_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            tasks_repo.update_task(settings, task_id, body)
+            return {"updated": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         update_task(settings, task_id, body)
         return {"updated": True}
@@ -482,6 +645,17 @@ def post_tasks_delete(body: dict[str, Any] = Body(...)):
     task_id = str(body.get("id", "")).strip()
     if not task_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            tasks_repo.delete_task(settings, task_id)
+            return {"deleted": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         delete_task(settings, task_id)
         return {"deleted": True}
@@ -497,6 +671,14 @@ def post_tasks_delete(body: dict[str, Any] = Body(...)):
 @app.get("/upload-rows")
 def get_upload_rows():
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return upload_rows_repo.list_upload_rows(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         return fetch_upload_rows(settings)
     except SheetsConfigurationError as e:
@@ -510,6 +692,16 @@ def get_upload_rows():
 @app.post("/upload-rows/create")
 def post_upload_rows_create(body: dict[str, Any] = Body(...)):
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return upload_rows_repo.create_upload_row(settings, body)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         return create_upload_row(settings, body)
     except SheetsConfigurationError as e:
@@ -526,6 +718,17 @@ def post_upload_rows_update(body: dict[str, Any] = Body(...)):
     row_id = str(body.pop("id", "")).strip()
     if not row_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            upload_rows_repo.update_upload_row(settings, row_id, body)
+            return {"updated": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         update_upload_row(settings, row_id, body)
         return {"updated": True}
@@ -543,6 +746,17 @@ def post_upload_rows_delete(body: dict[str, Any] = Body(...)):
     row_id = str(body.get("id", "")).strip()
     if not row_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            upload_rows_repo.delete_upload_row(settings, row_id)
+            return {"deleted": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         delete_upload_row(settings, row_id)
         return {"deleted": True}
@@ -558,6 +772,14 @@ def post_upload_rows_delete(body: dict[str, Any] = Body(...)):
 @app.get("/platform-rows")
 def get_platform_rows():
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return platform_rows_repo.list_platform_rows(settings)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         return fetch_platforms(settings)
     except SheetsConfigurationError as e:
@@ -571,6 +793,16 @@ def get_platform_rows():
 @app.post("/platform-rows/create")
 def post_platform_rows_create(body: dict[str, Any] = Body(...)):
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return platform_rows_repo.create_platform_row(settings, body)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     try:
         return create_platform_row(settings, body)
     except SheetsConfigurationError as e:
@@ -587,6 +819,17 @@ def post_platform_rows_update(body: dict):
     platform_id = str(body.pop("id", "")).strip()
     if not platform_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            platform_rows_repo.update_platform(settings, platform_id, body)
+            return {"updated": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         update_platform(settings, platform_id, body)
         return {"updated": True}
@@ -604,6 +847,17 @@ def post_platform_rows_delete(body: dict[str, Any] = Body(...)):
     platform_id = str(body.get("id", "")).strip()
     if not platform_id:
         raise HTTPException(status_code=400, detail="[파싱] id가 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            platform_rows_repo.delete_platform_row(settings, platform_id)
+            return {"deleted": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
     try:
         delete_platform_row(settings, platform_id)
         return {"deleted": True}
@@ -634,7 +888,10 @@ def get_stats():
 
     # 업무정리
     try:
-        tasks = fetch_tasks(settings)
+        if settings.data_backend == "supabase":
+            tasks = tasks_repo.list_tasks(settings)
+        else:
+            tasks = fetch_tasks(settings)
     except Exception:
         tasks = []
 
@@ -644,7 +901,10 @@ def get_stats():
 
     # 업로드정리
     try:
-        upload_rows = fetch_upload_rows(settings)
+        if settings.data_backend == "supabase":
+            upload_rows = upload_rows_repo.list_upload_rows(settings)
+        else:
+            upload_rows = fetch_upload_rows(settings)
     except Exception:
         upload_rows = []
 
@@ -653,7 +913,10 @@ def get_stats():
 
     # 플랫폼정리
     try:
-        platforms = fetch_platforms(settings)
+        if settings.data_backend == "supabase":
+            platforms = platform_rows_repo.list_platform_rows(settings)
+        else:
+            platforms = fetch_platforms(settings)
     except Exception:
         platforms = []
 

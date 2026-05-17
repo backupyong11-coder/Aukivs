@@ -55,6 +55,9 @@ def _materialize_google_credentials_from_env() -> None:
 class Settings:
     """Google Sheets·OpenAI 등 백엔드 설정."""
 
+    data_backend: str  # "sheets" | "supabase"
+    supabase_url: str | None
+    supabase_service_role_key: str | None
     google_service_account_file: str | None
     google_sheet_url: str | None
     google_checklist_tab: str
@@ -92,7 +95,16 @@ def load_settings() -> Settings:
         openai_timeout = 45.0
     if openai_timeout <= 0:
         openai_timeout = 45.0
+    raw_backend = (os.getenv("DATA_BACKEND") or "sheets").strip().lower()
+    if raw_backend not in ("sheets", "supabase"):
+        raise ValueError(
+            "[설정] DATA_BACKEND 는 sheets 또는 supabase 만 허용됩니다. "
+            f"(현재: {raw_backend!r})"
+        )
     return Settings(
+        data_backend=raw_backend,
+        supabase_url=os.getenv("SUPABASE_URL"),
+        supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY"),
         google_service_account_file=os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
         google_sheet_url=os.getenv("GOOGLE_SHEET_URL"),
         google_checklist_tab=checklist_tab,

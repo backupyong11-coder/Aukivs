@@ -7,6 +7,12 @@ import { SidebarMemoPad } from "@/components/SidebarMemoPad";
 
 const links = [
   { href: "/", label: "관제실", title: "PC 관제판(첫 화면)" },
+  { href: "/chatbot", label: "챗봇", title: "데이터 자연어 질의(/api/ops/ask)" },
+  { href: "/calendar", label: "캘린더", title: "월·주·일 일정(시트 연동)" },
+  { href: "/platform-matrix", label: "플랫폼", title: "작품×플랫폼 연동 매트릭스" },
+  { href: "/personnel", label: "인물별", title: "인물×제작·유통 표(로컬 저장)" },
+  { href: "/milestones", label: "마일스톤", title: "주요 일정 타임라인·간트(로컬 저장)" },
+  { href: "/weekly-agenda", label: "주간아젠다", title: "대분류 병합 표(로컬 저장)" },
   { href: "/announcement-date", label: "발표일", title: "발표 일정" },
   { href: "/progress", label: "현재진행", title: "현재 진행 현황" },
   { href: "/launching", label: "런칭정리", title: "런칭 일정·정리" },

@@ -10,8 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchBriefingToday, type BriefingTodayPayload } from "@/lib/briefing";
-import { getApiBaseUrl } from "@/lib/apiBase";
 import {
   loadFavoriteQueries,
   loadRecentQueries,
@@ -19,6 +17,8 @@ import {
   toggleFavoriteQuery,
 } from "@/lib/controlRoomQueryHistory";
 import { fetchChecklist, type ChecklistItem } from "@/lib/checklist";
+import { formatCalendarTaskTitle } from "@/lib/formatCalendarTaskTitle";
+import type { HubLoadState } from "@/lib/controlRoomHub";
 import { fetchTasks, type TaskSheetRow } from "@/lib/tasks";
 import {
   duplicateUploadIdsFromIssues,
@@ -29,20 +29,10 @@ import {
 import { fetchMemos, type MemoItem } from "@/lib/memos";
 import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMaster";
 import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
-import { userFacingListError } from "@/lib/userFacingErrors";
-
-function formatSeoulYmd(date: Date): string {
-  const seoul = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  const y = seoul.getFullYear();
-  const m = String(seoul.getMonth() + 1).padStart(2, "0");
-  const d = String(seoul.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function seoulCalendarYearMonthNow(): { year: number; month: number } {
-  const seoul = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  return { year: seoul.getFullYear(), month: seoul.getMonth() + 1 };
-}
+import { worksFirstSupplyYmd, worksRowSubLines } from "@/lib/worksMasterDisplay";
+import { formatSeoulYmd, normalizeSheetDateYmd, seoulCalendarYearMonthNow } from "@/lib/sheetDates";
+import { safeInt } from "@/lib/safeInt";
+import { useControlRoomHub } from "@/hooks/useControlRoomHub";
 
 function isUploadOnSeoulDay(iso: string, ymd: string): boolean {
   const t = Date.parse(iso);
@@ -66,119 +56,6 @@ function isUploadThisSeoulWeek(iso: string): boolean {
 
 function isUploadToday(iso: string): boolean {
   return isUploadOnSeoulDay(iso, formatSeoulYmd(new Date()));
-}
-
-function normalizeSheetDateYmd(raw: string): string | null {
-  // 구버전: 점/슬래시만 하이픈으로 치환 → "2026. 3. 9" 가 "2026- 3- 9" 로 남아 정규식이 매칭 실패(null)
-  // const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-");
-  const s = raw.trim().replace(/\./g, "-").replace(/\//g, "-").replace(/\s+/g, "");
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (!m) return null;
-  return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-}
-
-/** GET /tasks → 허브 state용: 값 trim */
-function normalizeTaskSheetRow(row: TaskSheetRow): TaskSheetRow {
-  const out: TaskSheetRow = {};
-  for (const [k, v] of Object.entries(row)) {
-    out[k] = (v ?? "").trim();
-  }
-  return out;
-}
-
-/** 달력 일정 패널 업무 한 줄: [분야][분류][관련] + 정리된 업무명 */
-function normalizeCalendarTagInner(raw: string): string {
-  let t = (raw ?? "").trim();
-  if (t.startsWith("[") && t.endsWith("]")) {
-    t = t.slice(1, -1).trim();
-  }
-  return t;
-}
-
-function uniqueOrderedCalendarTags(tag1: string, tag2: string, tag3: string): string[] {
-  const candidates = [
-    normalizeCalendarTagInner(tag1),
-    normalizeCalendarTagInner(tag2),
-    normalizeCalendarTagInner(tag3),
-  ];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const t of candidates) {
-    if (!t) continue;
-    if (seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
-  }
-  return out;
-}
-
-function stripLeadingBracketBlocks(업무명: string): string {
-  let s = (업무명 ?? "").trim();
-  let guard = 0;
-  while (guard++ < 80) {
-    const next = s.replace(/^\s*\[[^\]]*\]\s*/, "");
-    if (next === s) break;
-    s = next;
-  }
-  return s.trim();
-}
-
-/**
- * 업무명 앞에서 분류·관련 열과 겹치는 선행 단어만 제거(분야와 동일한 값은 본문 의미일 수 있어 제외).
- */
-function stripLeadingBodyEchoes(
-  body: string,
-  분야Inner: string,
-  분류Inner: string,
-  관련Inner: string,
-): string {
-  let eff2 = 분류Inner.trim();
-  if (eff2 && eff2 === 분야Inner) eff2 = "";
-  let eff3 = 관련Inner.trim();
-  if (eff3 && (eff3 === 분야Inner || eff3 === eff2)) eff3 = "";
-  const removable = new Set([eff2, eff3].filter(Boolean));
-
-  let s = body.trim();
-  let guard = 0;
-  while (guard++ < 40) {
-    const m = /^(\S+)/u.exec(s);
-    if (!m) break;
-    if (!removable.has(m[1])) break;
-    s = s.slice(m[1].length).trim();
-  }
-  return s;
-}
-
-function formatCalendarTaskTitle(row: TaskSheetRow): string {
-  const tag1 = row["분야"] ?? "";
-  const tag2 = row["분류"] ?? "";
-  const rawWorks = row["관련작품"] ?? "";
-  const tag3 = rawWorks.trim() ? rawWorks : (row["관련플랫폼"] ?? "");
-
-  const 분야Inner = normalizeCalendarTagInner(tag1);
-  const 분류Inner = normalizeCalendarTagInner(tag2);
-  const 관련Inner = normalizeCalendarTagInner(tag3);
-
-  const orderedTags = uniqueOrderedCalendarTags(tag1, tag2, tag3);
-  const prefix = orderedTags.map((t) => `[${t}]`).join(" ");
-
-  let body = stripLeadingBracketBlocks(row["업무명"] ?? "");
-  body = stripLeadingBodyEchoes(body, 분야Inner, 분류Inner, 관련Inner);
-
-  if (!prefix && !body) return "";
-  if (!prefix) return body;
-  if (!body) return prefix;
-  return `${prefix} ${body}`;
-}
-
-/** GET /upload-rows 한 행: 키·값 문자열 trim */
-function normalizeUploadRowFromApi(row: unknown): Record<string, string> {
-  if (!row || typeof row !== "object") return {};
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
-    out[k] = v == null ? "" : String(v).trim();
-  }
-  return out;
 }
 
 function uploadLooksIncomplete(status: string | null): boolean {
@@ -410,44 +287,6 @@ function platformOngoingProjectSubLines(p: PlatformMasterItem): { label: string;
   return rows;
 }
 
-/** 작품정리 시트 열 순(시트 1행 헤더와 동일한 키) */
-function worksRowSubLines(w: WorksMasterItem): { label: string; value: string }[] {
-  const rows: { label: string; value: string }[] = [];
-  const push = (label: string, key: string) => {
-    const v = (w[key] ?? "").trim();
-    if (v) rows.push({ label, value: v });
-  };
-  push("제작완료", "제작완료");
-  push("글작가", "글작가");
-  push("그림작가", "그림작가");
-  push("분류", "분류(일반/성인)");
-  push("형식", "형식(웹툰/웹소설 등)");
-  push("현재상태", "현재상태");
-  push("업로드해야 하는 사이트", "업로드해야 하는 사이트");
-  push("런칭된 사이트", "런칭된 사이트");
-  push("대기중 사이트", "대기중 사이트");
-  push("계약된 사이트", "계약된 사이트");
-  push("총화수/시즌", "총화수/시즌정보");
-  push("줄거리", "줄거리");
-  push("캐릭터", "캐릭터");
-  push("카피라이트", "카피라이트");
-  push("UCI", "UCI (구 ISBN)");
-  push("태그", "태그");
-  push("보유에셋/비고", "보유에셋/비고");
-  push("스태프", "스태프");
-  push("연령등급", "연령등급");
-  push("첫 공급 일정", "첫 공급 일정");
-  push("연재요일", "연재요일");
-  push("연재중인 곳 갯수", "연재중인 곳 갯수");
-  push("연재중인 사이트", "연재중인 사이트");
-  return rows;
-}
-
-function worksFirstSupplyYmd(w: WorksMasterItem): string {
-  const raw = w["첫 공급 일정"] ?? w["첫공급일정"] ?? "";
-  return normalizeSheetDateYmd(raw) ?? "";
-}
-
 function PlatformOngoingProjectPanel(props: {
   adultRows: PlatformMasterItem[];
   subsidyRows: PlatformMasterItem[];
@@ -515,14 +354,6 @@ function PlatformOngoingProjectPanel(props: {
   );
 }
 
-function safeInt(v: unknown): number {
-  try {
-    const s = String(v ?? "").trim();
-    if (!s || s === "-") return 0;
-    return Math.floor(parseFloat(s)) || 0;
-  } catch { return 0; }
-}
-
 /** 업로드정리 탭: 미완료이면서 F열 남은업로드화수 > 0 */
 function remainingUploadOrganizeRows(rows: Record<string, string>[]): Record<string, string>[] {
   return rows.filter(
@@ -586,24 +417,6 @@ const SUGGESTED_QUERIES: { id: string; label: string }[] = [
   { id: "memo_all", label: "메모장 전체 보기" },
 ];
 
-type HubLoadState =
-  | { kind: "loading" }
-  | {
-    kind: "ready";
-    briefing: BriefingTodayPayload;
-    uploads: { items: UploadListItem[]; issues: UploadListIssue[] };
-    memos: MemoItem[];
-    memosError: string | null;
-    checklist: ChecklistItem[];
-    checklistError: string | null;
-    platformMaster: PlatformMasterItem[];
-    worksMaster: WorksMasterItem[];
-    allTasks: Record<string, string>[];
-    uploadRows: Record<string, string>[];
-    platformRows: Record<string, string>[];
-  }
-  | { kind: "error"; message: string };
-
 type PanelState =
   | { kind: "welcome" }
   | { kind: "nl_stub"; query: string }
@@ -612,7 +425,7 @@ type PanelState =
   | { kind: "render"; title: string; node: ReactNode };
 
 export function ControlRoomHomeClient() {
-  const [hub, setHub] = useState<HubLoadState>({ kind: "loading" });
+  const hub = useControlRoomHub();
   const [panel, setPanel] = useState<PanelState>({ kind: "welcome" });
   const [queryDraft, setQueryDraft] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
@@ -624,52 +437,6 @@ export function ControlRoomHomeClient() {
   }, []);
 
   useEffect(() => { refreshHistory(); }, [refreshHistory]);
-
-  const [hubRefreshKey, setHubRefreshKey] = useState(0);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    (async () => {
-      setHub({ kind: "loading" });
-      try {
-        const [b, u, m, c, pm, wm, tr, uploadRowsRaw, platformRowsRaw] = await Promise.all([
-          fetchBriefingToday({ signal: ac.signal }),
-          fetchUploads({ signal: ac.signal }),
-          fetchMemos({ signal: ac.signal }),
-          fetchChecklist().catch(() => ({ ok: false as const, message: "체크리스트 로드 실패", items: [] })),
-          fetchPlatformMaster().catch(() => ({ ok: false as const, items: [] as PlatformMasterItem[] })),
-          fetchWorksMaster().catch(() => ({ ok: false as const, items: [] as WorksMasterItem[] })),
-          fetchTasks(),
-          fetch(`${getApiBaseUrl()}/upload-rows`).then(r => r.json()).catch(() => []) as Promise<unknown[]>,
-          fetch(`${getApiBaseUrl()}/platform-rows`).then(r => r.json()).catch(() => []) as Promise<Record<string, string>[]>,
-        ]);
-        if (ac.signal.aborted) return;
-        if (!b.ok) { setHub({ kind: "error", message: userFacingListError("briefing", b.message) }); return; }
-        if (!u.ok) { setHub({ kind: "error", message: userFacingListError("uploads", u.message) }); return; }
-        setHub({
-          kind: "ready",
-          briefing: b.payload,
-          uploads: { items: u.items, issues: u.issues },
-          memos: m.ok ? m.items : [],
-          memosError: m.ok ? null : userFacingListError("memos", m.message),
-          checklist: c.ok ? c.items : [],
-          checklistError: c.ok ? null : c.message,
-          platformMaster: pm.ok ? pm.items : [],
-          worksMaster: wm.ok ? wm.items : [],
-          allTasks: tr.ok ? tr.items.map(normalizeTaskSheetRow) : [],
-          uploadRows: Array.isArray(uploadRowsRaw)
-            ? uploadRowsRaw.map(normalizeUploadRowFromApi)
-            : [],
-          platformRows: Array.isArray(platformRowsRaw) ? platformRowsRaw : [],
-        });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.name === "AbortError") return;
-        if (ac.signal.aborted) return;
-        setHub({ kind: "error", message: e instanceof Error ? e.message : "데이터를 불러오지 못했습니다." });
-      }
-    })();
-    return () => ac.abort();
-  }, [hubRefreshKey]);
 
   const quickStats = useMemo(() => {
     if (hub.kind !== "ready") return null;

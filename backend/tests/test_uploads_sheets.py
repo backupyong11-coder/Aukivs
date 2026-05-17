@@ -193,6 +193,28 @@ def test_uploads_200_all_rows_unusable(
     assert data["issues"] == []
 
 
+def test_uploads_200_when_sheet_range_unparseable_tab_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from services.sheets_errors import SheetsFetchError
+
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", "x.json")
+    monkeypatch.setenv(
+        "GOOGLE_SHEET_URL",
+        "https://docs.google.com/spreadsheets/d/x/edit",
+    )
+
+    def boom(_settings):
+        raise SheetsFetchError(
+            "[Sheets API] HTTP 400: <HttpError 400 ...> Unable to parse range: '업로드운영'!A2:K."
+        )
+
+    monkeypatch.setattr(main_module, "fetch_upload_list_from_google_sheets", boom)
+    r = client.get("/uploads")
+    assert r.status_code == 200
+    assert r.json() == {"items": [], "issues": []}
+
+
 def test_uploads_502_on_sheets_fetch_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -238,6 +260,9 @@ def test_fetch_upload_list_tolerates_missing_file_name_no_raise(
         ],
     )
     settings = Settings(
+        data_backend="sheets",
+        supabase_url=None,
+        supabase_service_role_key=None,
         google_service_account_file=str(creds),
         google_sheet_url="https://docs.google.com/spreadsheets/d/abc123/edit",
         google_checklist_tab="체크리스트",

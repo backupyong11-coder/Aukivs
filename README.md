@@ -13,11 +13,86 @@ Next.js(App Router) 프론트와 FastAPI 백엔드가 분리된 구조입니다.
 | [current_app_status_report.md](./current_app_status_report.md) | 기능 완료/검증/보류 표, 에러 원칙, 운영 플로우 |
 | [FULL_HANDOFF_AND_NEXT_STEPS.md](./FULL_HANDOFF_AND_NEXT_STEPS.md) | API·라우트 요약, 다음 작업 순서, 다음 채팅용 붙여넣기 문단 |
 
+## 데이터 백엔드 전환 상태 (최종)
+
+`backend/.env`의 **`DATA_BACKEND=sheets`**(기본) 또는 **`supabase`**로 주요 업무 데이터 소스를 고릅니다. **`google_*.py`는 유지**되며, `sheets`로 바꾸면 언제든 기존 동작으로 롤백할 수 있습니다.
+
+> **보안 경고 — `SUPABASE_SERVICE_ROLE_KEY`**  
+> 이 키는 **Postgres 전 권한**입니다. **`backend/.env`에만** 두세요.  
+> **넣지 마세요:** 프론트 소스·`frontend/.env*`·Vercel/브라우저 노출 env·Git 커밋·스크린샷·채팅 로그.  
+> 프론트는 **`/api/ops` → 백엔드**로만 호출하고, Supabase anon/service 키를 쓰지 않습니다.
+
+### API별 데이터 소스 (`DATA_BACKEND=supabase` 기준)
+
+| 영역 | API (예) | Supabase | Google Sheets |
+|------|----------|:--------:|:-------------:|
+| 체크리스트 | `GET/POST /checklist`, `…/create`, `…/complete`, `…/update`, `…/delete` | 주 | — |
+| 업무정리 | `GET/POST /tasks`, `…/create`, `…/update`, `…/delete` | 주 | — |
+| 업로드정리 | `GET/POST /upload-rows`, `…/*` | 주 | — |
+| 플랫폼정리 | `GET/POST /platform-rows`, `…/*` | 주 | — |
+| 메모장 | `GET /memos`, `POST /memos/append` | 주 | — |
+| 작품 마스터 | `GET /works-master` | 주 | — |
+| 관제·집계 | `GET /briefing/today`, `GET /stats` | 해당 파트는 Supabase 행 사용 | — |
+| 플랫폼 마스터 | `GET /platform-master` | — | 주 |
+| 레거시 업로드 운영 | `GET/POST /uploads`, `…/create`, `…/delete`, `…/update`, `…/next-episode` | — | 주 |
+| AI — 업로드 제안 | `POST /ai/uploads/suggest` | — | 주 (시트 기반) |
+| AI — 체크리스트 제안 | `POST /ai/checklist/suggest` | 체크리스트 **컨텍스트**는 Supabase | `sheets` 모드에서는 시트 |
+| 기타 | `GET /health` | — | — |
+
+`DATA_BACKEND=sheets`이면 위 표에서 「Supabase」였던 API는 **전부 Google Sheets**를 씁니다. **`supabase` 모드에서도** 레거시 `/uploads*`, `/platform-master`, `POST /ai/uploads/suggest`는 **시트 URL·서비스 계정**이 필요합니다.
+
+### 초보자용: 로컬에서 한 번에 띄우기
+
+1. **준비:** [Python](https://www.python.org/) 3.11+ , [Node.js](https://nodejs.org/) 20+ 설치.
+2. **저장소 클론** 후 터미널을 프로젝트 루트로 연다.
+3. **백엔드 환경 변수:** `backend` 폴더에 `backend/.env` 파일을 만든다.  
+   - `backend/.env.example`을 복사한 뒤 값 채우기.  
+   - Supabase 쓰는 경우: `DATA_BACKEND=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (**이 파일에만**).
+4. **백엔드 실행:**
+   ```bash
+   cd backend
+   python -m pip install -r requirements-dev.txt
+   python -m pytest -q
+   python -m uvicorn main:app --reload --host 127.0.0.1 --port 8001
+   ```
+5. **브라우저로 확인:** `http://127.0.0.1:8001/health` → `{"status":"ok"}`.
+6. **프론트 환경 변수:** `frontend/.env.local` 생성:
+   ```
+   OPSPROXY_TARGET=http://127.0.0.1:8001
+   ```
+   (`NEXT_PUBLIC_API_BASE_URL`는 비워 두는 것을 권장 — 동일 출처 `/api/ops` 경유.)
+7. **프론트 실행:**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+8. **앱:** `http://localhost:3000` — 홈 브리핑·관제판, 하단 네비.
+
+시트 업무용 **상세 헤더·탭 이름**은 아래 「Google Sheets」 절과 `backend/.env.example` 주석을 본다.
+
+### 운영(배포) 전 체크리스트
+
+- [ ] `backend/.env`(또는 호스팅 비밀 변수): `DATA_BACKEND` 의도한 값.
+- [ ] Supabase 사용 시: 프로젝트에 마이그레이션 반영, RLS·키 회전 정책 확인.
+- [ ] **`SUPABASE_SERVICE_ROLE_KEY`가 레포·프론트·공개 로그에 없음** (백엔드 비밀 변수만).
+- [ ] 시트 연동 API 쓰는 경우: `GOOGLE_SHEET_URL`, 서비스 계정 공유, 필수 탭 존재.
+- [ ] `python -m pytest -q`, `npm test`, `npm run build` 통과.
+- [ ] 프로덕션에서 `GET /health`, 주요 화면(체크리스트, 업로드정리, 플랫폼, 브리핑) 스모크.
+- [ ] CORS: `BACKEND_CORS_ORIGINS` 등 배포 URL 반영 ([README_DEPLOY.md](./README_DEPLOY.md)).
+
+### 시트 연동 Verbose 로그 (선택)
+
+로컬에서 시트 헤더/첫 행 디버그가 필요할 때만 `backend/.env`에 `SHEETS_VERBOSE_DEBUG=1` 설정. 미설정 시 해당 `logger.info` 디버그 줄은 출력하지 않습니다.
+
 ## 지금 앱에서 할 수 있는 것 (요약)
 
-- **체크리스트** (`/checklist`): 시트 연동 조회·생성·수정·완료·삭제. AI 제안(prioritize / draft). draft는 **단건 또는 선택 일괄**로 `POST /checklist/create`에 반영 (자동 반영 아님).
-- **업로드** (`/uploads`): 조회·생성·수정·삭제·다음 회차. AI 제안(prioritize / review)은 시트에 쓰지 않음. 추천 행에서 **카드로 이동·수정 열기·다음 회차·삭제**까지 연결 (모두 사용자 확인 후 실행).
-- **홈** (`/`): `GET /briefing/today` 브리핑 + `GET /health`.
+데이터 저장소는 **`DATA_BACKEND`** 에 따라 시트 또는 Supabase입니다 (위 표 참고).
+
+- **체크리스트** (`/checklist`): 조회·생성·수정·완료·삭제. AI 제안(prioritize / draft). draft는 `POST /checklist/create`에 **수동** 반영.
+- **업로드정리** (`/upload-rows`): 탭 기반 관리 화면 (`DATA_BACKEND` 반영).
+- **레거시 업로드 운영** (`/uploads`): 시트 기반(항상). AI 제안은 시트에 자동 저장하지 않음.
+- **홈·관제판** (`/`): 브리핑(`GET /briefing/today`), `/stats` 등. 관제판은 레거시 `GET /uploads`도 함께 호출할 수 있음.
 - **비서** (`/assistant`): 플레이스홀더 (미연결).
 
 ## 검증 자동화 (한 번에)
@@ -75,7 +150,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-동작 확인: `http://127.0.0.1:8001/health` → `{"status":"ok"}`.
+동작 확인: `http://127.0.0.1:8001/health` → `{"status":"ok"}`. 로컬 첫 실행 순서는 위 **「초보자용: 로컬에서 한 번에 띄우기」** 절을 권장합니다.
 
 ### Google Sheets — 체크리스트 (`GET /checklist`)
 
@@ -98,7 +173,7 @@ python -m uvicorn main:app --reload --host 127.0.0.1 --port 8001
 - `POST /ai/checklist/suggest`, `POST /ai/uploads/suggest` — `OPENAI_API_KEY` 등은 `backend/.env.example` 참고.  
 - AI 응답은 시트에 **자동 저장되지 않음**.
 
-`GET /briefing/today`는 체크리스트·업로드를 읽어 집계합니다.
+`GET /briefing/today`: `supabase` 모드에서는 체크리스트·**업로드정리(`upload_rows`)** 기준으로 집계합니다. 레거시 업로드운영 시트는 사용하지 않습니다.
 
 ## 프론트엔드 실행
 

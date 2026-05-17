@@ -438,6 +438,10 @@ class MemoItem(BaseModel):
         description="메모날짜 열(비어 있으면 빈 문자열)",
     )
     category: str | None = Field(None, description="메모분류·분류 열(비어 있으면 null)")
+    legacy_id: str | None = Field(
+        None,
+        description="Supabase 이관 시 legacy_id (시트 전용이면 생략 가능)",
+    )
 
 
 class MemoAppendRequest(BaseModel):
