@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchPlatformMaster } from "@/lib/platformMaster";
 import { fetchWorksMaster } from "@/lib/worksMaster";
-import { buildPlatformWorkMatrix, type MatrixCellKind } from "@/lib/platformWorkMatrix";
+import {
+  buildPlatformWorkMatrix,
+  clearMatrixColumnOrder,
+  loadMatrixColumnOrder,
+  reorderPlatformWorkMatrix,
+  saveMatrixColumnOrder,
+  type MatrixCellKind,
+} from "@/lib/platformWorkMatrix";
 
 type LoadState =
   | { kind: "loading" }
@@ -54,6 +61,8 @@ function MatrixIcon({ kind }: { kind: MatrixCellKind }) {
 export function PlatformWorkMatrixClient() {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
+  /** null → localStorage(또는 기본 모델 순서); 비-null → 방금 조작한 순서 */
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
 
   const [model, setModel] = useState<ReturnType<typeof buildPlatformWorkMatrix> | null>(null);
 
@@ -89,7 +98,29 @@ export function PlatformWorkMatrixClient() {
     })();
   }, [refreshKey]);
 
-  const colCount = model?.columns.length ?? 0;
+  const displayModel = useMemo(() => {
+    if (!model) return null;
+    const preferred = columnOrder ?? loadMatrixColumnOrder();
+    return reorderPlatformWorkMatrix(model, preferred);
+  }, [model, columnOrder]);
+
+  const movePlatformColumn = useCallback((idx: number, dir: -1 | 1) => {
+    if (!displayModel) return;
+    const labels = displayModel.columns.map((c) => c.label);
+    const j = idx + dir;
+    if (j < 0 || j >= labels.length) return;
+    const next = [...labels];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setColumnOrder(next);
+    saveMatrixColumnOrder(next);
+  }, [displayModel]);
+
+  const resetColumnOrder = useCallback(() => {
+    clearMatrixColumnOrder();
+    setColumnOrder(null);
+  }, []);
+
+  const colCount = displayModel?.columns.length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -97,14 +128,28 @@ export function PlatformWorkMatrixClient() {
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           작품정리의「런칭·연재·업로드·대기·계약」열과 플랫폼명을 매칭합니다. 표기 방식이 다르면 셀이 비어 보일 수 있습니다.
         </p>
-        <button
-          type="button"
-          onClick={() => setRefreshKey((k) => k + 1)}
-          disabled={load.kind === "loading"}
-          className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-        >
-          {load.kind === "loading" ? "불러오는 중…" : "새로고침"}
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setColumnOrder(null);
+              setRefreshKey((k) => k + 1);
+            }}
+            disabled={load.kind === "loading"}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+          >
+            {load.kind === "loading" ? "불러오는 중…" : "새로고침"}
+          </button>
+          <button
+            type="button"
+            onClick={resetColumnOrder}
+            disabled={load.kind === "loading" || colCount === 0}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-600 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+            title="플랫폼 열 순서를 가나다 기본 순서로 되돌립니다."
+          >
+            열 순서 초기화
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
@@ -135,26 +180,57 @@ export function PlatformWorkMatrixClient() {
         </div>
       )}
 
-      {load.kind === "ready" && model && colCount > 0 && model.rows.length > 0 && (
+      {load.kind === "ready" && displayModel && colCount > 0 && displayModel.rows.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <p className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            각 플랫폼 열 머리글의 ◀ ▶ 로 좌우 순서를 바꿀 수 있습니다. 이 브라우저에만 저장됩니다.
+          </p>
           <table className="w-full min-w-[960px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
                 <th className="sticky left-0 z-20 min-w-[10rem] border-r border-zinc-200 bg-zinc-100 px-3 py-3 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
                   작품명
                 </th>
-                {model.columns.map((c) => (
-                  <th
-                    key={c.label}
-                    className="min-w-[5.5rem] border-l border-zinc-200 px-2 py-3 text-center text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-                  >
-                    {c.label}
-                  </th>
-                ))}
+                {displayModel.columns.map((c, colIdx) => {
+                  const thMoveBtn =
+                    "rounded border border-zinc-200 bg-white px-1 py-0.5 text-[11px] leading-none text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800";
+                  return (
+                    <th
+                      key={c.label}
+                      className="min-w-[6rem] border-l border-zinc-200 align-top dark:border-zinc-700"
+                    >
+                      <div className="flex items-stretch gap-0">
+                        <div className="flex flex-1 items-center justify-center px-1 py-2 text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                          {c.label}
+                        </div>
+                        <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
+                          <button
+                            type="button"
+                            className={thMoveBtn}
+                            aria-label={`${c.label} 열을 왼쪽으로`}
+                            disabled={colIdx === 0}
+                            onClick={() => movePlatformColumn(colIdx, -1)}
+                          >
+                            ◀
+                          </button>
+                          <button
+                            type="button"
+                            className={thMoveBtn}
+                            aria-label={`${c.label} 열을 오른쪽으로`}
+                            disabled={colIdx === displayModel.columns.length - 1}
+                            onClick={() => movePlatformColumn(colIdx, 1)}
+                          >
+                            ▶
+                          </button>
+                        </div>
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {model.rows.map((row, ri) => (
+              {displayModel.rows.map((row, ri) => (
                 <tr
                   key={`${ri}-${row.title}`}
                   className="border-b border-zinc-100 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-zinc-900/40"
@@ -167,7 +243,7 @@ export function PlatformWorkMatrixClient() {
                   </th>
                   {row.cells.map((cell, i) => (
                     <td
-                      key={`${row.title}-${model.columns[i]?.label ?? i}`}
+                      key={`${row.title}-${displayModel.columns[i]?.label ?? i}`}
                       className="border-l border-zinc-100 px-2 py-2 text-center align-middle dark:border-zinc-800"
                     >
                       <div className="flex justify-center">
@@ -186,7 +262,7 @@ export function PlatformWorkMatrixClient() {
                 >
                   플랫폼 메모
                 </th>
-                {model.columns.map((c) => (
+                {displayModel.columns.map((c) => (
                   <td
                     key={`foot-${c.label}`}
                     className="max-w-[14rem] border-l border-zinc-200 px-2 py-3 align-top text-left text-[11px] leading-snug text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"

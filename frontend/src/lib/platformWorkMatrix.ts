@@ -19,6 +19,67 @@ export type PlatformWorkMatrixModel = {
   rows: WorkMatrixRow[];
 };
 
+/** 플랫폼 연동 매트릭스(/platform-matrix) 열(플랫폼명) 사용자 순서 */
+export const PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY = "platform_work_matrix_col_labels_v1";
+
+export function loadMatrixColumnOrder(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function saveMatrixColumnOrder(labels: string[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY, JSON.stringify(labels));
+}
+
+export function clearMatrixColumnOrder() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY);
+}
+
+/** 저장된 플랫폼명 순서를 반영하고, 빠진 열·신규 열은 기본 모델 순서로 이어붙입니다. */
+export function reorderPlatformWorkMatrix(
+  model: PlatformWorkMatrixModel,
+  preferredLabels: string[],
+): PlatformWorkMatrixModel {
+  if (preferredLabels.length === 0) return model;
+
+  const labelSet = new Set(model.columns.map((c) => c.label));
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const l of preferredLabels) {
+    if (labelSet.has(l) && !seen.has(l)) {
+      ordered.push(l);
+      seen.add(l);
+    }
+  }
+  for (const c of model.columns) {
+    if (!seen.has(c.label)) {
+      ordered.push(c.label);
+      seen.add(c.label);
+    }
+  }
+
+  const colByLabel = new Map(model.columns.map((c) => [c.label, c]));
+  const columns = ordered.map((l) => colByLabel.get(l)!);
+  const oldIndex = new Map(model.columns.map((c, i) => [c.label, i]));
+  const rows = model.rows.map((r) => ({
+    title: r.title,
+    cells: ordered.map((l) => r.cells[oldIndex.get(l)!]),
+  }));
+
+  return { columns, rows };
+}
+
 function normCompact(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, "");
 }
