@@ -10,7 +10,10 @@ from zoneinfo import ZoneInfo
 
 from config import Settings
 from schemas import MemoItem
-from services.supabase_client import SupabaseRestClient
+from services.supabase_client import (
+    SupabaseConfigurationError,
+    SupabaseRestClient,
+)
 
 _KST = ZoneInfo("Asia/Seoul")
 _LEGACY_ROW_RE = re.compile(r"^memo-row-(\d+)$")
@@ -66,6 +69,8 @@ def _row_to_memo_item(row: dict[str, Any]) -> MemoItem | None:
     content = str(row.get("content") or "").strip()
     if not content:
         return None
+    mid = row.get("id")
+    id_str = str(mid).strip() if mid else None
     return MemoItem(
         sheet_row=_sheet_row_for_item(row),
         content=content,
@@ -76,6 +81,7 @@ def _row_to_memo_item(row: dict[str, Any]) -> MemoItem | None:
             else str(row["category"]).strip()
         ),
         legacy_id=str(row["legacy_id"]).strip() if row.get("legacy_id") else None,
+        id=id_str,
     )
 
 
@@ -136,6 +142,45 @@ def create_memo(settings: Settings, content: str, category: str | None) -> None:
         }
     ]
     cli.post_json("/memos", body, prefer="return=minimal")
+
+
+def update_memo(
+    settings: Settings,
+    *,
+    memo_id: str | None,
+    sheet_row: int,
+    content: str,
+    category: str | None,
+) -> None:
+    text = content.strip()
+    if not text:
+        raise ValueError("[파싱] 메모 내용이 비어 있습니다.")
+    cli = _client(settings)
+    ts_display = _memo_timestamp_seoul()
+    body: dict[str, Any] = {
+        "content": text,
+        "category": (category or "").strip() or None,
+        "memo_at": _iso_memo_at(),
+        "memo_at_raw": ts_display,
+    }
+    oid = (memo_id or "").strip()
+    if oid:
+        cli.patch_json("/memos", params={"id": f"eq.{oid}"}, body=body)
+        return
+    if sheet_row < 2:
+        raise ValueError("[파싱] 메모 행 번호가 올바르지 않습니다.")
+    cli.patch_json("/memos", params={"sheet_row": f"eq.{sheet_row}"}, body=body)
+
+
+def delete_memo(settings: Settings, *, memo_id: str | None, sheet_row: int) -> None:
+    cli = _client(settings)
+    oid = (memo_id or "").strip()
+    if oid:
+        cli.delete_json("/memos", params={"id": f"eq.{oid}"})
+        return
+    if sheet_row < 2:
+        raise ValueError("[파싱] 메모 행 번호가 올바르지 않습니다.")
+    cli.delete_json("/memos", params={"sheet_row": f"eq.{sheet_row}"})
 
 
 def resolve_memos_config(settings: Settings) -> None:

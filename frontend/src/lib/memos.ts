@@ -5,6 +5,8 @@ export type MemoItem = {
   content: string;
   memo_date: string;
   category: string | null;
+  legacy_id?: string | null;
+  id?: string | null;
 };
 
 export type FetchMemosResult =
@@ -61,11 +63,19 @@ function parseMemoItems(raw: unknown): MemoItem[] | null {
       typeof rec.category === "string" && rec.category.trim()
         ? rec.category
         : null;
+    const legacy_id =
+      typeof rec.legacy_id === "string" && rec.legacy_id.trim()
+        ? rec.legacy_id.trim()
+        : null;
+    const id =
+      typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : null;
     items.push({
       sheet_row,
       content: rec.content,
       memo_date,
       category,
+      legacy_id,
+      id,
     });
   }
   return items;
@@ -148,6 +158,95 @@ export async function appendMemo(
       ok: false,
       message:
         "메모 저장에 실패했습니다. 백엔드가 실행 중인지·네트워크를 확인하세요.",
+    };
+  }
+}
+
+export type MutateMemoResult = { ok: true } | { ok: false; message: string };
+
+export async function updateMemo(
+  args: {
+    sheet_row: number;
+    content: string;
+    category: string;
+    id?: string | null;
+  },
+  init?: RequestInit,
+): Promise<MutateMemoResult> {
+  const base = getApiBaseUrl();
+  const body = {
+    sheet_row: args.sheet_row,
+    content: args.content.trim(),
+    category: args.category.trim() ? args.category.trim() : null,
+    id: args.id?.trim() ? args.id.trim() : null,
+  };
+  try {
+    const res = await fetch(`${base}/memos`, {
+      method: "PATCH",
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      body: JSON.stringify(body),
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: userFacingMemoHttpError(res.status, rawText),
+      };
+    }
+    return { ok: true };
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") throw e;
+    return {
+      ok: false,
+      message:
+        e instanceof Error
+          ? e.message
+          : "메모 수정에 실패했습니다. 네트워크를 확인하세요.",
+    };
+  }
+}
+
+export async function deleteMemo(
+  args: { sheet_row: number; id?: string | null },
+  init?: RequestInit,
+): Promise<MutateMemoResult> {
+  const base = getApiBaseUrl();
+  const body = {
+    sheet_row: args.sheet_row,
+    id: args.id?.trim() ? args.id.trim() : null,
+  };
+  try {
+    const res = await fetch(`${base}/memos`, {
+      method: "DELETE",
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      body: JSON.stringify(body),
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: userFacingMemoHttpError(res.status, rawText),
+      };
+    }
+    return { ok: true };
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") throw e;
+    return {
+      ok: false,
+      message:
+        e instanceof Error
+          ? e.message
+          : "메모 삭제에 실패했습니다. 네트워크를 확인하세요.",
     };
   }
 }

@@ -10,8 +10,11 @@ from config import Settings
 from schemas import MemoItem
 from .google_sheets import (
     append_rows_to_sheet_range,
+    batch_update_sheet_values,
+    get_worksheet_id_by_title,
     read_sheet_tab_values,
     spreadsheet_id_from_url,
+    spreadsheets_batch_update,
 )
 from .sheet_cell_utils import cell_str
 from .sheets_errors import SheetsConfigurationError, SheetsParseError
@@ -161,4 +164,64 @@ def append_memo_row_to_google_sheets(
         spreadsheet_id,
         f"'{tab_esc}'!A:{end_letter}",
         [new_row],
+    )
+
+
+def update_memo_row_in_google_sheets(
+    settings: Settings,
+    sheet_row: int,
+    content: str,
+    category: str | None,
+) -> None:
+    """메모 탭의 해당 행(1-based) 메모내용·메모날짜·분류를 갱신합니다."""
+    if sheet_row < 2:
+        raise SheetsParseError("[파싱] 메모 행 번호가 올바르지 않습니다.")
+    text = content.strip()
+    if not text:
+        raise SheetsParseError("[파싱] 메모 내용이 비어 있습니다.")
+
+    cred_path, spreadsheet_id, tab = _memo_sheet_context(settings)
+    tab_esc = _memo_tab_esc(tab)
+    header_rows = read_sheet_tab_values(
+        cred_path, spreadsheet_id, f"'{tab_esc}'!1:1"
+    )
+    header = header_rows[0] if header_rows else []
+    col_c, col_d, col_cat = _parse_header_row(header)
+
+    ts = _now_memo_timestamp_seoul()
+    cat_cell = (category or "").strip()
+    r = sheet_row
+    letters = [_col_letter(i) for i in (col_c, col_d, col_cat)]
+    batch_update_sheet_values(
+        cred_path,
+        spreadsheet_id,
+        [
+            {"range": f"'{tab_esc}'!{letters[0]}{r}", "values": [[text]]},
+            {"range": f"'{tab_esc}'!{letters[1]}{r}", "values": [[ts]]},
+            {"range": f"'{tab_esc}'!{letters[2]}{r}", "values": [[cat_cell]]},
+        ],
+    )
+
+
+def delete_memo_row_from_google_sheets(settings: Settings, sheet_row: int) -> None:
+    """메모 탭에서 해당 행(1-based)을 삭제합니다."""
+    if sheet_row < 2:
+        raise SheetsParseError("[파싱] 메모 행 번호가 올바르지 않습니다.")
+    cred_path, spreadsheet_id, tab = _memo_sheet_context(settings)
+    worksheet_id = get_worksheet_id_by_title(cred_path, spreadsheet_id, tab)
+    spreadsheets_batch_update(
+        cred_path,
+        spreadsheet_id,
+        [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": worksheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": sheet_row - 1,
+                        "endIndex": sheet_row,
+                    }
+                }
+            }
+        ],
     )

@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
-const links = [
+type NavLink = {
+  href: string;
+  label: string;
+  title: string;
+  dividerAfter?: boolean;
+};
+
+const links: NavLink[] = [
   { href: "/", label: "관제실", title: "PC 관제판(첫 화면)" },
   { href: "/chatbot", label: "챗봇", title: "데이터 자연어 질의(/api/ops/ask)" },
   { href: "/memo", label: "메모", title: "메모장 시트 목록·추가" },
@@ -12,7 +19,12 @@ const links = [
   { href: "/platform-matrix", label: "플랫폼", title: "작품×플랫폼 연동 매트릭스" },
   { href: "/personnel", label: "인물별", title: "인물×제작·유통 표(로컬 저장)" },
   { href: "/milestones", label: "마일스톤", title: "주요 일정 타임라인·간트(로컬 저장)" },
-  { href: "/weekly-agenda", label: "주간아젠다", title: "대분류 병합 표(로컬 저장)" },
+  {
+    href: "/weekly-agenda",
+    label: "주간아젠다",
+    title: "대분류 병합 표(로컬 저장)",
+    dividerAfter: true,
+  },
   { href: "/announcement-date", label: "발표일", title: "발표 일정" },
   { href: "/progress", label: "현재진행", title: "현재 진행 현황" },
   { href: "/launching", label: "런칭정리", title: "런칭 일정·정리" },
@@ -20,7 +32,7 @@ const links = [
   { href: "/tasks", label: "업무정리", title: "업무정리 시트 작업" },
   { href: "/upload-rows", label: "업로드정리", title: "업로드정리 시트 작업" },
   { href: "/platforms", label: "플랫폼정리", title: "플랫폼정리 시트 작업" },
-] as const;
+];
 
 type AppNavProps = {
   showDemoLogout?: boolean;
@@ -59,27 +71,37 @@ export function AppNav({ showDemoLogout = false }: AppNavProps) {
           조회는 왼쪽 관제실 첫 화면에서 먼저 하세요.
         </p>
       </div>
-      <ul className="flex flex-row gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-visible md:px-2 md:pb-4">
-        {links.map(({ href, label, title }) => {
+      <ul className="flex max-md:flex-wrap max-md:overflow-x-auto flex-row gap-1 px-2 py-2 md:flex-col md:flex-nowrap md:overflow-visible md:px-2 md:pb-4">
+        {links.map((link) => {
           const active =
-            href === "/"
+            link.href === "/"
               ? pathname === "/"
-              : pathname === href || pathname.startsWith(`${href}/`);
+              : pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (
-            <li key={href} className="min-w-0 shrink-0 md:shrink">
-              <Link
-                href={href}
-                title={title}
-                className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors md:text-sm ${
-                  active
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                }`}
-                aria-current={active ? "page" : undefined}
-              >
-                {label}
-              </Link>
-            </li>
+            <Fragment key={link.href}>
+              <li className="min-w-0 shrink-0 md:shrink">
+                <Link
+                  href={link.href}
+                  title={link.title}
+                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors md:text-sm ${
+                    active
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  }`}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              </li>
+              {link.dividerAfter ? (
+                <li
+                  className="mx-1 w-full shrink-0 basis-full py-1 md:basis-auto"
+                  aria-hidden
+                >
+                  <hr className="border-zinc-200 dark:border-zinc-700" />
+                </li>
+              ) : null}
+            </Fragment>
           );
         })}
       </ul>

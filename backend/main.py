@@ -18,7 +18,9 @@ from schemas import (
     BriefingTodayResponse,
     MemoAppendRequest,
     MemoAppendResponse,
+    MemoDeletePayload,
     MemoItem,
+    MemoUpdateRequest,
     ChecklistCompleteRequest,
     ChecklistCompleteResponse,
     ChecklistCreateRequest,
@@ -58,11 +60,15 @@ from services.google_checklist_sheets import (
 from services.google_master_sheets import fetch_master_tab_keyed_rows
 from services.google_memo_sheets import (
     append_memo_row_to_google_sheets,
+    delete_memo_row_from_google_sheets,
     fetch_memos_from_google_sheets,
+    update_memo_row_in_google_sheets,
 )
 from services.supabase_client import SupabaseConfigurationError, SupabaseRequestError
 from repositories.memos_repo import create_memo as create_memo_supabase
+from repositories.memos_repo import delete_memo as delete_memo_supabase
 from repositories.memos_repo import list_memos as list_memos_supabase
+from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from services.google_uploads_sheets import (
     advance_upload_next_episode,
@@ -504,6 +510,71 @@ def post_memos_append(body: MemoAppendRequest) -> MemoAppendResponse:
             content=body.content,
             category=body.category,
         )
+        return MemoAppendResponse()
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.patch("/memos", response_model=MemoAppendResponse)
+def patch_memo(body: MemoUpdateRequest) -> MemoAppendResponse:
+    settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            update_memo_supabase(
+                settings,
+                memo_id=body.id,
+                sheet_row=body.sheet_row,
+                content=body.content,
+                category=body.category,
+            )
+            return MemoAppendResponse()
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        update_memo_row_in_google_sheets(
+            settings,
+            body.sheet_row,
+            body.content,
+            body.category,
+        )
+        return MemoAppendResponse()
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.delete("/memos", response_model=MemoAppendResponse)
+def delete_memo_endpoint(body: MemoDeletePayload = Body(...)) -> MemoAppendResponse:
+    settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            delete_memo_supabase(
+                settings,
+                memo_id=body.id,
+                sheet_row=body.sheet_row,
+            )
+            return MemoAppendResponse()
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        delete_memo_row_from_google_sheets(settings, body.sheet_row)
         return MemoAppendResponse()
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e

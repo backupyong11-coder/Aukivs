@@ -442,6 +442,48 @@ class MemoItem(BaseModel):
         None,
         description="Supabase 이관 시 legacy_id (시트 전용이면 생략 가능)",
     )
+    id: str | None = Field(
+        None,
+        description="Supabase 행 UUID (DATA_BACKEND=supabase 일 때만)",
+    )
+
+
+class MemoUpdateRequest(BaseModel):
+    """메모 한 건 수정. Supabase는 id 우선, 없으면 sheet_row로 식별."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sheet_row: int = Field(..., ge=2)
+    content: str
+    category: str | None = None
+    id: str | None = Field(None, description="Supabase UUID")
+
+    @field_validator("content")
+    @classmethod
+    def strip_content(cls, v: str) -> str:
+        s = str(v).strip()
+        if not s:
+            raise ValueError("[파싱] 메모 내용이 비어 있습니다.")
+        return s
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def blank_category_none(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            t = v.strip()
+            return t if t else None
+        return v
+
+
+class MemoDeletePayload(BaseModel):
+    """메모 삭제. Supabase는 id 우선."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sheet_row: int = Field(..., ge=2)
+    id: str | None = None
 
 
 class MemoAppendRequest(BaseModel):
