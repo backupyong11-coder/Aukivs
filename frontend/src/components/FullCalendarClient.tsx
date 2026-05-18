@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { CalendarQuickTaskAdd } from "@/components/CalendarQuickTaskAdd";
 import { DayAgendaDetail } from "@/components/DayAgendaDetail";
 import { useCalendarWindow } from "@/hooks/useCalendarWindow";
 import type { CalendarWindowState } from "@/hooks/useCalendarWindow";
@@ -64,6 +65,15 @@ function weekdayShortKo(y: number, m: number, d: number): string {
   return w ?? "";
 }
 
+function collectCategoryHints(allTasks: Record<string, string>[]): string[] {
+  const set = new Set<string>();
+  for (const t of allTasks) {
+    const c = (t["분류"] ?? "").trim();
+    if (c) set.add(c);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+}
+
 export function FullCalendarClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const todayParts = seoulYmdPartsNow();
@@ -86,6 +96,16 @@ export function FullCalendarClient() {
   const win = useCalendarWindow(range.from, range.to, refreshKey);
   const activityMap = useMemo(() => activityDotsMap(win), [win]);
   const ready = win.kind === "ready";
+
+  const categoryHints = useMemo(
+    () => (win.kind === "ready" ? collectCategoryHints(win.data.allTasks) : []),
+    [win],
+  );
+
+  const handleTaskCreated = useCallback(() => {
+    invalidateCalendarWindowCache(range.from, range.to);
+    setRefreshKey((k) => k + 1);
+  }, [range.from, range.to]);
 
   const weekStart = sundayWeekStart(cursor.y, cursor.m, cursor.d);
   const weekDays = useMemo(
@@ -453,6 +473,12 @@ export function FullCalendarClient() {
                     memos.length === 0 ? (
                       <p className="text-zinc-400">일정 없음</p>
                     ) : null}
+                    <CalendarQuickTaskAdd
+                      ymd={ymd}
+                      categoryHints={categoryHints}
+                      onCreated={handleTaskCreated}
+                      compact
+                    />
                   </div>
                 </div>
               );
@@ -517,6 +543,8 @@ export function FullCalendarClient() {
               allTasks={win.data.allTasks}
               memos={win.data.memos}
               worksMaster={win.data.worksMaster}
+              categoryHints={categoryHints}
+              onTaskCreated={handleTaskCreated}
             />
           </section>
         </div>
@@ -537,6 +565,8 @@ export function FullCalendarClient() {
               allTasks={win.data.allTasks}
               memos={win.data.memos}
               worksMaster={win.data.worksMaster}
+              categoryHints={categoryHints}
+              onTaskCreated={handleTaskCreated}
             />
           </div>
         </section>

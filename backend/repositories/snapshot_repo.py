@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -44,17 +45,21 @@ def _ymd_bounds(from_ymd: str, to_ymd: str) -> tuple[str, str]:
 
 
 def _norm_sheet_ymd(val: object) -> str:
+    """시트/DB 날짜 문자열 → YYYY-MM-DD (프론트 normalizeSheetDateYmd 와 동일 규칙)."""
     if val is None:
         return ""
     if isinstance(val, date):
         return val.isoformat()
     s = str(val).strip()
+    if not s:
+        return ""
     if len(s) >= 10 and s[4] == "-":
         return s[:10]
-    if len(s) >= 10 and s[4] == ".":
-        parts = s[:10].split(".")
-        if len(parts) == 3:
-            return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+    compact = re.sub(r"[./]", "-", s)
+    compact = re.sub(r"\s+", "", compact)
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", compact)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
     return ""
 
 
@@ -221,10 +226,15 @@ def fetch_calendar_window(
 ) -> dict[str, Any]:
     """캘린더 표시 구간만 반환(업로드·업무·메모·작품 첫공급)."""
     if settings.data_backend == "supabase":
+        # PostgREST range on due_date/upload_date alone drops rows that only have
+        # *_raw sheet-style dates. Match control-room hub: load full lists, filter here.
+        upload_rows = upload_rows_repo.list_upload_rows(settings)
+        all_tasks = tasks_repo.list_tasks(settings)
+        memo_items = memos_repo.list_memos(settings, limit=500)
         return {
-            "uploadRows": _upload_rows_in_range_supabase(settings, from_ymd, to_ymd),
-            "allTasks": _tasks_in_range_supabase(settings, from_ymd, to_ymd),
-            "memos": _memos_in_range_supabase(settings, from_ymd, to_ymd),
+            "uploadRows": _filter_upload_rows_client(upload_rows, from_ymd, to_ymd),
+            "allTasks": _filter_tasks_client(all_tasks, from_ymd, to_ymd),
+            "memos": _filter_memos_client(memo_items, from_ymd, to_ymd),
             "worksMaster": _works_calendar_supabase(settings),
         }
     upload_rows = fetch_upload_rows(settings)

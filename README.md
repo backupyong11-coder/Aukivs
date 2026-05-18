@@ -6,6 +6,7 @@ Next.js(App Router) 프론트와 FastAPI 백엔드가 분리된 구조입니다.
 
 | 문서 | 용도 |
 |------|------|
+| [**인수인계서.md**](./인수인계서.md) | **일상 운영 필독**: Supabase/Fly/Vercel 역할, 로컬 2터미널, 배포·메모 삭제·자주 하는 실수 |
 | [**README_DEPLOY_FINAL.md**](./README_DEPLOY_FINAL.md) | **배포 직전 마감**: 로컬 체크리스트, Railway/Vercel 클릭 순서, env 복붙, 공유 문구 |
 | [**README_DEPLOY.md**](./README_DEPLOY.md) | **클라우드 상시 배포**: Vercel(프론트) + Railway/Render(백엔드), 환경 변수, Google JSON, 초보 순서 |
 | [**QUICK_START_VALIDATION.md**](./QUICK_START_VALIDATION.md) | **5분 검증**: 자동 스크립트, 수동 명령, Windows 한글·`[]` 경로 대응, UI 스모크 체크리스트 |

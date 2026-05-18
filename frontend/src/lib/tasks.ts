@@ -3,6 +3,45 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 /** GET /tasks — 업무정리 시트 행(dict, 한글 키) */
 export type TaskSheetRow = Record<string, string>;
 
+export async function createTask(
+  fields: Partial<TaskSheetRow> & Pick<TaskSheetRow, "업무명">,
+): Promise<{ ok: true; item: TaskSheetRow } | { ok: false; message: string }> {
+  const base = getApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/tasks/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      let message = rawText;
+      try {
+        const j = JSON.parse(rawText) as { detail?: string };
+        if (j.detail) message = j.detail;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, message: message || `HTTP ${res.status}` };
+    }
+    const parsed: unknown = rawText.trim() ? JSON.parse(rawText) : {};
+    if (!parsed || typeof parsed !== "object") {
+      return { ok: false, message: "응답 형식 오류" };
+    }
+    const rec = parsed as Record<string, unknown>;
+    const out: TaskSheetRow = {};
+    for (const [k, v] of Object.entries(rec)) {
+      out[k] = v == null ? "" : String(v);
+    }
+    return { ok: true, item: out };
+  } catch (e: unknown) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "요청 중 오류가 발생했습니다.",
+    };
+  }
+}
+
 export async function fetchTasks(): Promise<
   { ok: true; items: TaskSheetRow[] } | { ok: false; message: string }
 > {

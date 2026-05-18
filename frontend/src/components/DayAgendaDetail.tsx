@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarQuickTaskAdd } from "@/components/CalendarQuickTaskAdd";
 import type { MemoItem } from "@/lib/memos";
 import type { WorksMasterItem } from "@/lib/worksMaster";
 import { formatCalendarTaskTitle } from "@/lib/formatCalendarTaskTitle";
@@ -13,9 +14,19 @@ type Props = {
   allTasks: Record<string, string>[];
   memos: MemoItem[];
   worksMaster: WorksMasterItem[];
+  categoryHints?: string[];
+  onTaskCreated?: () => void;
 };
 
-export function DayAgendaDetail({ ymd, uploadRows, allTasks, memos, worksMaster }: Props) {
+export function DayAgendaDetail({
+  ymd,
+  uploadRows,
+  allTasks,
+  memos,
+  worksMaster,
+  categoryHints = [],
+  onTaskCreated,
+}: Props) {
   const [y, m, d] = ymd.split("-").map(Number);
   const uploadRowsOnDay = uploadRows.filter((it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd);
   const memosOnDay = memos.filter((memo) => normalizeSheetDateYmd(memo.memo_date ?? "") === ymd);
@@ -25,6 +36,7 @@ export function DayAgendaDetail({ ymd, uploadRows, allTasks, memos, worksMaster 
 
   return (
     <div className="space-y-4 text-sm">
+      <CalendarQuickTaskAdd ymd={ymd} categoryHints={categoryHints} onCreated={onTaskCreated} />
       <div>
         <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">업무 ({allTasksOnDay.length}건)</p>
         {allTasksOnDay.length === 0 ? (
