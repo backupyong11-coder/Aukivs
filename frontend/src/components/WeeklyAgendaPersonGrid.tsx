@@ -95,6 +95,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
           인물별 표 제목
           <input
             type="text"
+            spellCheck={false}
             value={grid.title}
             onChange={(e) => onChange((g) => ({ ...g, title: e.target.value }))}
             className={`${inputCls} max-w-md`}
@@ -145,6 +146,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
                   <td className={nameBodyTdCls}>
                     <input
                       type="text"
+                      spellCheck={false}
                       value={row.name}
                       onChange={(e) => patchRow(row.id, { name: e.target.value })}
                       className={nameInputCls}
@@ -154,6 +156,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
                   {WEEKDAY_KEYS.map((day) => (
                     <td key={day} className={weekdayTdCls(day)}>
                       <textarea
+                        spellCheck={false}
                         value={row.cells[day] ?? ""}
                         onChange={(e) => patchCell(row.id, day, e.target.value)}
                         className={cellTextareaCls}

@@ -338,6 +338,7 @@ export function WeeklyAgendaClient() {
           표 제목
           <input
             type="text"
+            spellCheck={false}
             value={state.title}
             onChange={(e) => updateState((s) => ({ ...s, title: e.target.value }))}
             className={`${inputCls} max-w-md`}
@@ -394,6 +395,7 @@ export function WeeklyAgendaClient() {
                   <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="text"
+                      spellCheck={false}
                       value={major.name}
                       onChange={(e) => renameMajor(major.id, e.target.value)}
                       className={`${inputCls} max-w-xs font-medium`}
@@ -453,7 +455,7 @@ export function WeeklyAgendaClient() {
                         e.currentTarget.reset();
                       }}
                     >
-                      <input name="preset" placeholder="새 라벨" className={inputCls} />
+                      <input name="preset" spellCheck={false} placeholder="새 라벨" className={inputCls} />
                       <button
                         type="submit"
                         className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -552,6 +554,7 @@ export function WeeklyAgendaClient() {
                       ) : null}
                       <input
                         type="text"
+                        spellCheck={false}
                         value={row.minor}
                         onChange={(e) => patchRow(row.id, { minor: e.target.value })}
                         className={cellInputCls}
@@ -580,6 +583,7 @@ export function WeeklyAgendaClient() {
                     <td className="border border-zinc-400 p-1 dark:border-zinc-600">
                       <input
                         type="text"
+                        spellCheck={false}
                         value={row.details}
                         onChange={(e) => patchRow(row.id, { details: e.target.value })}
                         className={cellInputCls}
@@ -590,6 +594,7 @@ export function WeeklyAgendaClient() {
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
+                          spellCheck={false}
                           value={row.checklist}
                           onChange={(e) => patchRow(row.id, { checklist: e.target.value })}
                           className={
