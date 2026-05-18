@@ -230,6 +230,25 @@ export function WeeklyAgendaClient() {
     updateState((s) => ({ ...s, rows: s.rows.filter((r) => r.id !== id) }));
   }
 
+  function moveRow(id: string, dir: -1 | 1) {
+    updateState((s) => {
+      const rows = [...s.rows];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx < 0) return s;
+      const majorId = rows[idx].majorId;
+      const sameMajorIndices = rows
+        .map((r, i) => (r.majorId === majorId ? i : -1))
+        .filter((i) => i >= 0);
+      const posInGroup = sameMajorIndices.indexOf(idx);
+      if (posInGroup < 0) return s;
+      const targetPos = posInGroup + dir;
+      if (targetPos < 0 || targetPos >= sameMajorIndices.length) return s;
+      const swapIdx = sameMajorIndices[targetPos];
+      [rows[idx], rows[swapIdx]] = [rows[swapIdx], rows[idx]];
+      return { ...s, rows };
+    });
+  }
+
   function moveMajor(majorId: string, dir: -1 | 1) {
     updateState((s) => {
       const sorted = sortMajors([...s.majors]);
@@ -478,7 +497,7 @@ export function WeeklyAgendaClient() {
                 <th className="border border-zinc-400 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                   체크 사항
                 </th>
-                <th className="w-24 border border-zinc-400 px-1 py-2 text-center font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
+                <th className="w-32 border border-zinc-400 px-1 py-2 text-center font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                   작업
                 </th>
               </tr>
@@ -584,14 +603,36 @@ export function WeeklyAgendaClient() {
                         </label>
                       </div>
                     </td>
-                    <td className="align-top border border-zinc-400 p-1 text-center dark:border-zinc-600">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(row.id)}
-                        className="text-xs text-red-600 underline hover:no-underline dark:text-red-400"
-                      >
-                        행 삭제
-                      </button>
+                    <td className="border border-zinc-400 p-1 text-center align-middle dark:border-zinc-600">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveRow(row.id, -1)}
+                          className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                          title="위로"
+                          aria-label="행 위로"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === groupRows.length - 1}
+                          onClick={() => moveRow(row.id, 1)}
+                          className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                          title="아래로"
+                          aria-label="행 아래로"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          className="text-xs text-red-600 underline hover:no-underline dark:text-red-400"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ));
