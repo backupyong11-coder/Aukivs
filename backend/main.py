@@ -673,8 +673,7 @@ def patch_memo(body: MemoUpdateRequest) -> MemoAppendResponse:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@app.delete("/memos", response_model=MemoAppendResponse)
-def delete_memo_endpoint(body: MemoDeletePayload = Body(...)) -> MemoAppendResponse:
+def _delete_memo_impl(body: MemoDeletePayload) -> MemoAppendResponse:
     settings = load_settings()
     if settings.data_backend == "supabase":
         try:
@@ -700,6 +699,17 @@ def delete_memo_endpoint(body: MemoDeletePayload = Body(...)) -> MemoAppendRespo
         raise HTTPException(status_code=400, detail=str(e)) from e
     except SheetsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/memos/delete", response_model=MemoAppendResponse)
+def post_memos_delete(body: MemoDeletePayload) -> MemoAppendResponse:
+    """메모 삭제(권장). Vercel·프록시에서 DELETE 본문이 유실되는 경우를 피합니다."""
+    return _delete_memo_impl(body)
+
+
+@app.delete("/memos", response_model=MemoAppendResponse)
+def delete_memo_endpoint(body: MemoDeletePayload = Body(...)) -> MemoAppendResponse:
+    return _delete_memo_impl(body)
 
 
 @app.get("/briefing/today", response_model=BriefingTodayResponse)

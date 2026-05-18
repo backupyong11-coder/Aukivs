@@ -27,10 +27,41 @@ function formatHttpDetail(status: number, raw: string): string {
   return `HTTP ${status}: ${raw}`;
 }
 
+type MemoApiOp = "fetch" | "append" | "update" | "delete";
+
 /** 메모 API 실패 시 사용자용 문구 (404·연결 오류 등). */
-export function userFacingMemoHttpError(status: number, raw: string): string {
+export function userFacingMemoHttpError(
+  status: number,
+  raw: string,
+  op: MemoApiOp = "append",
+): string {
+  const pathHint =
+    op === "delete"
+      ? "/memos/delete"
+      : op === "update"
+        ? "/memos (PATCH)"
+        : op === "fetch"
+          ? "/memos"
+          : "/memos/append";
+  const actionLabel =
+    op === "delete"
+      ? "삭제"
+      : op === "update"
+        ? "수정"
+        : op === "fetch"
+          ? "불러오기"
+          : "저장";
   if (status === 404 || status === 405) {
-    return "메모 저장에 실패했습니다. 백엔드 주소 또는 /memos/append 연결을 확인하세요.";
+    return `메모 ${actionLabel}에 실패했습니다. 백엔드 주소 또는 ${pathHint} 연결을 확인하세요.`;
+  }
+  if (status === 401) {
+    try {
+      const j = JSON.parse(raw) as { error?: string };
+      if (j.error) return j.error;
+    } catch {
+      /* ignore */
+    }
+    return "데모 접근 코드가 필요합니다. /demo-login 에서 로그인해 주세요.";
   }
   if (status === 503) {
     return "메모 서버 설정을 확인할 수 없습니다. 서비스 계정·시트 URL을 점검하세요.";
@@ -99,7 +130,7 @@ export async function fetchMemos(
     if (!res.ok) {
       return {
         ok: false,
-        message: userFacingMemoHttpError(res.status, rawText),
+        message: userFacingMemoHttpError(res.status, rawText, "fetch"),
       };
     }
     let parsed: unknown;
@@ -150,7 +181,7 @@ export async function appendMemo(
     if (!res.ok) {
       return {
         ok: false,
-        message: userFacingMemoHttpError(res.status, rawText),
+        message: userFacingMemoHttpError(res.status, rawText, "append"),
       };
     }
     return { ok: true };
@@ -197,7 +228,7 @@ export async function updateMemo(
     if (!res.ok) {
       return {
         ok: false,
-        message: userFacingMemoHttpError(res.status, rawText),
+        message: userFacingMemoHttpError(res.status, rawText, "update"),
       };
     }
     return { ok: true };
@@ -223,8 +254,8 @@ export async function deleteMemo(
     id: args.id?.trim() ? args.id.trim() : null,
   };
   try {
-    const res = await fetch(`${base}/memos`, {
-      method: "DELETE",
+    const res = await fetch(`${base}/memos/delete`, {
+      method: "POST",
       ...init,
       headers: {
         Accept: "application/json",
@@ -237,7 +268,7 @@ export async function deleteMemo(
     if (!res.ok) {
       return {
         ok: false,
-        message: userFacingMemoHttpError(res.status, rawText),
+        message: userFacingMemoHttpError(res.status, rawText, "delete"),
       };
     }
     return { ok: true };

@@ -133,6 +133,32 @@ def test_memos_append_calls_append(monkeypatch: pytest.MonkeyPatch, tmp_path) ->
     assert row[1][10] == " "
 
 
+def test_memos_delete_post_api(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    creds = tmp_path / "creds.json"
+    creds.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(creds))
+    monkeypatch.setenv(
+        "GOOGLE_SHEET_URL",
+        "https://docs.google.com/spreadsheets/d/x/edit",
+    )
+    deleted: list[int] = []
+
+    def _delete(_settings, sheet_row: int) -> None:
+        deleted.append(sheet_row)
+
+    monkeypatch.setattr(
+        "main.delete_memo_row_from_google_sheets",
+        _delete,
+    )
+    r = client.post(
+        "/memos/delete",
+        json={"sheet_row": 5, "id": None},
+    )
+    assert r.status_code == 200
+    assert r.json().get("appended") is True
+    assert deleted == [5]
+
+
 def test_memos_append_api(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     creds = tmp_path / "creds.json"
     creds.write_text("{}", encoding="utf-8")
