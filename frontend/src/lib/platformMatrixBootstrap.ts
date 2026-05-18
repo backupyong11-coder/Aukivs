@@ -1,6 +1,38 @@
 import { getApiBaseUrl } from "@/lib/apiBase";
-import type { PlatformMasterItem } from "@/lib/platformMaster";
-import type { WorksMasterItem } from "@/lib/worksMaster";
+import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMaster";
+import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
+
+function shouldFallbackFromHub(status: number): boolean {
+  return status === 404 || status === 405;
+}
+
+function hubErrorMessage(status: number, raw: string): string {
+  if (status === 401) {
+    try {
+      const j = JSON.parse(raw) as { error?: string };
+      if (j.error) return j.error;
+    } catch {
+      /* ignore */
+    }
+    return "데모 접근 코드가 필요합니다. /demo-login 에서 로그인해 주세요.";
+  }
+  return raw || `HTTP ${status}`;
+}
+
+async function fetchPlatformMatrixBootstrapFallback(
+  init?: RequestInit,
+): Promise<{ ok: true; data: PlatformMatrixBootstrap } | { ok: false; message: string }> {
+  const [wm, pm] = await Promise.all([fetchWorksMaster(), fetchPlatformMaster()]);
+  if (init?.signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  const data: PlatformMatrixBootstrap = {
+    worksMaster: wm.ok ? wm.items : [],
+    platformMaster: pm.ok ? pm.items : [],
+  };
+  writeCache(data);
+  return { ok: true, data };
+}
 
 export type PlatformMatrixBootstrap = {
   worksMaster: WorksMasterItem[];
@@ -45,7 +77,10 @@ export async function fetchPlatformMatrixBootstrap(
     });
     const raw = await res.text();
     if (!res.ok) {
-      return { ok: false, message: raw || `HTTP ${res.status}` };
+      if (shouldFallbackFromHub(res.status)) {
+        return fetchPlatformMatrixBootstrapFallback(init);
+      }
+      return { ok: false, message: hubErrorMessage(res.status, raw) };
     }
     const j = JSON.parse(raw) as PlatformMatrixBootstrap;
     const data: PlatformMatrixBootstrap = {

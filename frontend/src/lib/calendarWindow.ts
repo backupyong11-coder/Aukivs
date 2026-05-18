@@ -1,6 +1,101 @@
 import { getApiBaseUrl } from "@/lib/apiBase";
-import type { MemoItem } from "@/lib/memos";
-import type { WorksMasterItem } from "@/lib/worksMaster";
+import { fetchMemos, type MemoItem } from "@/lib/memos";
+import { normalizeSheetDateYmd } from "@/lib/sheetDates";
+import { fetchTasks } from "@/lib/tasks";
+import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
+
+function shouldFallbackFromHub(status: number): boolean {
+  return status === 404 || status === 405;
+}
+
+function hubErrorMessage(status: number, raw: string): string {
+  if (status === 401) {
+    try {
+      const j = JSON.parse(raw) as { error?: string };
+      if (j.error) return j.error;
+    } catch {
+      /* ignore */
+    }
+    return "데모 접근 코드가 필요합니다. /demo-login 에서 로그인해 주세요.";
+  }
+  return raw || `HTTP ${status}`;
+}
+
+function ymdInRange(ymd: string | null, from: string, to: string): boolean {
+  if (!ymd) return false;
+  return from <= ymd && ymd <= to;
+}
+
+function filterUploadRows(
+  rows: Record<string, string>[],
+  from: string,
+  to: string,
+): Record<string, string>[] {
+  return rows.filter((d) => {
+    const up = normalizeSheetDateYmd(d["업로드일"] ?? "");
+    const launch = normalizeSheetDateYmd(d["런칭일"] ?? "");
+    return ymdInRange(up, from, to) || ymdInRange(launch, from, to);
+  });
+}
+
+function filterTasks(
+  rows: Record<string, string>[],
+  from: string,
+  to: string,
+): Record<string, string>[] {
+  return rows.filter((d) => ymdInRange(normalizeSheetDateYmd(d["마감일"] ?? ""), from, to));
+}
+
+function filterMemos(items: MemoItem[], from: string, to: string): MemoItem[] {
+  const out: MemoItem[] = [];
+  for (const m of items) {
+    const ymd = normalizeSheetDateYmd(m.memo_date);
+    if (ymdInRange(ymd, from, to)) out.push(m);
+  }
+  return out.slice(0, 200);
+}
+
+async function fetchUploadRowsList(init?: RequestInit): Promise<Record<string, string>[]> {
+  const res = await fetch(`${getApiBaseUrl()}/upload-rows`, {
+    ...init,
+    headers: { Accept: "application/json", ...init?.headers },
+  });
+  if (!res.ok) return [];
+  const data: unknown = await res.json();
+  if (!Array.isArray(data)) return [];
+  return data.map((row) => {
+    if (!row || typeof row !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      out[k] = v == null ? "" : String(v).trim();
+    }
+    return out;
+  });
+}
+
+async function fetchCalendarWindowFallback(
+  from: string,
+  to: string,
+  init?: RequestInit,
+): Promise<CalendarWindowResult> {
+  const [uploadRows, tasks, memos, works] = await Promise.all([
+    fetchUploadRowsList(init),
+    fetchTasks(),
+    fetchMemos(init, 250),
+    fetchWorksMaster(),
+  ]);
+  if (init?.signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  const data: CalendarWindowPayload = {
+    uploadRows: filterUploadRows(uploadRows, from, to),
+    allTasks: tasks.ok ? filterTasks(tasks.items, from, to) : [],
+    memos: memos.ok ? filterMemos(memos.items, from, to) : [],
+    worksMaster: works.ok ? works.items : [],
+  };
+  writeCache(from, to, data);
+  return { ok: true, data };
+}
 
 export type CalendarWindowPayload = {
   uploadRows: Record<string, string>[];
@@ -104,7 +199,10 @@ export async function fetchCalendarWindow(
     });
     const raw = await res.text();
     if (!res.ok) {
-      return { ok: false, message: raw || `HTTP ${res.status}` };
+      if (shouldFallbackFromHub(res.status)) {
+        return fetchCalendarWindowFallback(from, to, init);
+      }
+      return { ok: false, message: hubErrorMessage(res.status, raw) };
     }
     const data = JSON.parse(raw) as CalendarWindowPayload;
     writeCache(from, to, data);

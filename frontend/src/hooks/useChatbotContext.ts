@@ -10,7 +10,7 @@ export type ChatbotContextState =
   | { kind: "error"; message: string };
 
 export function useChatbotContext(refreshKey = 0): ChatbotContextState {
-  const [state, setState] = useState<ChatbotContextState>({ kind: "idle" });
+  const [state, setState] = useState<ChatbotContextState>({ kind: "loading" });
 
   useEffect(() => {
     const ac = new AbortController();

@@ -1,8 +1,10 @@
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { fetchChecklist } from "@/lib/checklist";
 import type { ChecklistItem } from "@/lib/checklist";
-import type { MemoItem } from "@/lib/memos";
-import type { PlatformMasterItem } from "@/lib/platformMaster";
-import type { WorksMasterItem } from "@/lib/worksMaster";
+import { fetchMemos, type MemoItem } from "@/lib/memos";
+import { fetchPlatformMaster, type PlatformMasterItem } from "@/lib/platformMaster";
+import { fetchTasks } from "@/lib/tasks";
+import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
 
 export type ChatbotContextPayload = {
   platformMaster: PlatformMasterItem[];
@@ -41,6 +43,47 @@ function writeCache(data: ChatbotContextPayload) {
   }
 }
 
+function shouldFallbackFromHub(status: number): boolean {
+  return status === 404 || status === 405;
+}
+
+function hubErrorMessage(status: number, raw: string): string {
+  if (status === 401) {
+    try {
+      const j = JSON.parse(raw) as { error?: string };
+      if (j.error) return j.error;
+    } catch {
+      /* ignore */
+    }
+    return "데모 접근 코드가 필요합니다. /demo-login 에서 로그인해 주세요.";
+  }
+  return raw || `HTTP ${status}`;
+}
+
+async function fetchChatbotContextFallback(
+  init?: RequestInit,
+): Promise<ChatbotContextResult> {
+  const [pm, wm, memos, tasks, checklist] = await Promise.all([
+    fetchPlatformMaster(),
+    fetchWorksMaster(),
+    fetchMemos(init, 40),
+    fetchTasks(),
+    fetchChecklist(),
+  ]);
+  if (init?.signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  const data: ChatbotContextPayload = {
+    platformMaster: pm.ok ? pm.items.slice(0, 60) : [],
+    worksMaster: wm.ok ? wm.items.slice(0, 60) : [],
+    memos: memos.ok ? memos.items.slice(0, 40) : [],
+    tasks: tasks.ok ? tasks.items.slice(0, 100) : [],
+    checklist: checklist.ok ? checklist.items.slice(0, 100) : [],
+  };
+  writeCache(data);
+  return { ok: true, data };
+}
+
 function mapChecklist(rows: unknown[]): ChecklistItem[] {
   if (!Array.isArray(rows)) return [];
   return rows.map((r) => {
@@ -73,7 +116,10 @@ export async function fetchChatbotContext(init?: RequestInit): Promise<ChatbotCo
     });
     const raw = await res.text();
     if (!res.ok) {
-      return { ok: false, message: raw || `HTTP ${res.status}` };
+      if (shouldFallbackFromHub(res.status)) {
+        return fetchChatbotContextFallback(init);
+      }
+      return { ok: false, message: hubErrorMessage(res.status, raw) };
     }
     const j = JSON.parse(raw) as Record<string, unknown>;
     const data: ChatbotContextPayload = {
