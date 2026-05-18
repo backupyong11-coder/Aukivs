@@ -218,7 +218,7 @@ export function FullCalendarClient() {
 
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         관제실 미니 달력과 동일한 데이터(업무 마감일, 업로드·런칭일, 메모, 작품 첫 공급 일정)를 사용합니다. 표시 타임존은 서울 기준이며,{" "}
-        <span className="font-medium text-sky-700 dark:text-sky-300">오늘</span>은 파란색,{" "}
+        <span className="font-medium text-red-700 dark:text-red-300">오늘</span>은 빨간색,{" "}
         <span className="font-medium text-zinc-600 dark:text-zinc-300">회색 칸은 토·일·공휴일·대체공휴일</span>입니다.
       </p>
 
@@ -271,20 +271,20 @@ export function FullCalendarClient() {
                 const sel = ymd === selectedYmd;
                 const rest = isCalendarRestDay(monthGrid.vy, monthGrid.vm, d);
                 const cellBg = isToday
-                  ? "bg-sky-100 dark:bg-sky-950/50"
+                  ? "bg-red-100 dark:bg-red-950/50"
                   : rest
                     ? "bg-zinc-100 dark:bg-zinc-800/70"
                     : "";
                 const cellHover = sel
                   ? ""
                   : isToday
-                    ? "hover:bg-sky-200/95 dark:hover:bg-sky-900/55"
+                    ? "hover:bg-red-200/95 dark:hover:bg-red-900/55"
                     : rest
                       ? "hover:bg-zinc-200/95 dark:hover:bg-zinc-700/85"
                       : "hover:bg-zinc-50 dark:hover:bg-zinc-900";
                 const selBorder = sel
                   ? isToday
-                    ? "border-sky-600 ring-2 ring-sky-500 dark:border-sky-400 dark:ring-sky-400"
+                    ? "border-red-600 ring-2 ring-red-500 dark:border-red-400 dark:ring-red-400"
                     : "border-zinc-900 ring-2 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
                   : `border-zinc-200 dark:border-zinc-700 ${cellHover}`;
                 return (
@@ -296,7 +296,7 @@ export function FullCalendarClient() {
                   >
                     <span
                       className={`text-base font-semibold tabular-nums ${
-                        isToday ? "text-sky-900 dark:text-sky-100" : "text-zinc-800 dark:text-zinc-200"
+                        isToday ? "text-red-900 dark:text-red-100" : "text-zinc-800 dark:text-zinc-200"
                       }`}
                     >
                       {d}
@@ -340,11 +340,11 @@ export function FullCalendarClient() {
                   key={ymd}
                   className={`flex min-h-[22rem] flex-col ${
                     sel && isToday
-                      ? "bg-sky-100/95 dark:bg-sky-950/50 ring-2 ring-inset ring-sky-500 dark:ring-sky-400"
+                      ? "bg-red-100/95 dark:bg-red-950/50 ring-2 ring-inset ring-red-500 dark:ring-red-400"
                       : sel
                         ? "bg-zinc-50 dark:bg-zinc-900/50"
                         : isToday
-                          ? "bg-sky-100/90 dark:bg-sky-950/45"
+                          ? "bg-red-100/90 dark:bg-red-950/45"
                           : rest
                             ? "bg-zinc-100/90 dark:bg-zinc-800/55"
                             : ""
@@ -355,7 +355,7 @@ export function FullCalendarClient() {
                     onClick={() => setSelectedYmd(ymd)}
                     className={`border-b border-zinc-200 px-2 py-3 text-left dark:border-zinc-800 ${
                       isToday
-                        ? "bg-sky-600 text-white dark:bg-sky-600"
+                        ? "bg-red-600 text-white dark:bg-red-600"
                         : rest
                           ? "bg-zinc-200/80 text-zinc-900 dark:bg-zinc-700/80 dark:text-zinc-50"
                           : ""
@@ -365,7 +365,7 @@ export function FullCalendarClient() {
                     <p
                       className={`text-xs ${
                         isToday
-                          ? "text-sky-100"
+                          ? "text-red-100"
                           : rest
                             ? "text-zinc-600 dark:text-zinc-300"
                             : "text-zinc-500 dark:text-zinc-400"
@@ -460,7 +460,7 @@ export function FullCalendarClient() {
           <section
             className={`rounded-xl border border-zinc-200 bg-gradient-to-b p-6 dark:border-zinc-800 lg:col-span-4 ${
               ymdFromParts(cursor.y, cursor.m, cursor.d) === todayYmd
-                ? "from-sky-100 to-sky-50 dark:from-sky-950/80 dark:to-sky-950/35"
+                ? "from-red-100 to-red-50 dark:from-red-950/80 dark:to-red-950/35"
                 : isCalendarRestDay(cursor.y, cursor.m, cursor.d)
                   ? "from-zinc-200/70 to-zinc-100 dark:from-zinc-800/90 dark:to-zinc-950"
                   : "from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-950"

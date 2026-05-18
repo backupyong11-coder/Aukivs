@@ -246,14 +246,14 @@ export function MemoMenuClient() {
                 </td>
               </tr>
             ) : (
-              items.map((m) => {
+              items.map((m, index) => {
                 const k = memoRowKey(m);
                 const isEditing = editingKey === k;
                 const busy = rowBusy === k;
                 return (
                   <tr key={k} className="bg-white dark:bg-zinc-950">
                     <td className="border border-zinc-400 px-2 py-2 tabular-nums text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
-                      {m.sheet_row}
+                      {index + 1}
                     </td>
                     <td className="border border-zinc-400 px-2 py-2 tabular-nums text-zinc-800 dark:border-zinc-600 dark:text-zinc-200">
                       {m.memo_date?.trim() || "—"}
@@ -289,7 +289,7 @@ export function MemoMenuClient() {
                     </td>
                     <td className="border border-zinc-400 px-2 py-2 text-center align-middle dark:border-zinc-600">
                       {isEditing ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
                             type="button"
                             disabled={busy || !editContent.trim()}
@@ -308,7 +308,7 @@ export function MemoMenuClient() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
                             type="button"
                             disabled={busy || editingKey !== null}

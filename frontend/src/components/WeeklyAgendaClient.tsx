@@ -48,8 +48,9 @@ function rowSliceForTable(
 
 const inputCls =
   "w-full min-h-[2.5rem] rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
-const textareaCls =
-  "w-full min-h-[5rem] resize-y rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+/** 본문 칸: 셀 배경과 동일(흰 박스 없음) */
+const cellInputCls =
+  "w-full min-h-[2rem] border-0 bg-transparent px-1 py-1 text-sm text-zinc-900 shadow-none outline-none ring-0 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400/60 focus:ring-offset-0 dark:text-zinc-100 dark:placeholder:text-zinc-500";
 
 export function WeeklyAgendaClient() {
   const [workbook, setWorkbook] = useState<WeeklyAgendaWorkbook | null>(null);
@@ -513,7 +514,7 @@ export function WeeklyAgendaClient() {
                         {major.name}
                       </td>
                     ) : null}
-                    <td className="align-top border border-zinc-400 p-1 dark:border-zinc-600">
+                    <td className="border border-zinc-400 p-1 dark:border-zinc-600">
                       {idx === 0 && major.id !== "__orphan__" ? (
                         <datalist id={`presets-${major.id}`}>
                           {(presetsByMajor.get(major.id) ?? []).map((p) => (
@@ -525,13 +526,13 @@ export function WeeklyAgendaClient() {
                         type="text"
                         value={row.minor}
                         onChange={(e) => patchRow(row.id, { minor: e.target.value })}
-                        className={inputCls}
+                        className={cellInputCls}
                         placeholder="프로젝트·항목명"
                         list={major.id !== "__orphan__" ? `presets-${major.id}` : undefined}
                       />
                       {major.id !== "__orphan__" && (presetsByMajor.get(major.id) ?? []).length > 0 ? (
                         <select
-                          className={`${inputCls} mt-1 text-xs`}
+                          className={`${cellInputCls} mt-0.5 text-xs text-zinc-600 dark:text-zinc-400`}
                           value=""
                           onChange={(e) => {
                             const v = e.target.value;
@@ -548,33 +549,40 @@ export function WeeklyAgendaClient() {
                         </select>
                       ) : null}
                     </td>
-                    <td className="align-top border border-zinc-400 p-1 dark:border-zinc-600">
-                      <textarea
+                    <td className="border border-zinc-400 p-1 dark:border-zinc-600">
+                      <input
+                        type="text"
                         value={row.details}
                         onChange={(e) => patchRow(row.id, { details: e.target.value })}
-                        className={textareaCls}
-                        placeholder="세부 내용(여러 줄)"
+                        className={cellInputCls}
+                        placeholder="세부 내용"
                       />
                     </td>
-                    <td className="align-top border border-zinc-400 p-1 dark:border-zinc-600">
-                      <textarea
-                        value={row.checklist}
-                        onChange={(e) => patchRow(row.id, { checklist: e.target.value })}
-                        className={
-                          row.urgent
-                            ? `${textareaCls} text-red-600 dark:text-red-400`
-                            : textareaCls
-                        }
-                        placeholder="마감·계약·주의 사항 등"
-                      />
-                      <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                    <td className="border border-zinc-400 p-1 dark:border-zinc-600">
+                      <div className="flex items-center gap-2">
                         <input
-                          type="checkbox"
-                          checked={row.urgent}
-                          onChange={(e) => patchRow(row.id, { urgent: e.target.checked })}
+                          type="text"
+                          value={row.checklist}
+                          onChange={(e) => patchRow(row.id, { checklist: e.target.value })}
+                          className={
+                            row.urgent
+                              ? `${cellInputCls} min-w-0 flex-1 text-red-600 dark:text-red-400`
+                              : `${cellInputCls} min-w-0 flex-1`
+                          }
+                          placeholder="마감·계약·주의 사항 등"
                         />
-                        긴급 표시(빨간 글자)
-                      </label>
+                        <label
+                          className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap text-xs text-zinc-600 dark:text-zinc-400"
+                          title="긴급 표시(빨간 글자)"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={row.urgent}
+                            onChange={(e) => patchRow(row.id, { urgent: e.target.checked })}
+                          />
+                          긴급
+                        </label>
+                      </div>
                     </td>
                     <td className="align-top border border-zinc-400 p-1 text-center dark:border-zinc-600">
                       <button
