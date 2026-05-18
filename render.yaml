@@ -1,5 +1,5 @@
-# Render Blueprint 예시 — 저장소 연결 후 Blueprint 로 가져오거나, 수동으로 Web Service 를 만들 때 참고.
-# 대시보드에서 Root Directory = backend, Start Command 는 아래와 동일하게 맞추면 됩니다.
+# Render: GitHub 저장소 연결 후 이 Blueprint로 API 서버 배포 (Supabase 연동)
+# 대시보드 https://render.com/deploy?repo=https://github.com/backupyong11-coder/Aukivs
 services:
   - type: web
     name: worksheet-ops-api
@@ -9,3 +9,12 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    envVars:
+      - key: DATA_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11.9"
