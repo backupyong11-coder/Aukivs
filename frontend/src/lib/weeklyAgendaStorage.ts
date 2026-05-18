@@ -27,12 +27,41 @@ export type AgendaRow = {
   urgent: boolean;
 };
 
+export type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export const WEEKDAY_KEYS: WeekdayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+export const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};
+
+/** 인물별 주간 표 — 행=인물, 열=월~일 */
+export type PersonGridRow = {
+  id: string;
+  name: string;
+  order: number;
+  cells: Record<WeekdayKey, string>;
+};
+
+export type PersonGridState = {
+  title: string;
+  rows: PersonGridRow[];
+};
+
 export type WeeklyAgendaState = {
   version: 1;
   title: string;
   majors: MajorCategory[];
   minorPresets: MinorPreset[];
   rows: AgendaRow[];
+  /** 기간 탭마다 따로 저장되는 인물×요일 표 */
+  personGrid: PersonGridState;
 };
 
 /** 탭(기간) 한 장 — 내용은 v1 state와 동일 */
@@ -59,11 +88,37 @@ function newId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export function emptyWeekdayCells(): Record<WeekdayKey, string> {
+  return { mon: "", tue: "", wed: "", thu: "", fri: "", sat: "", sun: "" };
+}
+
+export function createDefaultPersonGrid(): PersonGridState {
+  return { title: "인물별 주간", rows: [] };
+}
+
+export function createPersonRow(order: number): PersonGridRow {
+  return { id: newId(), name: "", order, cells: emptyWeekdayCells() };
+}
+
+export function ensurePersonGrid(state: WeeklyAgendaState): WeeklyAgendaState {
+  const pg = state.personGrid;
+  if (pg && Array.isArray(pg.rows) && typeof pg.title === "string") {
+    const rows = pg.rows.map((r, i) => ({
+      id: typeof r.id === "string" ? r.id : newId(),
+      name: typeof r.name === "string" ? r.name : "",
+      order: typeof r.order === "number" ? r.order : i,
+      cells: { ...emptyWeekdayCells(), ...(r.cells ?? {}) },
+    }));
+    return { ...state, personGrid: { title: pg.title, rows } };
+  }
+  return { ...state, personGrid: createDefaultPersonGrid() };
+}
+
 export function createDefaultState(): WeeklyAgendaState {
   const m1 = newId();
   const m2 = newId();
   const m3 = newId();
-  return {
+  return ensurePersonGrid({
     version: 1,
     title: "Weekly Agenda",
     majors: [
@@ -73,7 +128,8 @@ export function createDefaultState(): WeeklyAgendaState {
     ],
     minorPresets: [],
     rows: [],
-  };
+    personGrid: createDefaultPersonGrid(),
+  });
 }
 
 /** 새 탭 기본 이름 제안 (서울 날짜 기준) */
@@ -91,7 +147,7 @@ export function createSheetFromState(label: string, state: WeeklyAgendaState, or
     id: newId(),
     label: label.trim() || getSuggestedAgendaTabLabel(),
     order,
-    state: { ...state, version: 1 } satisfies WeeklyAgendaState,
+    state: ensurePersonGrid({ ...state, version: 1 }) satisfies WeeklyAgendaState,
   };
 }
 
@@ -131,7 +187,7 @@ function parseWorkbook(raw: unknown): WeeklyAgendaWorkbook | null {
       id: s.id,
       label: s.label,
       order: s.order,
-      state: st,
+      state: ensurePersonGrid(st),
     });
   }
   if (sheets.length === 0) return null;
@@ -151,7 +207,7 @@ export function loadWeeklyAgendaWorkbook(): WeeklyAgendaWorkbook | null {
     if (rawV1) {
       const parsed = JSON.parse(rawV1) as WeeklyAgendaState;
       if (parsed?.version === 1 && Array.isArray(parsed.majors) && Array.isArray(parsed.rows)) {
-        return migrateV1ToWorkbook(parsed);
+        return migrateV1ToWorkbook(ensurePersonGrid(parsed));
       }
     }
     return null;
@@ -208,7 +264,7 @@ export function saveWeeklyAgendaState(state: WeeklyAgendaState): void {
   }
   const nextSheets = wb.sheets.map((s) =>
     s.id === wb.activeSheetId
-      ? { ...s, state: { ...state, version: 1 } satisfies WeeklyAgendaState }
+      ? { ...s, state: ensurePersonGrid({ ...state, version: 1 }) satisfies WeeklyAgendaState }
       : s,
   );
   saveWeeklyAgendaWorkbook({ ...wb, sheets: nextSheets });

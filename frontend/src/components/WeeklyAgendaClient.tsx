@@ -15,8 +15,10 @@ import {
   type MajorCategory,
   type MinorPreset,
   type WeeklyAgendaState,
+  type PersonGridState,
   type WeeklyAgendaWorkbook,
 } from "@/lib/weeklyAgendaStorage";
+import { WeeklyAgendaPersonGrid } from "@/components/WeeklyAgendaPersonGrid";
 
 function sortMajors(majors: MajorCategory[]): MajorCategory[] {
   return [...majors].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -94,6 +96,13 @@ export function WeeklyAgendaClient() {
   }, []);
 
   const updateState = updateActiveState;
+
+  const updatePersonGrid = useCallback(
+    (fn: (pg: PersonGridState) => PersonGridState) => {
+      updateActiveState((s) => ({ ...s, personGrid: fn(s.personGrid) }));
+    },
+    [updateActiveState],
+  );
 
   const groups = useMemo(() => {
     if (!state) return [];
@@ -640,6 +649,15 @@ export function WeeklyAgendaClient() {
             </tbody>
           </table>
         </div>
+
+      <div className="border-t border-zinc-200 pt-6 dark:border-zinc-700">
+        <h2 className="mb-1 text-sm font-semibold text-zinc-800 dark:text-zinc-100">인물별 주간 표</h2>
+        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+          행은 인물, 열은 월~일입니다. 아래 <strong className="font-medium text-zinc-700 dark:text-zinc-300">기간 탭</strong>
+          과 함께 저장·전환됩니다.
+        </p>
+        <WeeklyAgendaPersonGrid grid={state.personGrid} onChange={updatePersonGrid} />
+      </div>
 
       {/* 뷰포트 하단 고정 — 스크롤되는 표와 분리 */}
       <div
