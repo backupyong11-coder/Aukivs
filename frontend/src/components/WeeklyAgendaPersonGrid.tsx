@@ -26,8 +26,6 @@ const nameInputCls =
 const thCls =
   "min-w-[6.5rem] border border-zinc-400 px-2 py-2 text-center font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50";
 
-const weekendThCls = `${thCls} bg-zinc-300/80 dark:bg-zinc-700/80`;
-
 type Props = {
   grid: PersonGridState;
   onChange: (fn: (prev: PersonGridState) => PersonGridState) => void;
@@ -37,12 +35,8 @@ function sortedRows(grid: PersonGridState) {
   return [...grid.rows].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko"));
 }
 
-function weekdayTdCls(key: WeekdayKey): string {
-  const base = "align-top border border-zinc-400 p-1 dark:border-zinc-600";
-  if (key === "sat" || key === "sun") {
-    return `${base} bg-zinc-50/90 dark:bg-zinc-900/60`;
-  }
-  return `${base} bg-white dark:bg-zinc-950`;
+function weekdayTdCls(): string {
+  return "align-top border border-zinc-400 bg-white p-1 dark:border-zinc-600 dark:bg-zinc-950";
 }
 
 export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
@@ -111,7 +105,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
-        <table className="w-full min-w-[880px] border-collapse text-sm">
+        <table className="w-full min-w-[640px] border-collapse text-sm">
           <colgroup>
             <col className="w-[7.5rem]" />
             {WEEKDAY_KEYS.map((k) => (
@@ -123,7 +117,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
             <tr className="bg-zinc-200 dark:bg-zinc-800">
               <th className={nameHeaderThCls}>인물</th>
               {WEEKDAY_KEYS.map((k) => (
-                <th key={k} className={k === "sat" || k === "sun" ? weekendThCls : thCls}>
+                <th key={k} className={thCls}>
                   {WEEKDAY_LABELS[k]}
                 </th>
               ))}
@@ -154,7 +148,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
                     />
                   </td>
                   {WEEKDAY_KEYS.map((day) => (
-                    <td key={day} className={weekdayTdCls(day)}>
+                    <td key={day} className={weekdayTdCls()}>
                       <textarea
                         spellCheck={false}
                         value={row.cells[day] ?? ""}

@@ -658,7 +658,7 @@ export function WeeklyAgendaClient() {
       <div className="border-t border-zinc-200 pt-6 dark:border-zinc-700">
         <h2 className="mb-1 text-sm font-semibold text-zinc-800 dark:text-zinc-100">인물별 주간 표</h2>
         <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-          행은 인물, 열은 월~일입니다. 아래 <strong className="font-medium text-zinc-700 dark:text-zinc-300">기간 탭</strong>
+          행은 인물, 열은 월~금입니다. 아래 <strong className="font-medium text-zinc-700 dark:text-zinc-300">기간 탭</strong>
           과 함께 저장·전환됩니다.
         </p>
         <WeeklyAgendaPersonGrid grid={state.personGrid} onChange={updatePersonGrid} />

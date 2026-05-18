@@ -27,9 +27,9 @@ export type AgendaRow = {
   urgent: boolean;
 };
 
-export type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri";
 
-export const WEEKDAY_KEYS: WeekdayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+export const WEEKDAY_KEYS: WeekdayKey[] = ["mon", "tue", "wed", "thu", "fri"];
 
 export const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
   mon: "월",
@@ -37,11 +37,9 @@ export const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
   wed: "수",
   thu: "목",
   fri: "금",
-  sat: "토",
-  sun: "일",
 };
 
-/** 인물별 주간 표 — 행=인물, 열=월~일 */
+/** 인물별 주간 표 — 행=인물, 열=월~금 */
 export type PersonGridRow = {
   id: string;
   name: string;
@@ -89,7 +87,7 @@ function newId(): string {
 }
 
 export function emptyWeekdayCells(): Record<WeekdayKey, string> {
-  return { mon: "", tue: "", wed: "", thu: "", fri: "", sat: "", sun: "" };
+  return { mon: "", tue: "", wed: "", thu: "", fri: "" };
 }
 
 export function createDefaultPersonGrid(): PersonGridState {
@@ -103,12 +101,17 @@ export function createPersonRow(order: number): PersonGridRow {
 export function ensurePersonGrid(state: WeeklyAgendaState): WeeklyAgendaState {
   const pg = state.personGrid;
   if (pg && Array.isArray(pg.rows) && typeof pg.title === "string") {
-    const rows = pg.rows.map((r, i) => ({
-      id: typeof r.id === "string" ? r.id : newId(),
-      name: typeof r.name === "string" ? r.name : "",
-      order: typeof r.order === "number" ? r.order : i,
-      cells: { ...emptyWeekdayCells(), ...(r.cells ?? {}) },
-    }));
+    const rows = pg.rows.map((r, i) => {
+      const merged = { ...emptyWeekdayCells(), ...(r.cells ?? {}) };
+      const cells = emptyWeekdayCells();
+      for (const k of WEEKDAY_KEYS) cells[k] = merged[k] ?? "";
+      return {
+        id: typeof r.id === "string" ? r.id : newId(),
+        name: typeof r.name === "string" ? r.name : "",
+        order: typeof r.order === "number" ? r.order : i,
+        cells,
+      };
+    });
     return { ...state, personGrid: { title: pg.title, rows } };
   }
   return { ...state, personGrid: createDefaultPersonGrid() };
