@@ -74,6 +74,7 @@ from repositories.memos_repo import delete_memo as delete_memo_supabase
 from repositories.memos_repo import list_memos as list_memos_supabase
 from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
+from repositories import snapshot_repo
 from services.google_uploads_sheets import (
     advance_upload_next_episode,
     create_upload_item_in_sheet,
@@ -142,6 +143,15 @@ app.add_middleware(
 def get_platform_master() -> MasterTabItemsResponse:
     """플랫폼정리 등 GOOGLE_PLATFORM_TAB 탭 전체(헤더 1행 = 키)."""
     settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            items = platform_rows_repo.list_platform_master_slim(settings, limit=300)
+            return MasterTabItemsResponse(items=items)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
     try:
         items = fetch_master_tab_keyed_rows(settings, settings.google_platform_tab)
         return MasterTabItemsResponse(items=items)
@@ -226,6 +236,54 @@ def post_works_master_update(body: dict[str, Any] = Body(...)):
         raise HTTPException(status_code=404, detail=str(e)) from e
     except SheetsParseError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get("/hub/calendar-window")
+def get_hub_calendar_window(from_ymd: str, to_ymd: str) -> dict[str, Any]:
+    settings = load_settings()
+    try:
+        return snapshot_repo.fetch_calendar_window(settings, from_ymd, to_ymd)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get("/hub/chatbot-context")
+def get_hub_chatbot_context() -> dict[str, Any]:
+    settings = load_settings()
+    try:
+        return snapshot_repo.fetch_chatbot_context(settings)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get("/hub/platform-matrix-bootstrap")
+def get_hub_platform_matrix_bootstrap() -> dict[str, Any]:
+    settings = load_settings()
+    try:
+        return snapshot_repo.fetch_platform_matrix_bootstrap(settings)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except SheetsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -527,11 +585,12 @@ def post_uploads_next_episode(body: UploadNextEpisodeRequest) -> UploadNextEpiso
 
 
 @app.get("/memos", response_model=list[MemoItem])
-def get_memos() -> list[MemoItem]:
+def get_memos(limit: int = 250) -> list[MemoItem]:
     settings = load_settings()
+    cap = max(1, min(int(limit), 500))
     if settings.data_backend == "supabase":
         try:
-            return list_memos_supabase(settings)
+            return list_memos_supabase(settings, limit=cap, order_desc=True)
         except SupabaseConfigurationError as e:
             raise HTTPException(status_code=503, detail=str(e)) from e
         except SupabaseRequestError as e:
@@ -899,6 +958,27 @@ def post_upload_rows_delete(body: dict[str, Any] = Body(...)):
 
 
 # ── 플랫폼정리 탭 ────────────────────────────────────────────────────
+@app.get("/platform-rows/lookup")
+def get_platform_rows_lookup(limit: int = 400):
+    settings = load_settings()
+    cap = max(1, min(int(limit), 800))
+    if settings.data_backend == "supabase":
+        try:
+            return platform_rows_repo.list_platform_rows_lookup(settings, limit=cap)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+    try:
+        rows = fetch_platforms(settings)
+        return rows[:cap]
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @app.get("/platform-rows")
 def get_platform_rows():
     settings = load_settings()

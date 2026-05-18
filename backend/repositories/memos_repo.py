@@ -85,14 +85,23 @@ def _row_to_memo_item(row: dict[str, Any]) -> MemoItem | None:
     )
 
 
-def list_memos(settings: Settings) -> list[MemoItem]:
+def list_memos(
+    settings: Settings,
+    *,
+    limit: int | None = 250,
+    order_desc: bool = True,
+) -> list[MemoItem]:
     cli = _client(settings)
+    order = "memo_at.desc,sheet_row.desc" if order_desc else "sheet_row.asc"
+    params: dict[str, str] = {
+        "select": "id,legacy_id,sheet_row,content,memo_at,memo_at_raw,category",
+        "order": order,
+    }
+    if limit is not None and limit > 0:
+        params["limit"] = str(int(limit))
     rows = cli.get_json(
         "/memos",
-        params={
-            "select": "id,legacy_id,sheet_row,content,memo_at,memo_at_raw,category",
-            "order": "sheet_row.desc.nullslast,memo_at.desc",
-        },
+        params=params,
     )
     if not isinstance(rows, list):
         return []

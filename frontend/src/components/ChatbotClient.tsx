@@ -1,18 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { HubLoadState } from "@/lib/controlRoomHub";
 import type { ChecklistItem } from "@/lib/checklist";
+import type { ChatbotContextPayload } from "@/lib/chatbotContext";
 import type { MemoItem } from "@/lib/memos";
-import { useControlRoomHub } from "@/hooks/useControlRoomHub";
+import { useChatbotContext } from "@/hooks/useChatbotContext";
 
 type ChatMessage =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string }
   | { role: "error"; text: string };
 
-function trimForOpsAsk(hub: Extract<HubLoadState, { kind: "ready" }>) {
-  const trimPlatform = hub.platformMaster.slice(0, 50).map((p) => ({
+function trimForOpsAsk(ctx: ChatbotContextPayload) {
+  const trimPlatform = ctx.platformMaster.slice(0, 50).map((p) => ({
     회사명: p["회사명"],
     플랫폼명: p["플랫폼명"],
     현재단계: p["현재단계"],
@@ -24,7 +24,7 @@ function trimForOpsAsk(hub: Extract<HubLoadState, { kind: "ready" }>) {
     다음액션: p["다음액션"],
   }));
 
-  const trimWorks = hub.worksMaster.slice(0, 50).map((w) => ({
+  const trimWorks = ctx.worksMaster.slice(0, 50).map((w) => ({
     작품명: w["작품명"] ?? "",
     글작가: w["글작가"] ?? "",
     그림작가: w["그림작가"] ?? "",
@@ -37,12 +37,12 @@ function trimForOpsAsk(hub: Extract<HubLoadState, { kind: "ready" }>) {
     "첫 공급 일정": w["첫 공급 일정"] ?? "",
   }));
 
-  const trimMemos = hub.memos.slice(0, 30).map((m: MemoItem) => ({
+  const trimMemos = ctx.memos.slice(0, 30).map((m: MemoItem) => ({
     content: m.content,
     category: m.category,
   }));
 
-  const trimTasks = hub.allTasks.slice(0, 80).map((t) => ({
+  const trimTasks = ctx.tasks.slice(0, 80).map((t) => ({
     업무명: t["업무명"] ?? "",
     마감일: t["마감일"] ?? "",
     완료: t["완료"] ?? "",
@@ -54,7 +54,7 @@ function trimForOpsAsk(hub: Extract<HubLoadState, { kind: "ready" }>) {
     메모: t["메모"] ?? "",
   }));
 
-  const trimChecklist = hub.checklist.slice(0, 100).map((c: ChecklistItem) => ({
+  const trimChecklist = ctx.checklist.slice(0, 100).map((c: ChecklistItem) => ({
     title: c.title,
     due_date: c.due_date ?? null,
     priority: c.priority ?? null,
@@ -145,7 +145,7 @@ const QUICK_PROMPTS = [
 ];
 
 export function ChatbotClient() {
-  const hub = useControlRoomHub();
+  const ctxState = useChatbotContext();
   const sendingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -161,7 +161,7 @@ export function ChatbotClient() {
   const send = useCallback(async (raw: string) => {
     const q = raw.trim();
     if (!q || sendingRef.current) return;
-    if (hub.kind !== "ready") return;
+    if (ctxState.kind !== "ready") return;
 
     sendingRef.current = true;
     setMessages((m) => [...m, { role: "user", text: q }]);
@@ -169,7 +169,7 @@ export function ChatbotClient() {
     setSending(true);
 
     try {
-      const payload = trimForOpsAsk(hub);
+      const payload = trimForOpsAsk(ctxState.data);
       const res = await fetch("/api/ops/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -208,13 +208,13 @@ export function ChatbotClient() {
       sendingRef.current = false;
       setSending(false);
     }
-  }, [hub]);
+  }, [ctxState]);
 
   const busyBanner =
-    hub.kind === "loading" ? (
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">데이터를 불러오는 중이면 잠시만 기다려 주세요…</p>
-    ) : hub.kind === "error" ? (
-      <p className="text-xs text-red-600 dark:text-red-400">{hub.message}</p>
+    ctxState.kind === "loading" ? (
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">질문용 데이터를 불러오는 중…</p>
+    ) : ctxState.kind === "error" ? (
+      <p className="text-xs text-red-600 dark:text-red-400">{ctxState.message}</p>
     ) : null;
 
   return (
@@ -227,7 +227,7 @@ export function ChatbotClient() {
       {busyBanner ? <div className="shrink-0 border-b border-zinc-100 px-4 py-2 dark:border-zinc-800">{busyBanner}</div> : null}
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-white px-4 py-4 dark:bg-zinc-950/50">
-        {messages.length === 0 && hub.kind === "ready" ? (
+        {messages.length === 0 && ctxState.kind === "ready" ? (
           <div className="space-y-3">
             <p className="text-xs text-zinc-500 dark:text-zinc-400">예시 질문을 눌러 보세요.</p>
             <div className="flex flex-col items-end gap-2">
@@ -290,13 +290,13 @@ export function ChatbotClient() {
               }
             }}
             placeholder="데이터에 대해 질문하세요… (Enter 전송, Shift+Enter 줄바꿈)"
-            disabled={hub.kind !== "ready" || sending}
+            disabled={ctxState.kind !== "ready" || sending}
             className="min-h-[3rem] flex-1 resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-950 dark:focus:ring-zinc-600"
           />
           <button
             type="button"
             onClick={() => void send(draft)}
-            disabled={hub.kind !== "ready" || sending || !draft.trim()}
+            disabled={ctxState.kind !== "ready" || sending || !draft.trim()}
             className="self-end rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
           >
             전송

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createPlatformRow,
-  fetchPlatformRowsList,
+  fetchPlatformRowsLookup,
   findPlatformRowByLabel,
   PLATFORM_MATRIX_CREATE_FIELDS,
   PLATFORM_MATRIX_EDIT_FIELDS,
@@ -11,13 +11,13 @@ import {
   updatePlatformRow,
   type PlatformRowRecord,
 } from "@/lib/platformRowsMutate";
-import { fetchPlatformMaster } from "@/lib/platformMaster";
+import { fetchPlatformMatrixBootstrap } from "@/lib/platformMatrixBootstrap";
 import {
   createWorksMasterRow,
   updateWorksMasterRow,
   WORK_MATRIX_FIELDS,
 } from "@/lib/worksMasterMutate";
-import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
+import type { WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
   clearMatrixColumnOrder,
@@ -119,24 +119,17 @@ export function PlatformWorkMatrixClient() {
     void (async () => {
       setLoad({ kind: "loading" });
       try {
-        const [wm, pm, pr] = await Promise.all([
-          fetchWorksMaster(),
-          fetchPlatformMaster(),
-          fetchPlatformRowsList().catch(() => [] as PlatformRowRecord[]),
-        ]);
-        if (!wm.ok && !pm.ok) {
-          setLoad({ kind: "error", message: "작품정리·플랫폼정리를 불러오지 못했습니다." });
+        const boot = await fetchPlatformMatrixBootstrap();
+        if (!boot.ok) {
+          setLoad({ kind: "error", message: boot.message });
           setModel(null);
           setPlatformRows([]);
           setWorksItems([]);
           return;
         }
-        setWorksItems(wm.ok ? wm.items : []);
-        setPlatformRows(pr);
-        const m = buildPlatformWorkMatrix(
-          wm.ok ? wm.items : [],
-          pm.ok ? pm.items : [],
-        );
+        setWorksItems(boot.data.worksMaster);
+        setPlatformRows([]);
+        const m = buildPlatformWorkMatrix(boot.data.worksMaster, boot.data.platformMaster);
         let emptyHint = "";
         if (m.columns.length === 0) {
           emptyHint = "플랫폼 열이 없습니다. 플랫폼정리에 플랫폼명(또는 회사명)이 있는지 확인하세요.";
@@ -187,18 +180,30 @@ export function PlatformWorkMatrixClient() {
   };
 
   const openPlatformEdit = (label: string) => {
-    const row = findPlatformRowByLabel(platformRows, label);
-    if (!row) {
-      setActionError(
-        `「${label}」에 해당하는 플랫폼정리 행을 찾지 못했습니다. 플랫폼정리 메뉴에서 먼저 추가하세요.`,
-      );
-      return;
-    }
-    setActionError(null);
-    setPlatformEditLabel(label);
-    setPlatformEditId(row.id);
-    setPlatformEditRow(row);
-    setPlatformForm(platformRowToEditForm(row));
+    void (async () => {
+      setActionError(null);
+      let rows = platformRows;
+      if (rows.length === 0) {
+        try {
+          rows = await fetchPlatformRowsLookup();
+          setPlatformRows(rows);
+        } catch {
+          setActionError("플랫폼정리 행을 불러오지 못했습니다. 잠시 후 다시 시도하세요.");
+          return;
+        }
+      }
+      const row = findPlatformRowByLabel(rows, label);
+      if (!row) {
+        setActionError(
+          `「${label}」에 해당하는 플랫폼정리 행을 찾지 못했습니다. 플랫폼정리 메뉴에서 먼저 추가하세요.`,
+        );
+        return;
+      }
+      setPlatformEditLabel(label);
+      setPlatformEditId(row.id);
+      setPlatformEditRow(row);
+      setPlatformForm(platformRowToEditForm(row));
+    })();
   };
 
   const handleWorkSave = async () => {
@@ -404,12 +409,14 @@ export function PlatformWorkMatrixClient() {
                     scope="row"
                     className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-2 text-left dark:border-zinc-700 dark:bg-zinc-950"
                   >
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">{row.title}</span>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-50" title={row.title}>
+                        {row.title}
+                      </span>
                       <button
                         type="button"
                         onClick={() => openWorkEdit(row.title)}
-                        className="w-fit rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        className="shrink-0 rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
                       >
                         편집
                       </button>

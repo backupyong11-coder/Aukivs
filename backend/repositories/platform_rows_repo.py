@@ -168,6 +168,78 @@ def _api_dict(r: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_SELECT_MASTER_SLIM = (
+    "id,legacy_id,sheet_row,company_name,platform_name,current_stage,"
+    "last_situation,next_action,priority,last_updated_at,last_updated_at_raw,note"
+)
+
+
+def list_platform_master_slim(
+    settings: Settings, *, limit: int = 200
+) -> list[dict[str, Any]]:
+    """GET /platform-master · 플랫폼 매트릭스용 — platform_rows에서 요약만."""
+    rows = _client(settings).get_json(
+        "/platform_rows",
+        params={
+            "select": _SELECT_MASTER_SLIM,
+            "order": "last_updated_at.desc.nullslast",
+            "limit": str(max(1, int(limit))),
+        },
+    )
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = _api_dict(r)
+        name = (d.get("플랫폼명") or d.get("회사명") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(
+            {
+                "회사명": d.get("회사명") or "",
+                "플랫폼명": d.get("플랫폼명") or "",
+                "현재단계": d.get("현재단계") or "",
+                "마지막상황": d.get("마지막상황") or d.get("마지막 상황") or "",
+                "다음액션": d.get("다음액션") or "",
+                "우선순위": d.get("우선순위") or "",
+                "비고": d.get("비고") or "",
+            }
+        )
+    return out
+
+
+_SELECT_LOOKUP = "id,legacy_id,sheet_row,company_name,platform_name,last_situation,waiting_reason,next_action,priority,note,category,current_stage"
+
+
+def list_platform_rows_lookup(
+    settings: Settings, *, limit: int = 400
+) -> list[dict[str, Any]]:
+    """편집 모달용 — 전체 행보다 가벼운 조회."""
+    rows = _client(settings).get_json(
+        "/platform_rows",
+        params={
+            "select": _SELECT_LOOKUP,
+            "order": "last_updated_at.desc.nullslast",
+            "limit": str(max(1, int(limit))),
+        },
+    )
+    if not isinstance(rows, list):
+        raise SheetsParseError("Supabase platform_rows 응답 형식 오류")
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = _api_dict(r)
+        if not str(d.get("회사명") or "").strip():
+            continue
+        out.append(d)
+    return out
+
+
 def list_platform_rows(settings: Settings) -> list[dict[str, Any]]:
     rows = _client(settings).get_json(
         "/platform_rows",

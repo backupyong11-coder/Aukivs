@@ -46,6 +46,15 @@ _SELECT = (
     "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
 )
 
+_SELECT_MATRIX = (
+    "title,writer,artist,launched_sites,active_sites,sites_to_upload,"
+    "pending_sites,contracted_sites,first_supply_schedule"
+)
+
+_SELECT_SLIM = (
+    "title,writer,artist,current_status,active_sites,launched_sites,first_supply_schedule"
+)
+
 
 def _client(settings: Settings) -> SupabaseRestClient:
     return SupabaseRestClient(
@@ -115,17 +124,7 @@ def _row_to_master_dict(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
-    rows = _client(settings).get_json(
-        "/works",
-        params={
-            "select": _SELECT,
-            "order": "sheet_row.asc.nullslast,title.asc",
-        },
-    )
-    if not isinstance(rows, list):
-        raise SheetsParseError("Supabase works 응답 형식 오류")
-
+def _rows_to_master_items(rows: list[Any], *, full: bool) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen_titles: set[str] = set()
     for r in rows:
@@ -138,7 +137,106 @@ def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
             continue
         seen_titles.add(tkey)
         try:
-            items.append(_row_to_master_dict(r))
+            if full:
+                items.append(_row_to_master_dict(r))
+            else:
+                items.append(_row_to_master_dict_slim(r))
+        except ValueError:
+            continue
+    return items
+
+
+def _row_to_master_dict_slim(row: dict[str, Any]) -> dict[str, Any]:
+    """챗봇·경량 목록용 — 사이트·작품명 위주."""
+    title = str(row.get("title") or "").strip()
+    if not title:
+        raise ValueError("empty title")
+    out: dict[str, Any] = {"작품명": title}
+    slim_map = (
+        ("글작가", "writer"),
+        ("그림작가", "artist"),
+        ("현재상태", "current_status"),
+        ("연재중인 사이트", "active_sites"),
+        ("런칭된 사이트", "launched_sites"),
+        ("첫 공급 일정", "first_supply_schedule"),
+    )
+    for hdr, col in slim_map:
+        out[hdr] = _api_cell(row.get(col))
+    return out
+
+
+def _row_to_master_dict_matrix(row: dict[str, Any]) -> dict[str, Any]:
+    title = str(row.get("title") or "").strip()
+    if not title:
+        raise ValueError("empty title")
+    out: dict[str, Any] = {"작품명": title}
+    for hdr, col in _WORKS_HEADER_ORDER:
+        if col in (
+            "title",
+            "writer",
+            "artist",
+            "launched_sites",
+            "active_sites",
+            "sites_to_upload",
+            "pending_sites",
+            "contracted_sites",
+            "first_supply_schedule",
+        ):
+            if col == "title":
+                continue
+            out[hdr] = _api_cell(row.get(col))
+    return out
+
+
+def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
+    rows = _client(settings).get_json(
+        "/works",
+        params={
+            "select": _SELECT,
+            "order": "sheet_row.asc.nullslast,title.asc",
+        },
+    )
+    if not isinstance(rows, list):
+        raise SheetsParseError("Supabase works 응답 형식 오류")
+    return _rows_to_master_items(rows, full=True)
+
+
+def list_works_master_slim(settings: Settings, *, limit: int = 60) -> list[dict[str, Any]]:
+    rows = _client(settings).get_json(
+        "/works",
+        params={
+            "select": _SELECT_SLIM,
+            "order": "title.asc",
+            "limit": str(max(1, int(limit))),
+        },
+    )
+    if not isinstance(rows, list):
+        return []
+    return _rows_to_master_items(rows, full=False)
+
+
+def list_works_master_for_matrix(settings: Settings) -> list[dict[str, Any]]:
+    rows = _client(settings).get_json(
+        "/works",
+        params={
+            "select": _SELECT_MATRIX,
+            "order": "title.asc",
+            "limit": "800",
+        },
+    )
+    if not isinstance(rows, list):
+        return []
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        tkey = str(r.get("title") or "").strip()
+        if not tkey or tkey in seen:
+            continue
+        seen.add(tkey)
+        try:
+            items.append(_row_to_master_dict_matrix(r))
         except ValueError:
             continue
     return items

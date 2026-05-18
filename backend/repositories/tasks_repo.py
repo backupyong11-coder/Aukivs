@@ -235,10 +235,20 @@ def _next_sheet_row(cli: SupabaseRestClient) -> int:
 
 
 def list_tasks(settings: Settings) -> list[dict[str, Any]]:
+    return list_tasks_limited(settings, limit=None)
+
+
+def list_tasks_limited(settings: Settings, *, limit: int | None = None) -> list[dict[str, Any]]:
     cli = _client(settings)
+    params: dict[str, str] = {
+        "select": _SELECT_TASKS,
+        "order": "sheet_row.asc.nullslast",
+    }
+    if limit is not None and limit > 0:
+        params["limit"] = str(int(limit))
     rows = cli.get_json(
         "/tasks",
-        params={"select": _SELECT_TASKS, "order": "sheet_row.asc.nullslast"},
+        params=params,
     )
     if not isinstance(rows, list):
         return []
@@ -360,6 +370,19 @@ def delete_task(settings: Settings, task_id: str) -> None:
     if not tid:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
     cli.delete_json("/tasks", params={"id": f"eq.{tid}"})
+
+
+def checklist_item_to_payload(item: ChecklistItem) -> dict[str, Any]:
+    return {
+        "title": item.title,
+        "due_date": item.due_date,
+        "priority": item.priority,
+        "platform": item.platform,
+        "category": item.category,
+        "work_status": item.work_status,
+        "note": item.note,
+        "memo": item.memo,
+    }
 
 
 def fetch_checklist_from_supabase(settings: Settings) -> list[ChecklistItem]:

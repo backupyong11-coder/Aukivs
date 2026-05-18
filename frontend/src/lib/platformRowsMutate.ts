@@ -79,6 +79,12 @@ export async function fetchPlatformRowsList(): Promise<PlatformRowRecord[]> {
   return Array.isArray(data) ? (data as PlatformRowRecord[]) : [];
 }
 
+/** 편집 모달용 — 전체 /platform-rows 대신 경량 lookup */
+export async function fetchPlatformRowsLookup(): Promise<PlatformRowRecord[]> {
+  const data = await apiFetch("/platform-rows/lookup?limit=400");
+  return Array.isArray(data) ? (data as PlatformRowRecord[]) : [];
+}
+
 export async function createPlatformRow(
   fields: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; message: string }> {

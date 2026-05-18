@@ -83,10 +83,12 @@ function parseMemoItems(raw: unknown): MemoItem[] | null {
 
 export async function fetchMemos(
   init?: RequestInit,
+  limit = 250,
 ): Promise<FetchMemosResult> {
   const base = getApiBaseUrl();
+  const cap = Math.max(1, Math.min(limit, 500));
   try {
-    const res = await fetch(`${base}/memos`, {
+    const res = await fetch(`${base}/memos?limit=${cap}`, {
       ...init,
       headers: {
         Accept: "application/json",

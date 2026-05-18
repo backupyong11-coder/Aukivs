@@ -3,8 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { DayAgendaDetail } from "@/components/DayAgendaDetail";
-import { useControlRoomHub } from "@/hooks/useControlRoomHub";
-import type { HubLoadState } from "@/lib/controlRoomHub";
+import { useCalendarWindow } from "@/hooks/useCalendarWindow";
+import type { CalendarWindowState } from "@/hooks/useCalendarWindow";
+import {
+  calendarRangeForDay,
+  calendarRangeForMonth,
+  calendarRangeForWeek,
+  invalidateCalendarWindowCache,
+} from "@/lib/calendarWindow";
 import { formatCalendarTaskTitle } from "@/lib/formatCalendarTaskTitle";
 import { isCalendarRestDay } from "@/lib/calendarRestDay";
 import {
@@ -21,23 +27,25 @@ type CalendarView = "month" | "week" | "day";
 
 type YmdParts = { y: number; m: number; d: number };
 
-function activityDotsMap(hub: HubLoadState): Map<string, { uploads: number; tasks: number; launches: number }> {
-  if (hub.kind !== "ready") return new Map();
+function activityDotsMap(
+  win: CalendarWindowState,
+): Map<string, { uploads: number; tasks: number; launches: number }> {
+  if (win.kind !== "ready") return new Map();
   const map = new Map<string, { uploads: number; tasks: number; launches: number }>();
   const def = () => ({ uploads: 0, tasks: 0, launches: 0 });
-  for (const it of hub.uploadRows) {
+  for (const it of win.data.uploadRows) {
     const ymd = normalizeSheetDateYmd(it["업로드일"] ?? "");
     if (!ymd) continue;
     const cur = map.get(ymd) ?? def();
     map.set(ymd, { ...cur, uploads: cur.uploads + 1 });
   }
-  for (const it of hub.allTasks) {
+  for (const it of win.data.allTasks) {
     const ymd = normalizeSheetDateYmd(it["마감일"] ?? "");
     if (!ymd) continue;
     const cur = map.get(ymd) ?? def();
     map.set(ymd, { ...cur, tasks: cur.tasks + 1 });
   }
-  for (const it of hub.uploadRows) {
+  for (const it of win.data.uploadRows) {
     const ymd = normalizeSheetDateYmd(it["런칭일"] ?? "");
     if (!ymd) continue;
     const cur = map.get(ymd) ?? def();
@@ -58,7 +66,6 @@ function weekdayShortKo(y: number, m: number, d: number): string {
 
 export function FullCalendarClient() {
   const [refreshKey, setRefreshKey] = useState(0);
-  const hub = useControlRoomHub(refreshKey);
   const todayParts = seoulYmdPartsNow();
   const todayYmd = ymdFromParts(todayParts.year, todayParts.month, todayParts.day);
 
@@ -70,8 +77,15 @@ export function FullCalendarClient() {
   }));
   const [selectedYmd, setSelectedYmd] = useState<string>(todayYmd);
 
-  const activityMap = useMemo(() => activityDotsMap(hub), [hub]);
-  const ready = hub.kind === "ready";
+  const range = useMemo(() => {
+    if (view === "month") return calendarRangeForMonth(cursor.y, cursor.m);
+    if (view === "week") return calendarRangeForWeek(cursor.y, cursor.m, cursor.d);
+    return calendarRangeForDay(ymdFromParts(cursor.y, cursor.m, cursor.d));
+  }, [view, cursor.y, cursor.m, cursor.d]);
+
+  const win = useCalendarWindow(range.from, range.to, refreshKey);
+  const activityMap = useMemo(() => activityDotsMap(win), [win]);
+  const ready = win.kind === "ready";
 
   const weekStart = sundayWeekStart(cursor.y, cursor.m, cursor.d);
   const weekDays = useMemo(
@@ -207,11 +221,14 @@ export function FullCalendarClient() {
           </button>
           <button
             type="button"
-            onClick={() => setRefreshKey((k) => k + 1)}
-            disabled={hub.kind === "loading"}
+            onClick={() => {
+              invalidateCalendarWindowCache(range.from, range.to);
+              setRefreshKey((k) => k + 1);
+            }}
+            disabled={win.kind === "loading"}
             className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
           >
-            {hub.kind === "loading" ? "불러오는 중…" : "새로고침"}
+            {win.kind === "loading" ? "불러오는 중…" : "새로고침"}
           </button>
         </div>
       </div>
@@ -222,24 +239,13 @@ export function FullCalendarClient() {
         <span className="font-medium text-zinc-600 dark:text-zinc-300">회색 칸은 토·일·공휴일·대체공휴일</span>입니다.
       </p>
 
-      {hub.kind === "error" && (
+      {win.kind === "error" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200" role="alert">
-          {hub.message}
+          {win.message}
         </div>
       )}
 
-      {ready && hub.briefingLoadError ? (
-        <div
-          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
-          role="status"
-        >
-          <p className="font-medium">관제실 브리핑만 실패했습니다</p>
-          <p className="mt-1 text-xs opacity-90">{hub.briefingLoadError}</p>
-          <p className="mt-1 text-xs text-amber-900/85 dark:text-amber-200/85">캘린더 일정(업무·업로드·메모 등)은 그대로 불러옵니다.</p>
-        </div>
-      ) : null}
-
-      {hub.kind === "loading" && (
+      {win.kind === "loading" && (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400" role="status">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
           데이터 불러오는 중…
@@ -330,11 +336,11 @@ export function FullCalendarClient() {
               const isToday = ymd === todayYmd;
               const sel = ymd === selectedYmd;
               const rest = isCalendarRestDay(y, m, d);
-              const uploads = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd);
-              const tasks = hub.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
-              const launches = hub.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
-              const memos = hub.memos.filter((mo) => normalizeSheetDateYmd(mo.memo_date ?? "") === ymd);
-              const works = hub.worksMaster.filter((w) => worksFirstSupplyYmd(w) === ymd);
+              const uploads = win.data.uploadRows.filter((it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd);
+              const tasks = win.data.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
+              const launches = win.data.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
+              const memos = win.data.memos.filter((mo) => normalizeSheetDateYmd(mo.memo_date ?? "") === ymd);
+              const works = win.data.worksMaster.filter((w) => worksFirstSupplyYmd(w) === ymd);
               return (
                 <div
                   key={ymd}
@@ -507,10 +513,10 @@ export function FullCalendarClient() {
             </div>
             <DayAgendaDetail
               ymd={ymdFromParts(cursor.y, cursor.m, cursor.d)}
-              uploadRows={hub.uploadRows}
-              allTasks={hub.allTasks}
-              memos={hub.memos}
-              worksMaster={hub.worksMaster}
+              uploadRows={win.data.uploadRows}
+              allTasks={win.data.allTasks}
+              memos={win.data.memos}
+              worksMaster={win.data.worksMaster}
             />
           </section>
         </div>
@@ -527,10 +533,10 @@ export function FullCalendarClient() {
           <div className="mt-4">
             <DayAgendaDetail
               ymd={selectedYmd}
-              uploadRows={hub.uploadRows}
-              allTasks={hub.allTasks}
-              memos={hub.memos}
-              worksMaster={hub.worksMaster}
+              uploadRows={win.data.uploadRows}
+              allTasks={win.data.allTasks}
+              memos={win.data.memos}
+              worksMaster={win.data.worksMaster}
             />
           </div>
         </section>
