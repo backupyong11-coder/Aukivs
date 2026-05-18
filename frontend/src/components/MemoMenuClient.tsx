@@ -8,16 +8,19 @@ import {
   updateMemo,
   type MemoItem,
 } from "@/lib/memos";
+import {
+  applyMemoMenuOrder,
+  loadMemoMenuOrder,
+  memoRowKey,
+  saveMemoMenuOrder,
+  swapMemoOrderKeys,
+} from "@/lib/memoMenuOrder";
 
 function compareMemoNewestFirst(a: MemoItem, b: MemoItem): number {
   const da = a.memo_date.trim();
   const db = b.memo_date.trim();
   if (da !== db) return db.localeCompare(da, "ko");
   return b.sheet_row - a.sheet_row;
-}
-
-function memoRowKey(m: MemoItem): string {
-  return m.id ? `id:${m.id}` : `row:${m.sheet_row}`;
 }
 
 const inputCls =
@@ -41,7 +44,8 @@ export function MemoMenuClient() {
     try {
       const r = await fetchMemos();
       if (r.ok) {
-        setItems([...r.items].sort(compareMemoNewestFirst));
+        const sorted = [...r.items].sort(compareMemoNewestFirst);
+        setItems(applyMemoMenuOrder(sorted, loadMemoMenuOrder()));
         setMessage(null);
       } else {
         setItems([]);
@@ -113,6 +117,17 @@ export function MemoMenuClient() {
     } finally {
       setRowBusy(null);
     }
+  };
+
+  const moveMemoRow = (index: number, dir: -1 | 1) => {
+    setItems((prev) => {
+      const keys = prev.map(memoRowKey);
+      const nextKeys = swapMemoOrderKeys(keys, index, dir);
+      if (nextKeys === keys) return prev;
+      saveMemoMenuOrder(nextKeys);
+      const byKey = new Map(prev.map((m) => [memoRowKey(m), m]));
+      return nextKeys.map((k) => byKey.get(k)!).filter(Boolean);
+    });
   };
 
   const onDeleteRow = async (m: MemoItem) => {
@@ -221,7 +236,7 @@ export function MemoMenuClient() {
               <th className="border border-zinc-400 px-2 py-2 text-left text-xs font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                 내용
               </th>
-              <th className="w-44 border border-zinc-400 px-2 py-2 text-center text-xs font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
+              <th className="w-52 border border-zinc-400 px-2 py-2 text-center text-xs font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                 작업
               </th>
             </tr>
@@ -308,7 +323,27 @@ export function MemoMenuClient() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-center justify-center gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busy || editingKey !== null || index === 0}
+                            onClick={() => moveMemoRow(index, -1)}
+                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                            title="위로"
+                            aria-label="행 위로"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy || editingKey !== null || index === items.length - 1}
+                            onClick={() => moveMemoRow(index, 1)}
+                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                            title="아래로"
+                            aria-label="행 아래로"
+                          >
+                            ↓
+                          </button>
                           <button
                             type="button"
                             disabled={busy || editingKey !== null}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from config import Settings
+from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 from services.supabase_client import SupabaseRestClient
 from services.sheets_errors import SheetsParseError
 
@@ -141,3 +142,91 @@ def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
         except ValueError:
             continue
     return items
+
+
+_HEADER_TO_COLUMN: dict[str, str] = {h: c for h, c in _WORKS_HEADER_ORDER}
+
+
+def _next_sheet_row(settings: Settings) -> int:
+    rows = _client(settings).get_json(
+        "/works",
+        params={"select": "sheet_row", "order": "sheet_row.desc", "limit": "1"},
+    )
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        n = rows[0].get("sheet_row")
+        if isinstance(n, int) and n >= 1:
+            return n + 1
+    return 2
+
+
+def _fields_to_db_patch(fields: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    patch: dict[str, Any] = {}
+    extra: dict[str, Any] = {}
+    for k, v in fields.items():
+        kr = str(k).strip()
+        if not kr or kr == "id":
+            continue
+        s = "" if v is None else str(v).strip()
+        col = _HEADER_TO_COLUMN.get(kr)
+        if col == "production_done":
+            patch[col] = s.upper() in ("TRUE", "1", "YES", "Y", "O", "✓")
+        elif col:
+            patch[col] = s if s else None
+        elif s:
+            extra[kr] = s
+    return patch, extra
+
+
+def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
+    rows = _client(settings).get_json(
+        "/works",
+        params={"select": _SELECT, "title": f"eq.{title}", "limit": "1"},
+    )
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {title}")
+    return rows[0]
+
+
+def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
+    title = str(fields.get("작품명", "")).strip()
+    if not title:
+        raise SheetsParseError("[파싱] 작품명이 비어 있습니다.")
+    patch, extra = _fields_to_db_patch(fields)
+    patch["title"] = title
+    patch["extra"] = extra
+    n = _next_sheet_row(settings)
+    patch["sheet_row"] = n
+    rows = _client(settings).post_json(
+        "/works", patch, prefer="return=representation"
+    )
+    if not isinstance(rows, list) or not rows:
+        raise SheetsParseError("Supabase works.create 응답 없음")
+    return _row_to_master_dict(rows[0])
+
+
+def update_works_master_row(
+    settings: Settings, original_title: str, fields: dict[str, Any]
+) -> None:
+    orig = original_title.strip()
+    if not orig:
+        raise SheetsParseError("[파싱] 원본 작품명이 비어 있습니다.")
+    current = _get_by_title(settings, orig)
+    row_id = current.get("id")
+    if not row_id:
+        raise SheetsNotFoundError(f"[찾을수없음] 작품 id 없음: {orig}")
+    patch, extra_in = _fields_to_db_patch(fields)
+    base_ex = current.get("extra") or {}
+    if not isinstance(base_ex, dict):
+        base_ex = {}
+    merged_ex = {**base_ex, **extra_in}
+    for k in list(merged_ex.keys()):
+        if k in fields and (fields[k] is None or str(fields[k]).strip() == ""):
+            merged_ex.pop(k, None)
+    if patch or extra_in or merged_ex != base_ex:
+        patch["extra"] = merged_ex
+    new_title = str(fields.get("작품명", "")).strip()
+    if new_title:
+        patch["title"] = new_title
+    if not patch:
+        return
+    _client(settings).patch_json("/works", params={"id": f"eq.{row_id}"}, body=patch)

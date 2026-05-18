@@ -1,8 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createPlatformRow,
+  fetchPlatformRowsList,
+  findPlatformRowByLabel,
+  PLATFORM_MATRIX_CREATE_FIELDS,
+  PLATFORM_MATRIX_EDIT_FIELDS,
+  platformRowToEditForm,
+  updatePlatformRow,
+  type PlatformRowRecord,
+} from "@/lib/platformRowsMutate";
 import { fetchPlatformMaster } from "@/lib/platformMaster";
-import { fetchWorksMaster } from "@/lib/worksMaster";
+import {
+  createWorksMasterRow,
+  updateWorksMasterRow,
+  WORK_MATRIX_FIELDS,
+} from "@/lib/worksMasterMutate";
+import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
   clearMatrixColumnOrder,
@@ -11,6 +26,25 @@ import {
   saveMatrixColumnOrder,
   type MatrixCellKind,
 } from "@/lib/platformWorkMatrix";
+
+const inputCls =
+  "mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100";
+
+function emptyForm(fields: { key: string }[]): Record<string, string> {
+  const f: Record<string, string> = {};
+  fields.forEach(({ key }) => {
+    f[key] = "";
+  });
+  return f;
+}
+
+function workToForm(w: WorksMasterItem): Record<string, string> {
+  const f = emptyForm(WORK_MATRIX_FIELDS);
+  WORK_MATRIX_FIELDS.forEach(({ key }) => {
+    f[key] = String(w[key] ?? "").trim();
+  });
+  return f;
+}
 
 type LoadState =
   | { kind: "loading" }
@@ -65,17 +99,40 @@ export function PlatformWorkMatrixClient() {
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
 
   const [model, setModel] = useState<ReturnType<typeof buildPlatformWorkMatrix> | null>(null);
+  const [platformRows, setPlatformRows] = useState<PlatformRowRecord[]>([]);
+  const [worksItems, setWorksItems] = useState<WorksMasterItem[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [workCreateOpen, setWorkCreateOpen] = useState(false);
+  const [workEditTitle, setWorkEditTitle] = useState<string | null>(null);
+  const [workForm, setWorkForm] = useState<Record<string, string>>(() => emptyForm(WORK_MATRIX_FIELDS));
+  const [workSaving, setWorkSaving] = useState(false);
+  const [platformCreateOpen, setPlatformCreateOpen] = useState(false);
+  const [platformEditLabel, setPlatformEditLabel] = useState<string | null>(null);
+  const [platformEditId, setPlatformEditId] = useState<string | null>(null);
+  const [platformEditRow, setPlatformEditRow] = useState<PlatformRowRecord | null>(null);
+  const [platformForm, setPlatformForm] = useState<Record<string, string>>(() =>
+    emptyForm(PLATFORM_MATRIX_CREATE_FIELDS),
+  );
+  const [platformSaving, setPlatformSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
       setLoad({ kind: "loading" });
       try {
-        const [wm, pm] = await Promise.all([fetchWorksMaster(), fetchPlatformMaster()]);
+        const [wm, pm, pr] = await Promise.all([
+          fetchWorksMaster(),
+          fetchPlatformMaster(),
+          fetchPlatformRowsList().catch(() => [] as PlatformRowRecord[]),
+        ]);
         if (!wm.ok && !pm.ok) {
           setLoad({ kind: "error", message: "작품정리·플랫폼정리를 불러오지 못했습니다." });
           setModel(null);
+          setPlatformRows([]);
+          setWorksItems([]);
           return;
         }
+        setWorksItems(wm.ok ? wm.items : []);
+        setPlatformRows(pr);
         const m = buildPlatformWorkMatrix(
           wm.ok ? wm.items : [],
           pm.ok ? pm.items : [],
@@ -122,6 +179,71 @@ export function PlatformWorkMatrixClient() {
 
   const colCount = displayModel?.columns.length ?? 0;
 
+  const openWorkEdit = (title: string) => {
+    const w = worksItems.find((x) => (x["작품명"] ?? "").trim() === title.trim());
+    setActionError(null);
+    setWorkEditTitle(title);
+    setWorkForm(w ? workToForm(w) : { ...emptyForm(WORK_MATRIX_FIELDS), 작품명: title });
+  };
+
+  const openPlatformEdit = (label: string) => {
+    const row = findPlatformRowByLabel(platformRows, label);
+    if (!row) {
+      setActionError(
+        `「${label}」에 해당하는 플랫폼정리 행을 찾지 못했습니다. 플랫폼정리 메뉴에서 먼저 추가하세요.`,
+      );
+      return;
+    }
+    setActionError(null);
+    setPlatformEditLabel(label);
+    setPlatformEditId(row.id);
+    setPlatformEditRow(row);
+    setPlatformForm(platformRowToEditForm(row));
+  };
+
+  const handleWorkSave = async () => {
+    setWorkSaving(true);
+    setActionError(null);
+    const title = workForm["작품명"]?.trim() ?? "";
+    if (!title) {
+      setActionError("작품명을 입력하세요.");
+      setWorkSaving(false);
+      return;
+    }
+    const r = workEditTitle
+      ? await updateWorksMasterRow(workEditTitle, workForm)
+      : await createWorksMasterRow(workForm);
+    setWorkSaving(false);
+    if (!r.ok) {
+      setActionError(r.message);
+      return;
+    }
+    setWorkCreateOpen(false);
+    setWorkEditTitle(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handlePlatformSave = async () => {
+    setPlatformSaving(true);
+    setActionError(null);
+    const r = platformEditId
+      ? await updatePlatformRow(platformEditId, platformForm, platformEditRow ?? undefined)
+      : await createPlatformRow(platformForm);
+    setPlatformSaving(false);
+    if (!r.ok) {
+      setActionError(r.message);
+      return;
+    }
+    setPlatformCreateOpen(false);
+    setPlatformEditLabel(null);
+    setPlatformEditId(null);
+    setPlatformEditRow(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const workModalOpen = workCreateOpen || workEditTitle !== null;
+  const platformModalOpen = platformCreateOpen || platformEditLabel !== null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -149,8 +271,42 @@ export function PlatformWorkMatrixClient() {
           >
             열 순서 초기화
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setWorkForm(emptyForm(WORK_MATRIX_FIELDS));
+              setWorkCreateOpen(true);
+              setWorkEditTitle(null);
+            }}
+            disabled={load.kind === "loading"}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            작품 추가
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setPlatformForm(emptyForm(PLATFORM_MATRIX_CREATE_FIELDS));
+              setPlatformCreateOpen(true);
+              setPlatformEditLabel(null);
+              setPlatformEditId(null);
+              setPlatformEditRow(null);
+            }}
+            disabled={load.kind === "loading"}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            플랫폼 추가
+          </button>
         </div>
       </div>
+
+      {actionError && !workModalOpen && !platformModalOpen ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
         <span className="inline-flex items-center gap-2">
@@ -188,8 +344,8 @@ export function PlatformWorkMatrixClient() {
           <table className="w-full min-w-[960px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
-                <th className="sticky left-0 z-20 min-w-[10rem] border-r border-zinc-200 bg-zinc-100 px-3 py-3 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-                  작품명
+                <th className="sticky left-0 z-20 min-w-[11rem] border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                  <span className="block px-1">작품명</span>
                 </th>
                 {displayModel.columns.map((c, colIdx) => {
                   const thMoveBtn =
@@ -200,8 +356,17 @@ export function PlatformWorkMatrixClient() {
                       className="min-w-[6rem] border-l border-zinc-200 align-top dark:border-zinc-700"
                     >
                       <div className="flex items-stretch gap-0">
-                        <div className="flex flex-1 items-center justify-center px-1 py-2 text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                          {c.label}
+                        <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1.5">
+                          <span className="text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                            {c.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => openPlatformEdit(c.label)}
+                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                          >
+                            편집
+                          </button>
                         </div>
                         <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
                           <button
@@ -237,9 +402,18 @@ export function PlatformWorkMatrixClient() {
                 >
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-3 py-2.5 text-left font-medium text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                    className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-2 text-left dark:border-zinc-700 dark:bg-zinc-950"
                   >
-                    {row.title}
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">{row.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => openWorkEdit(row.title)}
+                        className="w-fit rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      >
+                        편집
+                      </button>
+                    </div>
                   </th>
                   {row.cells.map((cell, i) => (
                     <td
@@ -281,6 +455,112 @@ export function PlatformWorkMatrixClient() {
           {load.emptyHint}
         </p>
       )}
+
+      {workModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              {workEditTitle ? `작품 수정 · ${workEditTitle}` : "작품 추가"}
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              사이트 열에 플랫폼명을 쉼표로 구분해 넣으면 매트릭스 아이콘이 표시됩니다.
+            </p>
+            <div className="mt-4 max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+              {WORK_MATRIX_FIELDS.map(({ key, label }) => (
+                <label key={key} className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  {label}
+                  <input
+                    type="text"
+                    value={workForm[key] ?? ""}
+                    onChange={(e) => setWorkForm({ ...workForm, [key]: e.target.value })}
+                    className={inputCls}
+                  />
+                </label>
+              ))}
+            </div>
+            {actionError ? (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{actionError}</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={workSaving}
+                onClick={() => {
+                  setWorkCreateOpen(false);
+                  setWorkEditTitle(null);
+                  setActionError(null);
+                }}
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={workSaving}
+                onClick={() => void handleWorkSave()}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {workSaving ? "저장 중…" : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {platformModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              {platformEditLabel ? `플랫폼 수정 · ${platformEditLabel}` : "플랫폼 추가"}
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              회사명 또는 플랫폼명 중 하나는 필수입니다. 저장 후 새로고침됩니다.
+            </p>
+            <div className="mt-4 max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+              {(platformEditId ? PLATFORM_MATRIX_EDIT_FIELDS : PLATFORM_MATRIX_CREATE_FIELDS).map(
+                ({ key, label }) => (
+                  <label key={key} className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {label}
+                    <input
+                      type="text"
+                      value={platformForm[key] ?? ""}
+                      onChange={(e) => setPlatformForm({ ...platformForm, [key]: e.target.value })}
+                      className={inputCls}
+                    />
+                  </label>
+                ),
+              )}
+            </div>
+            {actionError ? (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{actionError}</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={platformSaving}
+                onClick={() => {
+                  setPlatformCreateOpen(false);
+                  setPlatformEditLabel(null);
+                  setPlatformEditId(null);
+                  setPlatformEditRow(null);
+                  setActionError(null);
+                }}
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={platformSaving}
+                onClick={() => void handlePlatformSave()}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {platformSaving ? "저장 중…" : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

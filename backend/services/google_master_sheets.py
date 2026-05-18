@@ -15,8 +15,14 @@ from typing import Any
 
 from config import Settings
 
-from .google_sheets import read_sheet_tab_values, spreadsheet_id_from_url
-from .sheets_errors import SheetsConfigurationError
+from .google_sheets import (
+    append_rows_to_sheet_range,
+    batch_update_sheet_values,
+    read_sheet_tab_values,
+    spreadsheet_id_from_url,
+)
+from .google_tasks_sheets import _col_index_to_a1_letters_zero_based
+from .sheets_errors import SheetsConfigurationError, SheetsNotFoundError, SheetsParseError
 
 
 def _escape_tab(tab_name: str) -> str:
@@ -93,3 +99,115 @@ def fetch_master_tab_keyed_rows(settings: Settings, tab_name: str) -> list[dict[
             rec[key] = _cell_to_json(val)
         out.append(rec)
     return out
+
+
+def _works_tab_rows_with_sheet_row(
+    settings: Settings, tab_name: str
+) -> tuple[list[str], list[tuple[int, list[object]]]]:
+    if not settings.google_service_account_file or not settings.google_sheet_url:
+        raise SheetsConfigurationError(
+            "[설정] GOOGLE_SERVICE_ACCOUNT_FILE 과 GOOGLE_SHEET_URL 을 "
+            "backend/.env 등에 설정하세요."
+        )
+    cred_path = Path(settings.google_service_account_file).expanduser()
+    if not cred_path.is_file():
+        raise SheetsConfigurationError(
+            f"[설정] 서비스 계정 JSON 파일을 찾을 수 없습니다: {cred_path.resolve()}"
+        )
+    spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
+    esc = _escape_tab(tab_name)
+    range_a1 = f"'{esc}'!A:ZZ"
+    rows = read_sheet_tab_values(cred_path, spreadsheet_id, range_a1)
+    if not rows:
+        return [], []
+    keys = _header_keys(rows[0])
+    data: list[tuple[int, list[object]]] = []
+    for sheet_row, row in enumerate(rows[1:], start=2):
+        if _row_all_blank(row):
+            continue
+        data.append((sheet_row, list(row)))
+    return keys, data
+
+
+def _works_title_from_row(keys: list[str], row: list[object]) -> str:
+    for i, key in enumerate(keys):
+        if key == "작품명" and i < len(row):
+            return str(row[i] or "").strip()
+    return ""
+
+
+def _works_col_index(keys: list[str], header: str) -> int | None:
+    for i, key in enumerate(keys):
+        if key == header:
+            return i
+    return None
+
+
+def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
+    """작품정리 탭에 행 추가. 작품명(B) 필수."""
+    title = str(fields.get("작품명", "")).strip()
+    if not title:
+        raise SheetsParseError("[파싱] 작품명이 비어 있습니다.")
+    tab = settings.google_works_tab
+    keys, _ = _works_tab_rows_with_sheet_row(settings, tab)
+    if not keys:
+        raise SheetsParseError("[파싱] 작품정리 시트 헤더를 읽지 못했습니다.")
+    width = len(keys)
+    row: list[object] = [""] * width
+    for i, key in enumerate(keys):
+        if key not in fields:
+            continue
+        val = fields.get(key)
+        if val is None:
+            continue
+        s = str(val).strip()
+        if s:
+            row[i] = s
+    title_idx = _works_col_index(keys, "작품명")
+    if title_idx is not None:
+        row[title_idx] = title
+    cred_path = Path(settings.google_service_account_file).expanduser()
+    spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
+    esc = _escape_tab(tab)
+    last_col = _col_index_to_a1_letters_zero_based(max(0, width - 1))
+    append_rows_to_sheet_range(
+        cred_path, spreadsheet_id, f"'{esc}'!A:{last_col}", [row]
+    )
+    return {"작품명": title}
+
+
+def update_works_master_row(
+    settings: Settings, original_title: str, fields: dict[str, Any]
+) -> None:
+    """작품명으로 행을 찾아 전달된 필드만 갱신."""
+    orig = original_title.strip()
+    if not orig:
+        raise SheetsParseError("[파싱] 원본 작품명이 비어 있습니다.")
+    tab = settings.google_works_tab
+    keys, data = _works_tab_rows_with_sheet_row(settings, tab)
+    if not keys:
+        raise SheetsParseError("[파싱] 작품정리 시트 헤더를 읽지 못했습니다.")
+    sheet_row: int | None = None
+    for row_num, row in data:
+        if _works_title_from_row(keys, row) == orig:
+            sheet_row = row_num
+            break
+    if sheet_row is None:
+        raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {orig}")
+    cred_path = Path(settings.google_service_account_file).expanduser()
+    spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
+    esc = _escape_tab(tab)
+    writes: list[dict[str, Any]] = []
+    for key, val in fields.items():
+        if key not in keys:
+            continue
+        idx = _works_col_index(keys, key)
+        if idx is None:
+            continue
+        cell = "" if val is None else str(val).strip()
+        col = _col_index_to_a1_letters_zero_based(idx)
+        writes.append(
+            {"range": f"'{esc}'!{col}{sheet_row}", "values": [[cell]]}
+        )
+    if writes:
+        batch_update_sheet_values(cred_path, spreadsheet_id, writes)

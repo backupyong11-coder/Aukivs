@@ -57,7 +57,11 @@ from services.google_checklist_sheets import (
     fetch_checklist_from_google_sheets,
     update_checklist_item_in_sheet,
 )
-from services.google_master_sheets import fetch_master_tab_keyed_rows
+from services.google_master_sheets import (
+    create_works_master_row as create_works_master_row_sheets,
+    fetch_master_tab_keyed_rows,
+    update_works_master_row as update_works_master_row_sheets,
+)
 from services.google_memo_sheets import (
     append_memo_row_to_google_sheets,
     delete_memo_row_from_google_sheets,
@@ -167,6 +171,61 @@ def get_works_master() -> MasterTabItemsResponse:
         return MasterTabItemsResponse(items=items)
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/works-master/create")
+def post_works_master_create(body: dict[str, Any] = Body(...)):
+    settings = load_settings()
+    if settings.data_backend == "supabase":
+        try:
+            return works_repo.create_works_master_row(settings, body)
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        return create_works_master_row_sheets(settings, body)
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/works-master/update")
+def post_works_master_update(body: dict[str, Any] = Body(...)):
+    settings = load_settings()
+    original_title = str(body.pop("original_title", "")).strip()
+    if not original_title:
+        raise HTTPException(status_code=400, detail="[파싱] original_title이 없습니다.")
+    if settings.data_backend == "supabase":
+        try:
+            works_repo.update_works_master_row(settings, original_title, body)
+            return {"updated": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        update_works_master_row_sheets(settings, original_title, body)
+        return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except SheetsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
