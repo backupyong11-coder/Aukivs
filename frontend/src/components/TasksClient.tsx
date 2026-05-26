@@ -212,8 +212,8 @@ type FilterTagGroup = {
 function filterTagBtnClass(active: boolean) {
   return `rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
     active
-      ? "border-zinc-800 bg-white text-zinc-900 shadow-sm dark:border-zinc-300 dark:bg-zinc-950 dark:text-zinc-50"
-      : "border-zinc-800 bg-zinc-900 text-white opacity-80 hover:opacity-100 dark:border-zinc-400 dark:bg-zinc-200 dark:text-zinc-900"
+      ? "border-zinc-700 bg-zinc-700 text-white shadow-sm hover:bg-zinc-800 dark:border-zinc-300 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-300"
+      : "border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
   }`;
 }
 
