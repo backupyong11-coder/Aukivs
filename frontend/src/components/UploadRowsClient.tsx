@@ -4,11 +4,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import {
+  UploadRowInlineCell,
+  type EditableUploadRowField,
+} from "@/components/UploadRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 export type UploadRow = {
@@ -33,15 +38,7 @@ export type UploadRow = {
   비고: string;
 };
 
-type SortKey =
-  | "업로드일"
-  | "플랫폼명"
-  | "작품명"
-  | "업로드완료여부"
-  | "남은업로드화수"
-  | "업로드방식"
-  | "다음업로드일"
-  | "비고";
+type SortKey = EditableUploadRowField;
 type SortDir = "asc" | "desc";
 type TabType = "미완료" | "완료" | "전체";
 
@@ -50,40 +47,34 @@ type ViewState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: UploadRow[] };
 
-/** 표에 노출하는 열 (id·sheet_row·완료 플래그는 별도 UI) */
-const TABLE_COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "업로드일", label: "업로드일" },
+const TABLE_COLUMNS: {
+  key: EditableUploadRowField;
+  label: string;
+  wide?: boolean;
+  muted?: boolean;
+  tabular?: boolean;
+}[] = [
+  { key: "업로드일", label: "업로드일", muted: true, tabular: true },
   { key: "플랫폼명", label: "플랫폼" },
-  { key: "작품명", label: "작품명" },
+  { key: "작품명", label: "작품명", wide: true },
+  { key: "업로드화수", label: "업로드화수", tabular: true },
+  { key: "남은업로드화수", label: "남은화수", tabular: true },
   { key: "업로드완료여부", label: "완료여부" },
-  { key: "남은업로드화수", label: "남은화수" },
-  { key: "업로드방식", label: "업로드방식" },
-  { key: "다음업로드일", label: "다음업로드일" },
-  { key: "비고", label: "비고" },
-];
-
-/** 수정 모달 전용(표에는 숨김) */
-const FORM_EXTRA_FIELDS: { key: keyof UploadRow; label: string }[] = [
-  { key: "업로드화수", label: "업로드화수" },
   { key: "업로드주기", label: "업로드주기" },
   { key: "업로드요일", label: "업로드요일" },
-  { key: "런칭일", label: "런칭일" },
-  { key: "마지막업로드일", label: "마지막업로드일" },
+  { key: "업로드방식", label: "업로드방식" },
+  { key: "런칭일", label: "런칭일", muted: true, tabular: true },
+  { key: "마지막업로드일", label: "마지막업로드일", muted: true, tabular: true },
+  { key: "다음업로드일", label: "다음업로드일", muted: true, tabular: true },
   { key: "원고준비", label: "원고준비" },
-  { key: "업로드링크", label: "업로드링크/제출처" },
-  { key: "마지막업로드회수", label: "마지막업로드회수" },
+  { key: "업로드링크", label: "업로드링크", wide: true },
+  { key: "마지막업로드회수", label: "마지막회수", tabular: true },
+  { key: "비고", label: "비고", wide: true, muted: true },
 ];
 
 export const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
   { key: "작품명", label: "작품명", required: true },
-  { key: "업로드일", label: "업로드일" },
-  { key: "플랫폼명", label: "플랫폼명" },
-  { key: "업로드완료여부", label: "업로드완료여부" },
-  { key: "남은업로드화수", label: "남은업로드화수" },
-  { key: "업로드방식", label: "업로드방식" },
-  { key: "다음업로드일", label: "다음업로드일" },
-  { key: "비고", label: "비고" },
-  ...FORM_EXTRA_FIELDS,
+  ...TABLE_COLUMNS.filter((c) => c.key !== "작품명").map(({ key, label }) => ({ key, label })),
 ];
 
 const EMPTY_ROW: Omit<UploadRow, "id" | "sheet_row"> = {
@@ -108,12 +99,27 @@ const EMPTY_ROW: Omit<UploadRow, "id" | "sheet_row"> = {
 
 export type FormType = Partial<Record<keyof UploadRow, string>>;
 
-function isDone(item: UploadRow) {
-  return (
-    item.완료 === "TRUE" || item.완료 === "true" || item.완료 === "1" ||
-    item.업로드완료여부 === "업로드 완료"
-  );
+function isDoneValue(raw: string | undefined): boolean {
+  const v = (raw ?? "").trim().toUpperCase();
+  return v === "TRUE" || v === "1" || v === "YES" || v === "Y" || v === "완료" || v === "✓";
 }
+
+function isDone(item: UploadRow) {
+  return isDoneValue(item.완료);
+}
+
+function doneToCell(checked: boolean): string {
+  return checked ? "TRUE" : "";
+}
+
+type CompletionUndoEntry = {
+  id: string;
+  title: string;
+  previousDone: string;
+};
+
+const UNDO_TOAST_MS = 10_000;
+const MAX_UNDO_STACK = 10;
 
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
@@ -147,6 +153,17 @@ export function UploadRowFormModal(props: {
       <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
         <h3 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-50">{title}</h3>
         <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
+            <input
+              type="checkbox"
+              checked={isDoneValue(fields.완료)}
+              onChange={(e) =>
+                setFields((prev) => ({ ...prev, 완료: doneToCell(e.target.checked) }))
+              }
+              className="h-4 w-4 accent-zinc-800 dark:accent-zinc-200"
+            />
+            <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">완료</span>
+          </label>
           {EDIT_FIELDS.map(({ key, label, required }) => (
             <label key={key} className="block">
               <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -185,6 +202,13 @@ export function UploadRowsClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newForm, setNewForm] = useState<FormType>({});
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [patchingCell, setPatchingCell] = useState<string | null>(null);
+  const [undoToast, setUndoToast] = useState<CompletionUndoEntry | null>(null);
+  const [undoCount, setUndoCount] = useState(0);
+  const [undoing, setUndoing] = useState(false);
+  const undoStackRef = useRef<CompletionUndoEntry[]>([]);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [tab, setTab] = useState<TabType>("미완료");
@@ -222,12 +246,97 @@ export function UploadRowsClient() {
         };
       });
       setState({ kind: "ready", items });
+      undoStackRef.current = [];
+      setUndoCount(0);
+      setUndoToast(null);
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
   }, []);
 
   useEffect(() => { void load(); }, [refreshKey, load]);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  const syncUndoCount = useCallback(() => {
+    setUndoCount(undoStackRef.current.length);
+  }, []);
+
+  const setCompletionInState = useCallback((id: string, doneValue: string) => {
+    setState((s) => {
+      if (s.kind !== "ready") return s;
+      return {
+        kind: "ready",
+        items: s.items.map((it) => (it.id === id ? { ...it, 완료: doneValue } : it)),
+      };
+    });
+  }, []);
+
+  const showUndoToast = useCallback((entry: CompletionUndoEntry) => {
+    undoStackRef.current = [
+      entry,
+      ...undoStackRef.current.filter((e) => e.id !== entry.id),
+    ].slice(0, MAX_UNDO_STACK);
+    syncUndoCount();
+    setUndoToast(entry);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), UNDO_TOAST_MS);
+  }, [syncUndoCount]);
+
+  const dismissUndoToast = useCallback(() => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast(null);
+  }, []);
+
+  const performUndo = useCallback(
+    async (entry?: CompletionUndoEntry) => {
+      const target = entry ?? undoStackRef.current[0];
+      if (!target || undoing) return;
+      setUndoing(true);
+      setActionError(null);
+      dismissUndoToast();
+      const revertTo = target.previousDone;
+      setCompletionInState(target.id, revertTo);
+      setTogglingId(target.id);
+      try {
+        await apiFetch("/upload-rows/update", { id: target.id, 완료: revertTo });
+        undoStackRef.current = undoStackRef.current.filter((e) => e.id !== target.id);
+        syncUndoCount();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "되돌리기 실패");
+        showUndoToast(target);
+      } finally {
+        setTogglingId(null);
+        setUndoing(false);
+      }
+    },
+    [dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      const el = e.target;
+      if (
+        el instanceof HTMLElement &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      if (undoStackRef.current.length === 0 && !undoToast) return;
+      e.preventDefault();
+      void performUndo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [performUndo, undoToast]);
 
   const counts = useMemo(() => {
     if (state.kind !== "ready") return { 미완료: 0, 완료: 0, 전체: 0 };
@@ -294,11 +403,9 @@ export function UploadRowsClient() {
     if (filterText) {
       const q = filterText;
       items = items.filter(it =>
+        TABLE_COLUMNS.some(({ key }) => (it[key] ?? "").includes(q)) ||
         (it.작품명 ?? "").includes(q) ||
-        (it.플랫폼명 ?? "").includes(q) ||
-        (it.비고 ?? "").includes(q) ||
-        (it.업로드방식 ?? "").includes(q) ||
-        (it.업로드완료여부 ?? "").includes(q)
+        (it.플랫폼명 ?? "").includes(q)
       );
     }
     if (hiddenPlatforms.size > 0) {
@@ -310,7 +417,7 @@ export function UploadRowsClient() {
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
-      if (sortKey === "남은업로드화수") {
+      if (sortKey === "남은업로드화수" || sortKey === "업로드화수" || sortKey === "마지막업로드회수") {
         const na = Number.parseFloat(va) || 0;
         const nb = Number.parseFloat(vb) || 0;
         return sortDir === "asc" ? na - nb : nb - na;
@@ -327,7 +434,7 @@ export function UploadRowsClient() {
   const openEdit = (item: UploadRow) => {
     setActionError(null);
     setEditItem(item);
-    const f: FormType = {};
+    const f: FormType = { 완료: item.완료 ?? "" };
     EDIT_FIELDS.forEach(({ key }) => { f[key] = item[key] ?? ""; });
     setForm(f);
   };
@@ -366,6 +473,86 @@ export function UploadRowsClient() {
     }
   };
 
+  const patchUploadField = useCallback(
+    async (rowId: string, field: EditableUploadRowField, newValue: string) => {
+      if (state.kind !== "ready") return;
+      const item = state.items.find((it) => it.id === rowId);
+      if (!item) return;
+      const prev = item[field] ?? "";
+      if (prev === newValue) return;
+      if (field === "작품명" && !newValue.trim()) {
+        throw new Error("작품명은 비울 수 없습니다.");
+      }
+      const cellKey = `${rowId}:${field}`;
+      setPatchingCell(cellKey);
+      setActionError(null);
+      setState((s) => {
+        if (s.kind !== "ready") return s;
+        return {
+          kind: "ready",
+          items: s.items.map((it) =>
+            it.id === rowId ? { ...it, [field]: newValue } : it,
+          ),
+        };
+      });
+      try {
+        await apiFetch("/upload-rows/update", { id: rowId, [field]: newValue });
+      } catch (e) {
+        setState((s) => {
+          if (s.kind !== "ready") return s;
+          return {
+            kind: "ready",
+            items: s.items.map((it) =>
+              it.id === rowId ? { ...it, [field]: prev } : it,
+            ),
+          };
+        });
+        throw e;
+      } finally {
+        setPatchingCell(null);
+      }
+    },
+    [state],
+  );
+
+  const handleInlineSave = useCallback(
+    async (rowId: string, field: EditableUploadRowField, newValue: string) => {
+      try {
+        await patchUploadField(rowId, field, newValue);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "저장 실패");
+        throw e;
+      }
+    },
+    [patchUploadField],
+  );
+
+  const isCellPatching = (rowId: string, field: EditableUploadRowField) =>
+    patchingCell === `${rowId}:${field}`;
+
+  const handleToggleComplete = async (item: UploadRow, checked: boolean) => {
+    const prevDone = item.완료 ?? "";
+    const nextDone = doneToCell(checked);
+    if (prevDone === nextDone) return;
+    setActionError(null);
+    dismissUndoToast();
+    setTogglingId(item.id);
+    setCompletionInState(item.id, nextDone);
+    try {
+      await apiFetch("/upload-rows/update", { id: item.id, 완료: nextDone });
+      showUndoToast({
+        id: item.id,
+        title: item.작품명?.trim() || "(제목 없음)",
+        previousDone: prevDone,
+      });
+    } catch (e) {
+      setCompletionInState(item.id, prevDone);
+      setActionError(e instanceof Error ? e.message : "완료 상태 변경 실패");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
@@ -384,12 +571,23 @@ export function UploadRowsClient() {
           새 업로드 추가
         </button>
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="작품명·플랫폼명·비고 검색"
+          placeholder="작품명·플랫폼명·비고 등 검색"
           className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 sm:min-w-[16rem]" />
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
         </button>
+        {undoCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => void performUndo()}
+            disabled={undoing}
+            title="Ctrl+Z"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60"
+          >
+            {undoing ? "되돌리는 중…" : "되돌리기 (Ctrl+Z)"}
+          </button>
+        ) : null}
       </div>
 
       {state.kind === "ready" && (
@@ -452,7 +650,7 @@ export function UploadRowsClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[1200px] text-xs">
+          <table className="w-full min-w-[2200px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thCls}>수정</th>
@@ -479,29 +677,33 @@ export function UploadRowsClient() {
                       수정
                     </button>
                   </td>
-                  <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
-                    {isDone(item) ? "✓" : ""}
+                  <td className="px-3 py-1.5 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isDone(item)}
+                      disabled={togglingId === item.id}
+                      onChange={(e) => void handleToggleComplete(item, e.target.checked)}
+                      aria-label={`${item.작품명} 완료`}
+                      className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
+                    />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.업로드일}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-medium">{item.플랫폼명}</td>
-                  <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
-                    <span className="block max-w-[280px] truncate">{item.작품명}</span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${
-                      item.업로드완료여부 === "업로드 완료"
-                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
-                    }`}>{item.업로드완료여부 || "업로드 예정"}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-center font-semibold text-zinc-800 dark:text-zinc-200">
-                    {item.남은업로드화수 || "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.업로드방식}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.다음업로드일}</td>
-                  <td className="px-3 py-1.5">
-                    <span className="block max-w-[14rem] truncate text-zinc-400">{item.비고}</span>
-                  </td>
+                  {TABLE_COLUMNS.map(({ key, wide, muted, tabular }) => (
+                    <td
+                      key={key}
+                      className={`px-3 py-1.5 ${tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"} ${wide ? "max-w-[280px]" : ""}`}
+                    >
+                      <UploadRowInlineCell
+                        value={item[key] ?? ""}
+                        field={key}
+                        rowId={item.id}
+                        wide={wide}
+                        muted={muted}
+                        tabular={tabular}
+                        disabled={isCellPatching(item.id, key)}
+                        onSave={handleInlineSave}
+                      />
+                    </td>
+                  ))}
                   <td className="px-2 py-1.5">
                     <button type="button" onClick={() => void handleDelete(item)}
                       className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
@@ -537,6 +739,36 @@ export function UploadRowsClient() {
           actionError={actionError}
         />
       )}
+
+      {undoToast ? (
+        <div
+          className="fixed bottom-4 left-1/2 z-50 flex max-w-lg -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          role="status"
+        >
+          <span className="text-zinc-700 dark:text-zinc-200">
+            <span className="font-medium text-zinc-900 dark:text-zinc-50">
+              「{undoToast.title}」
+            </span>{" "}
+            완료 상태를 변경했습니다.
+          </span>
+          <button
+            type="button"
+            onClick={() => void performUndo(undoToast)}
+            disabled={undoing}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            되돌리기
+          </button>
+          <button
+            type="button"
+            onClick={dismissUndoToast}
+            className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            닫기
+          </button>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ctrl+Z</span>
+        </div>
+      ) : null}
     </div>
   );
 }
