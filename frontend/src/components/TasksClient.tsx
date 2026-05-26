@@ -80,7 +80,6 @@ const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: bo
   { key: "업무명", label: "업무명", required: true },
   { key: "날짜그룹", label: "날짜그룹 (A열)" },
   { key: "우선순위", label: "우선순위" },
-  { key: "완료", label: "완료 (TRUE/빈칸)" },
   { key: "마감일", label: "마감일" },
   { key: "분야", label: "분야" },
   { key: "분류", label: "분류" },
@@ -100,8 +99,17 @@ const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: bo
   { key: "메모", label: "메모" },
 ];
 
+function isDoneValue(raw: string | undefined): boolean {
+  const v = (raw ?? "").trim().toUpperCase();
+  return v === "TRUE" || v === "1" || v === "YES" || v === "Y" || v === "완료" || v === "✓";
+}
+
 function isDone(item: TaskRow) {
-  return item.완료 === "TRUE" || item.완료 === "true" || item.완료 === "1";
+  return isDoneValue(item.완료);
+}
+
+function doneToCell(checked: boolean): string {
+  return checked ? "TRUE" : "";
 }
 
 async function apiFetch(path: string, body?: object) {
@@ -137,6 +145,17 @@ function TaskFormModal(props: {
       <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
         <h3 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-50">{title}</h3>
         <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/50">
+            <input
+              type="checkbox"
+              checked={isDoneValue(fields.완료)}
+              onChange={(e) =>
+                setFields((prev) => ({ ...prev, 완료: doneToCell(e.target.checked) }))
+              }
+              className="h-4 w-4 accent-zinc-800 dark:accent-zinc-200"
+            />
+            <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">완료</span>
+          </label>
           {FIELD_LABELS.map(({ key, label, required }) => (
             <label key={key} className="block">
               <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -175,6 +194,7 @@ export function TasksClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newForm, setNewForm] = useState<TaskFormFields>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [tab, setTab] = useState<TabType>("미완료");
@@ -440,6 +460,38 @@ export function TasksClient() {
     }
   };
 
+  const handleToggleComplete = async (item: TaskRow, checked: boolean) => {
+    const prevDone = item.완료 ?? "";
+    const nextDone = doneToCell(checked);
+    setActionError(null);
+    setTogglingId(item.id);
+    setState((s) => {
+      if (s.kind !== "ready") return s;
+      return {
+        kind: "ready",
+        items: s.items.map((it) =>
+          it.id === item.id ? { ...it, 완료: nextDone } : it,
+        ),
+      };
+    });
+    try {
+      await apiFetch("/tasks/update", { id: item.id, 완료: nextDone });
+    } catch (e) {
+      setState((s) => {
+        if (s.kind !== "ready") return s;
+        return {
+          kind: "ready",
+          items: s.items.map((it) =>
+            it.id === item.id ? { ...it, 완료: prevDone } : it,
+          ),
+        };
+      });
+      setActionError(e instanceof Error ? e.message : "완료 상태 변경 실패");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
@@ -685,8 +737,15 @@ export function TasksClient() {
                     </button>
                   </td>
                   <td className="max-w-[6rem] truncate px-3 py-1.5 text-zinc-500">{item.날짜그룹}</td>
-                  <td className="px-3 py-1.5 text-center text-emerald-600 dark:text-emerald-400">
-                    {isDone(item) ? "✓" : ""}
+                  <td className="px-3 py-1.5 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isDone(item)}
+                      disabled={togglingId === item.id}
+                      onChange={(e) => void handleToggleComplete(item, e.target.checked)}
+                      aria-label={`${item.업무명} 완료`}
+                      className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.우선순위}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.마감일}</td>
