@@ -12,7 +12,7 @@ export type FilterTagGroup = {
 };
 
 function filterTagBtnClass(active: boolean) {
-  return `rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+  return `rounded-full border px-2 py-0.5 text-[10px] leading-tight font-medium transition-colors ${
     active
       ? "border-zinc-500 bg-zinc-500 text-zinc-50 hover:bg-zinc-600 dark:border-zinc-500 dark:bg-zinc-500 dark:text-zinc-100 dark:hover:bg-zinc-400"
       : "border-zinc-300 bg-zinc-100 text-zinc-600 hover:border-zinc-400 hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:bg-zinc-700"
@@ -24,7 +24,7 @@ export function FilterTagsFlow(props: {
   listLabel: (key: string) => string;
 }) {
   const visible = props.groups.filter((g) => g.keys.length > 0);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const isGroupOpen = useCallback(
@@ -111,7 +111,7 @@ export function FilterTagsFlow(props: {
                   </button>
                 </div>
                 {open ? (
-                  <div className="flex flex-wrap gap-1.5 border-t border-zinc-100 px-2.5 pb-2.5 pt-2 dark:border-zinc-800">
+                  <div className="flex flex-wrap gap-1 border-t border-zinc-100 px-2.5 pb-2 pt-1.5 dark:border-zinc-800">
                     {group.keys.map((key) => {
                       const active = !group.hidden.has(key);
                       return (
