@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -112,6 +113,15 @@ function doneToCell(checked: boolean): string {
   return checked ? "TRUE" : "";
 }
 
+type CompletionUndoEntry = {
+  id: string;
+  title: string;
+  previousDone: string;
+};
+
+const UNDO_TOAST_MS = 10_000;
+const MAX_UNDO_STACK = 10;
+
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
   const res = await fetch(`${base}${path}`, {
@@ -195,6 +205,11 @@ export function TasksClient() {
   const [newForm, setNewForm] = useState<TaskFormFields>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [undoToast, setUndoToast] = useState<CompletionUndoEntry | null>(null);
+  const [undoCount, setUndoCount] = useState(0);
+  const [undoing, setUndoing] = useState(false);
+  const undoStackRef = useRef<CompletionUndoEntry[]>([]);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [tab, setTab] = useState<TabType>("미완료");
@@ -252,12 +267,97 @@ export function TasksClient() {
         };
       });
       setState({ kind: "ready", items });
+      undoStackRef.current = [];
+      setUndoCount(0);
+      setUndoToast(null);
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
   }, []);
 
   useEffect(() => { void load(); }, [refreshKey, load]);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  const syncUndoCount = useCallback(() => {
+    setUndoCount(undoStackRef.current.length);
+  }, []);
+
+  const setCompletionInState = useCallback((id: string, doneValue: string) => {
+    setState((s) => {
+      if (s.kind !== "ready") return s;
+      return {
+        kind: "ready",
+        items: s.items.map((it) => (it.id === id ? { ...it, 완료: doneValue } : it)),
+      };
+    });
+  }, []);
+
+  const showUndoToast = useCallback((entry: CompletionUndoEntry) => {
+    undoStackRef.current = [
+      entry,
+      ...undoStackRef.current.filter((e) => e.id !== entry.id),
+    ].slice(0, MAX_UNDO_STACK);
+    syncUndoCount();
+    setUndoToast(entry);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), UNDO_TOAST_MS);
+  }, [syncUndoCount]);
+
+  const dismissUndoToast = useCallback(() => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast(null);
+  }, []);
+
+  const performUndo = useCallback(
+    async (entry?: CompletionUndoEntry) => {
+      const target = entry ?? undoStackRef.current[0];
+      if (!target || undoing) return;
+      setUndoing(true);
+      setActionError(null);
+      dismissUndoToast();
+      const revertTo = target.previousDone;
+      setCompletionInState(target.id, revertTo);
+      setTogglingId(target.id);
+      try {
+        await apiFetch("/tasks/update", { id: target.id, 완료: revertTo });
+        undoStackRef.current = undoStackRef.current.filter((e) => e.id !== target.id);
+        syncUndoCount();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "되돌리기 실패");
+        showUndoToast(target);
+      } finally {
+        setTogglingId(null);
+        setUndoing(false);
+      }
+    },
+    [dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      const el = e.target;
+      if (
+        el instanceof HTMLElement &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      if (undoStackRef.current.length === 0 && !undoToast) return;
+      e.preventDefault();
+      void performUndo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [performUndo, undoToast]);
 
   const counts = useMemo(() => {
     if (state.kind !== "ready") return { 미완료: 0, 완료: 0, 전체: 0 };
@@ -463,29 +563,20 @@ export function TasksClient() {
   const handleToggleComplete = async (item: TaskRow, checked: boolean) => {
     const prevDone = item.완료 ?? "";
     const nextDone = doneToCell(checked);
+    if (prevDone === nextDone) return;
     setActionError(null);
+    dismissUndoToast();
     setTogglingId(item.id);
-    setState((s) => {
-      if (s.kind !== "ready") return s;
-      return {
-        kind: "ready",
-        items: s.items.map((it) =>
-          it.id === item.id ? { ...it, 완료: nextDone } : it,
-        ),
-      };
-    });
+    setCompletionInState(item.id, nextDone);
     try {
       await apiFetch("/tasks/update", { id: item.id, 완료: nextDone });
-    } catch (e) {
-      setState((s) => {
-        if (s.kind !== "ready") return s;
-        return {
-          kind: "ready",
-          items: s.items.map((it) =>
-            it.id === item.id ? { ...it, 완료: prevDone } : it,
-          ),
-        };
+      showUndoToast({
+        id: item.id,
+        title: item.업무명?.trim() || "(제목 없음)",
+        previousDone: prevDone,
       });
+    } catch (e) {
+      setCompletionInState(item.id, prevDone);
       setActionError(e instanceof Error ? e.message : "완료 상태 변경 실패");
     } finally {
       setTogglingId(null);
@@ -654,6 +745,17 @@ export function TasksClient() {
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
         </button>
+        {undoCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => void performUndo()}
+            disabled={undoing}
+            title="Ctrl+Z"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60"
+          >
+            {undoing ? "되돌리는 중…" : "되돌리기 (Ctrl+Z)"}
+          </button>
+        ) : null}
       </div>
 
       {/* 탭 */}
@@ -803,6 +905,36 @@ export function TasksClient() {
           actionError={actionError}
         />
       )}
+
+      {undoToast ? (
+        <div
+          className="fixed bottom-4 left-1/2 z-50 flex max-w-lg -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          role="status"
+        >
+          <span className="text-zinc-700 dark:text-zinc-200">
+            <span className="font-medium text-zinc-900 dark:text-zinc-50">
+              「{undoToast.title}」
+            </span>{" "}
+            완료 상태를 변경했습니다.
+          </span>
+          <button
+            type="button"
+            onClick={() => void performUndo(undoToast)}
+            disabled={undoing}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            되돌리기
+          </button>
+          <button
+            type="button"
+            onClick={dismissUndoToast}
+            className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            닫기
+          </button>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ctrl+Z</span>
+        </div>
+      ) : null}
     </div>
   );
 }
