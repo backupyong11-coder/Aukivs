@@ -1,134 +1,117 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import {
+  PlatformRowInlineCell,
+  boolToCell,
+  isPlatformBoolValue,
+} from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 
-/** 시트 열 문자(A, B, …, Z, AA, …) → 0-based 열 인덱스 (A=0) */
-function colLettersToZeroBased(letters: string): number {
-  const s = letters.toUpperCase();
-  let n = 0;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i) - 64;
-    if (c < 1 || c > 26) return -1;
-    n = n * 26 + c;
-  }
-  return n - 1;
-}
+const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
+const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
+const FILTER_TAG_FIELDS = ["발표일", "분류", "플랫폼명"] as const;
+type FilterTagField = (typeof FILTER_TAG_FIELDS)[number];
 
-/** /platform-rows 한 행에서 id·sheet_row 제외, 시트 열 순서와 동일한 헤더 key 배열 */
+const CHECKBOX_FIELD_CANDIDATES = new Set([
+  "지원사업",
+  "일반계약",
+  "불가",
+  "예정",
+  "진행중",
+  "완료",
+  "계약",
+  "미팅",
+  "성인웹툰",
+  "성인웹툰(구 일반계약)",
+]);
+
+const COLUMN_ORDER_STORAGE_KEY = "platform_rows_col_order_v2";
+
+const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] = [
+  { key: "회사명", label: "회사명" },
+  { key: "발표일", label: "발표일" },
+  { key: "플랫폼명", label: "플랫폼명" },
+  { key: "분류", label: "분류" },
+  { key: "현재단계", label: "현재단계" },
+  { key: "마지막상황", label: "마지막상황" },
+  { key: "대기사유", label: "대기사유" },
+  { key: "다음액션", label: "다음액션" },
+  { key: "우선순위", label: "우선순위" },
+  { key: "비고", label: "비고" },
+];
+
+type FieldUndoEntry = {
+  id: string;
+  field: string;
+  title: string;
+  previousValue: string;
+};
+
+const UNDO_TOAST_MS = 10_000;
+const MAX_UNDO_STACK = 10;
+
 function orderedHeaderKeys(row: PlatformRow): string[] {
-  return Object.keys(row).filter((k) => k !== "id" && k !== "sheet_row");
+  return Object.keys(row).filter((k) => !INTERNAL_KEYS.has(k));
 }
 
-function isTrueCell(v: unknown): boolean {
-  if (v === true) return true;
-  const s = String(v ?? "").trim().toUpperCase();
-  return s === "TRUE" || s === "1" || s === "YES" || s === "Y" || s === "O" || s === "✓";
-}
-
-/**
- * 속성: 시트 F~I열(인덱스 5~8) 중 체크된 첫 열의 헤더명 표시
- * (일반적 헤더: 불가 / 예정 / 진행중 / 완료 — 실제 문자열은 1행 기준)
- */
-function platformAttrLabel(row: PlatformRow, sample: PlatformRow): string {
-  const hdrs = orderedHeaderKeys(sample);
-  for (const idx of [5, 6, 7, 8]) {
-    const k = hdrs[idx];
-    if (k && isTrueCell(row[k])) return k;
-  }
-  return "";
-}
-
-function valueAtColumnLetter(row: PlatformRow, sample: PlatformRow, letter: string): string {
-  const hdrs = orderedHeaderKeys(sample);
-  const idx = colLettersToZeroBased(letter);
-  if (idx < 0 || idx >= hdrs.length) return "";
-  const k = hdrs[idx];
-  return k ? String(row[k] ?? "").trim() : "";
-}
-
-/** 표시 열 순서: 시트 열 문자 기준 (속성은 계산 열) */
-const PLATFORM_DISPLAY_LETTERS = [
-  "C",
-  "D",
-  "B",
-  "K",
-  "L",
-  "H",
-  "U",
-  "V",
-  "W",
-  "Y",
-  "Z",
-  "AA",
-  "AH",
-  "AI",
-  "AL",
-  "AP",
-] as const;
-
-type SortId = "attr" | (typeof PLATFORM_DISPLAY_LETTERS)[number];
-type PlatformColLetter = (typeof PLATFORM_DISPLAY_LETTERS)[number];
-
-/** C·D·속성 뒤에 오는 열만 좌우 이동(플랫폼·메모 열이 함께 움직임) */
-const REORDERABLE_PLATFORM_LETTERS = PLATFORM_DISPLAY_LETTERS.slice(
-  2,
-) as PlatformColLetter[];
-
-const PLATFORM_COL_ORDER_STORAGE_KEY = "platform_rows_reorderable_letters_v1";
-
-function loadPlatformColOrder(): PlatformColLetter[] {
-  if (typeof window === "undefined") return [...REORDERABLE_PLATFORM_LETTERS];
+function loadHiddenSet(storageKey: string): Set<string> {
+  if (typeof window === "undefined") return new Set<string>();
   try {
-    const raw = localStorage.getItem(PLATFORM_COL_ORDER_STORAGE_KEY);
-    if (!raw) return [...REORDERABLE_PLATFORM_LETTERS];
+    const saved = window.localStorage.getItem(storageKey);
+    if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+  } catch { /* ignore */ }
+  return new Set<string>();
+}
+
+function saveHiddenSet(storageKey: string, next: Set<string>) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify([...next]));
+  } catch { /* ignore */ }
+}
+
+function loadColumnOrder(defaultKeys: string[]): string[] {
+  if (typeof window === "undefined") return defaultKeys;
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return defaultKeys;
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed) || parsed.length !== REORDERABLE_PLATFORM_LETTERS.length) {
-      return [...REORDERABLE_PLATFORM_LETTERS];
+    if (!Array.isArray(parsed)) return defaultKeys;
+    const allowed = new Set(defaultKeys);
+    const out: string[] = [];
+    for (const k of parsed) {
+      if (typeof k === "string" && allowed.has(k) && !out.includes(k)) out.push(k);
     }
-    const allowed = new Set(REORDERABLE_PLATFORM_LETTERS);
-    for (const x of parsed) {
-      if (typeof x !== "string" || !allowed.has(x as PlatformColLetter)) {
-        return [...REORDERABLE_PLATFORM_LETTERS];
-      }
+    for (const k of defaultKeys) {
+      if (!out.includes(k)) out.push(k);
     }
-    for (const x of REORDERABLE_PLATFORM_LETTERS) {
-      if (!parsed.includes(x)) return [...REORDERABLE_PLATFORM_LETTERS];
-    }
-    return parsed as PlatformColLetter[];
+    return out;
   } catch {
-    return [...REORDERABLE_PLATFORM_LETTERS];
+    return defaultKeys;
   }
 }
 
-const STATUS_KEY_CANDIDATES = ["마지막상황", "마지막 상황", "최근상황", "최근 상황", "상황"];
-function findStatusKey(item: PlatformRow): string {
-  for (const k of STATUS_KEY_CANDIDATES) {
-    if (k in item && item[k]) return k;
-  }
-  return "마지막상황";
+function fieldIsBoolean(field: string, items: PlatformRow[]): boolean {
+  if (CHECKBOX_FIELD_CANDIDATES.has(field)) return true;
+  const samples = items
+    .map((it) => String(it[field] ?? "").trim())
+    .filter((v) => v !== "");
+  if (samples.length === 0) return false;
+  return samples.every((v) => isPlatformBoolValue(v));
 }
 
-/** 백엔드 update_platform 이 쓰는 필드와 동일 계열 */
-const MODAL_FIELDS: { key: string; label: string }[] = [
-  { key: "분류", label: "분류 (B)" },
-  { key: "현재단계", label: "현재단계 (L)" },
-  { key: "마지막상황", label: "마지막 상황 (N)" },
-  { key: "대기사유", label: "대기사유 (O)" },
-  { key: "다음액션", label: "다음액션 (P)" },
-  { key: "우선순위", label: "우선순위 (R)" },
-  { key: "비고", label: "비고 (AO)" },
-];
-
-/** 생성 모달: 회사명·발표일·플랫폼명 + 수정 모달과 동일 필드 */
-const CREATE_MODAL_FIELDS: { key: string; label: string }[] = [
-  { key: "회사명", label: "회사명 (A)" },
-  { key: "발표일", label: "발표일 (C)" },
-  { key: "플랫폼명", label: "플랫폼명 (Q)" },
-  ...MODAL_FIELDS,
-];
+function rowTitle(item: PlatformRow): string {
+  return (item["플랫폼명"] ?? item["회사명"] ?? "").trim() || "(이름 없음)";
+}
 
 function emptyCreateForm(): Record<string, string> {
   const f: Record<string, string> = {};
@@ -164,9 +147,23 @@ export function PlatformRowsClient() {
   >({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
   const [filterText, setFilterText] = useState("");
-  const [sortKey, setSortKey] = useState<SortId>("C");
+  const [sortKey, setSortKey] = useState<string>("발표일");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const keysLoggedRef = useRef(false);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [patchingCell, setPatchingCell] = useState<string | null>(null);
+  const [togglingCell, setTogglingCell] = useState<string | null>(null);
+  const [undoToast, setUndoToast] = useState<FieldUndoEntry | null>(null);
+  const [undoCount, setUndoCount] = useState(0);
+  const [undoing, setUndoing] = useState(false);
+  const undoStackRef = useRef<FieldUndoEntry[]>([]);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [hiddenByField, setHiddenByField] = useState<Record<FilterTagField, Set<string>>>(() => ({
+    발표일: loadHiddenSet("platform.hidden.발표일"),
+    분류: loadHiddenSet("platform.hidden.분류"),
+    플랫폼명: loadHiddenSet("platform.hidden.플랫폼명"),
+  }));
 
   const [modalItem, setModalItem] = useState<PlatformRow | null>(null);
   const [modalForm, setModalForm] = useState<Record<string, string>>({});
@@ -175,43 +172,22 @@ export function PlatformRowsClient() {
   const [createForm, setCreateForm] = useState<Record<string, string>>(emptyCreateForm);
   const [savingCreate, setSavingCreate] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [platformLetterOrder, setPlatformLetterOrder] = useState<PlatformColLetter[]>(() => [
-    ...REORDERABLE_PLATFORM_LETTERS,
-  ]);
-
-  useLayoutEffect(() => {
-    setPlatformLetterOrder(loadPlatformColOrder());
-  }, []);
-
-  const persistPlatformColOrder = useCallback((next: PlatformColLetter[]) => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(PLATFORM_COL_ORDER_STORAGE_KEY, JSON.stringify(next));
-  }, []);
-
-  const movePlatformColumn = useCallback((letter: PlatformColLetter, dir: -1 | 1) => {
-    setPlatformLetterOrder((prev) => {
-      const i = prev.indexOf(letter);
-      if (i < 0) return prev;
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      persistPlatformColOrder(next);
-      return next;
-    });
-  }, [persistPlatformColOrder]);
-
-  const resetPlatformColumnOrder = useCallback(() => {
-    const next = [...REORDERABLE_PLATFORM_LETTERS];
-    persistPlatformColOrder(next);
-    setPlatformLetterOrder(next);
-  }, [persistPlatformColOrder]);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
       const items = (await apiFetch("/platform-rows")) as PlatformRow[] | null;
-      setState({ kind: "ready", items: Array.isArray(items) ? items : [] });
+      const list = Array.isArray(items) ? items : [];
+      setState({ kind: "ready", items: list });
+      undoStackRef.current = [];
+      setUndoCount(0);
+      setUndoToast(null);
+      if (list.length > 0) {
+        const defaultKeys = orderedHeaderKeys(list[0]);
+        setColumnOrder(loadColumnOrder(defaultKeys));
+      } else {
+        setColumnOrder([]);
+      }
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
@@ -221,47 +197,241 @@ export function PlatformRowsClient() {
     void load();
   }, [refreshKey, load]);
 
-  const sample = state.kind === "ready" && state.items.length > 0 ? state.items[0] : null;
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  const syncUndoCount = useCallback(() => {
+    setUndoCount(undoStackRef.current.length);
+  }, []);
+
+  const showUndoToast = useCallback((entry: FieldUndoEntry) => {
+    undoStackRef.current = [
+      entry,
+      ...undoStackRef.current.filter((e) => !(e.id === entry.id && e.field === entry.field)),
+    ].slice(0, MAX_UNDO_STACK);
+    syncUndoCount();
+    setUndoToast(entry);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), UNDO_TOAST_MS);
+  }, [syncUndoCount]);
+
+  const dismissUndoToast = useCallback(() => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast(null);
+  }, []);
+
+  const persistColumnOrder = useCallback((next: string[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const resetColumnOrder = useCallback(() => {
+    if (state.kind !== "ready" || state.items.length === 0) return;
+    const next = orderedHeaderKeys(state.items[0]);
+    persistColumnOrder(next);
+    setColumnOrder(next);
+  }, [persistColumnOrder, state]);
+
+  const handleColDrop = useCallback((targetField: string) => {
+    if (!dragCol || dragCol === targetField) {
+      setDragCol(null);
+      return;
+    }
+    setColumnOrder((prev) => {
+      const from = prev.indexOf(dragCol);
+      const to = prev.indexOf(targetField);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      next.splice(from, 1);
+      next.splice(to, 0, dragCol);
+      persistColumnOrder(next);
+      return next;
+    });
+    setDragCol(null);
+  }, [dragCol, persistColumnOrder]);
+
+  const booleanFields = useMemo(() => {
+    if (state.kind !== "ready") return new Set<string>();
+    const set = new Set<string>();
+    for (const key of columnOrder) {
+      if (fieldIsBoolean(key, state.items)) set.add(key);
+    }
+    return set;
+  }, [state, columnOrder]);
+
+  const filterOptions = useMemo(() => {
+    if (state.kind !== "ready") {
+      return { 발표일: [] as string[], 분류: [] as string[], 플랫폼명: [] as string[] };
+    }
+    const sortedKeys = (vals: string[]) => {
+      const keys = [...new Set(vals.map((v) => v.trim()))];
+      keys.sort((a, b) => {
+        const ae = a === "", be = b === "";
+        if (ae && !be) return 1;
+        if (!ae && be) return -1;
+        return a.localeCompare(b, "ko");
+      });
+      return keys;
+    };
+    return {
+      발표일: sortedKeys(state.items.map((it) => it["발표일"] ?? "")),
+      분류: sortedKeys(state.items.map((it) => it["분류"] ?? "")),
+      플랫폼명: sortedKeys(state.items.map((it) => it["플랫폼명"] ?? "")),
+    };
+  }, [state]);
+
+  const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
+
+  const toggleFilter = (field: FilterTagField, key: string) => {
+    const storageKey = `platform.hidden.${field}`;
+    setHiddenByField((prev) => {
+      const nextSet = new Set(prev[field]);
+      if (nextSet.has(key)) nextSet.delete(key);
+      else nextSet.add(key);
+      saveHiddenSet(storageKey, nextSet);
+      return { ...prev, [field]: nextSet };
+    });
+  };
+
+  const setFilterHiddenAll = (field: FilterTagField, hidden: Set<string>) => {
+    const storageKey = `platform.hidden.${field}`;
+    saveHiddenSet(storageKey, hidden);
+    setHiddenByField((prev) => ({ ...prev, [field]: hidden }));
+  };
+
+  const setFieldInState = useCallback((id: string, field: string, value: string) => {
+    setState((s) => {
+      if (s.kind !== "ready") return s;
+      return {
+        kind: "ready",
+        items: s.items.map((it) => (it.id === id ? { ...it, [field]: value } : it)),
+      };
+    });
+  }, []);
+
+  const patchField = useCallback(
+    async (rowId: string, field: string, newValue: string, opts?: { withUndo?: boolean }) => {
+      if (state.kind !== "ready") return;
+      const item = state.items.find((it) => it.id === rowId);
+      if (!item) return;
+      const prev = item[field] ?? "";
+      if (prev === newValue) return;
+      const cellKey = `${rowId}:${field}`;
+      if (booleanFields.has(field)) setTogglingCell(cellKey);
+      else setPatchingCell(cellKey);
+      setActionError(null);
+      setFieldInState(rowId, field, newValue);
+      try {
+        await apiFetch("/platform-rows/update", { id: rowId, [field]: newValue });
+        if (opts?.withUndo) {
+          showUndoToast({
+            id: rowId,
+            field,
+            title: rowTitle(item),
+            previousValue: prev,
+          });
+        }
+      } catch (e) {
+        setFieldInState(rowId, field, prev);
+        setActionError(e instanceof Error ? e.message : "저장 실패");
+        throw e;
+      } finally {
+        setPatchingCell(null);
+        setTogglingCell(null);
+      }
+    },
+    [booleanFields, setFieldInState, showUndoToast, state],
+  );
+
+  const handleInlineSave = useCallback(
+    async (rowId: string, field: string, newValue: string) => {
+      const withUndo = booleanFields.has(field);
+      if (withUndo) dismissUndoToast();
+      try {
+        await patchField(rowId, field, newValue, { withUndo });
+      } catch {
+        /* actionError set in patchField */
+      }
+    },
+    [booleanFields, dismissUndoToast, patchField],
+  );
+
+  const performUndo = useCallback(
+    async (entry?: FieldUndoEntry) => {
+      const target = entry ?? undoStackRef.current[0];
+      if (!target || undoing) return;
+      setUndoing(true);
+      setActionError(null);
+      dismissUndoToast();
+      setFieldInState(target.id, target.field, target.previousValue);
+      setTogglingCell(`${target.id}:${target.field}`);
+      try {
+        await apiFetch("/platform-rows/update", {
+          id: target.id,
+          [target.field]: target.previousValue,
+        });
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => !(e.id === target.id && e.field === target.field),
+        );
+        syncUndoCount();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "되돌리기 실패");
+        showUndoToast(target);
+      } finally {
+        setTogglingCell(null);
+        setUndoing(false);
+      }
+    },
+    [dismissUndoToast, setFieldInState, showUndoToast, syncUndoCount, undoing],
+  );
 
   useEffect(() => {
-    if (!sample || keysLoggedRef.current) return;
-    keysLoggedRef.current = true;
-    const hdrs = orderedHeaderKeys(sample);
-    const apIdx = colLettersToZeroBased("AP");
-    const apKey = apIdx >= 0 && apIdx < hdrs.length ? hdrs[apIdx] : "(열 없음)";
-    console.log("[platform-rows] header keys (sheet order) =", hdrs);
-    console.log("[platform-rows] AP column index", apIdx, "→ key =", apKey);
-  }, [sample]);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      const el = e.target;
+      if (
+        el instanceof HTMLElement &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      if (undoStackRef.current.length === 0 && !undoToast) return;
+      e.preventDefault();
+      void performUndo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [performUndo, undoToast]);
 
   const sorted = useMemo(() => {
-    if (state.kind !== "ready" || !sample) return [];
+    if (state.kind !== "ready") return [];
     let items = state.items;
     if (filterText.trim()) {
       const q = filterText.trim().toLowerCase();
-      items = items.filter((it) => {
-        const parts: string[] = [];
-        for (const L of PLATFORM_DISPLAY_LETTERS) {
-          parts.push(valueAtColumnLetter(it, sample, L));
-        }
-        parts.push(platformAttrLabel(it, sample));
-        return parts.some((p) => p.toLowerCase().includes(q));
-      });
+      items = items.filter((it) =>
+        columnOrder.some((key) => (it[key] ?? "").toLowerCase().includes(q)),
+      );
+    }
+    for (const field of FILTER_TAG_FIELDS) {
+      const hidden = hiddenByField[field];
+      if (hidden.size > 0) {
+        items = items.filter((it) => !hidden.has((it[field] ?? "").trim()));
+      }
     }
     return [...items].sort((a, b) => {
-      let va = "";
-      let vb = "";
-      if (sortKey === "attr") {
-        va = platformAttrLabel(a, sample);
-        vb = platformAttrLabel(b, sample);
-      } else {
-        va = valueAtColumnLetter(a, sample, sortKey);
-        vb = valueAtColumnLetter(b, sample, sortKey);
-      }
+      const va = a[sortKey] ?? "";
+      const vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, sample, filterText, sortKey, sortDir]);
+  }, [state, filterText, hiddenByField, sortKey, sortDir, columnOrder]);
 
-  const handleSort = (key: SortId) => {
+  const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
@@ -269,7 +439,7 @@ export function PlatformRowsClient() {
     }
   };
 
-  const SortIcon = ({ col }: { col: SortId }) => {
+  const SortIcon = ({ col }: { col: string }) => {
     if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
@@ -282,10 +452,9 @@ export function PlatformRowsClient() {
   const openEditModal = (item: PlatformRow) => {
     setActionError(null);
     setModalItem(item);
-    const statusKey = findStatusKey(item);
     const f: Record<string, string> = {};
-    MODAL_FIELDS.forEach(({ key }) => {
-      f[key] = item[key === "마지막상황" ? statusKey : key] ?? "";
+    columnOrder.forEach((key) => {
+      f[key] = item[key] ?? "";
     });
     setModalForm(f);
   };
@@ -295,10 +464,9 @@ export function PlatformRowsClient() {
     setSavingModal(true);
     setActionError(null);
     try {
-      const statusKey = findStatusKey(modalItem);
       const payload: Record<string, string> = { id: modalItem.id };
-      MODAL_FIELDS.forEach(({ key }) => {
-        payload[key === "마지막상황" ? statusKey : key] = modalForm[key] ?? "";
+      columnOrder.forEach((key) => {
+        if (!READONLY_FIELDS.has(key)) payload[key] = modalForm[key] ?? "";
       });
       await apiFetch("/platform-rows/update", payload);
       setModalItem(null);
@@ -329,46 +497,14 @@ export function PlatformRowsClient() {
     }
   };
 
-  const headerLabelForLetter = (letter: string): string => {
-    if (!sample) return letter;
-    const hdrs = orderedHeaderKeys(sample);
-    const idx = colLettersToZeroBased(letter);
-    const name = idx >= 0 && idx < hdrs.length ? hdrs[idx] : "";
-    return name ? `${name} (${letter})` : `${letter}`;
-  };
+  const isCellBusy = (rowId: string, field: string) =>
+    patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const thColMoveBtn =
-    "rounded border border-zinc-200 bg-white px-1 py-0.5 text-[11px] leading-none text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800";
-
-  const dataColCount = platformLetterOrder.length;
+  const tableColSpan = 1 + columnOrder.length;
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <input
-            type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            placeholder="표시 열·속성 검색"
-            className="min-w-[200px] flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-          />
-          <button
-            type="button"
-            onClick={() => setRefreshKey((k) => k + 1)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300"
-          >
-            새로고침
-          </button>
-          <button
-            type="button"
-            onClick={resetPlatformColumnOrder}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
-            title="플랫폼 열(C·D·속성 뒤) 순서를 시트 기본으로"
-          >
-            플랫폼 열 순서 초기화
-          </button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => {
@@ -376,11 +512,60 @@ export function PlatformRowsClient() {
             setCreateForm(emptyCreateForm());
             setCreateModalOpen(true);
           }}
-          className="shrink-0 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
         >
           새로만들기
         </button>
+        <input
+          type="text"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          placeholder="전체 열 검색"
+          className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 sm:min-w-[16rem]"
+        />
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300"
+        >
+          새로고침
+        </button>
+        <button
+          type="button"
+          onClick={resetColumnOrder}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+          title="열 순서를 시트 기본 순서로"
+        >
+          열 순서 초기화
+        </button>
+        {undoCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => void performUndo()}
+            disabled={undoing}
+            title="Ctrl+Z"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60"
+          >
+            {undoing ? "되돌리는 중…" : "되돌리기 (Ctrl+Z)"}
+          </button>
+        ) : null}
       </div>
+
+      {state.kind === "ready" && columnOrder.length > 0 && (
+        <FilterTagsFlow
+          listLabel={listLabel}
+          groups={FILTER_TAG_FIELDS.filter((f) => columnOrder.includes(f) || filterOptions[f].length > 0).map(
+            (field) => ({
+              title: field === "플랫폼명" ? "플랫폼" : field,
+              keys: filterOptions[field],
+              hidden: hiddenByField[field],
+              onToggle: (key) => toggleFilter(field, key),
+              onShowAll: () => setFilterHiddenAll(field, new Set()),
+              onHideAll: () => setFilterHiddenAll(field, new Set(filterOptions[field])),
+            }),
+          )}
+        />
+      )}
 
       {actionError && !modalItem && !createModalOpen && (
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>
@@ -398,56 +583,37 @@ export function PlatformRowsClient() {
         </div>
       )}
 
-      {state.kind === "ready" && sample && (
+      {state.kind === "ready" && columnOrder.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[1200px] text-xs">
+          <table className="w-full min-w-[2400px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
-                <th className={thSort} onClick={() => handleSort("C")}>
-                  {headerLabelForLetter("C")}
-                  <SortIcon col="C" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("D")}>
-                  {headerLabelForLetter("D")}
-                  <SortIcon col="D" />
-                </th>
-                <th className={thSort} onClick={() => handleSort("attr")}>
-                  속성
-                  <SortIcon col="attr" />
-                </th>
-                {platformLetterOrder.map((letter, idx) => (
-                  <th key={letter} className="min-w-[6rem] align-top">
-                    <div className="flex items-stretch gap-0 border-b-0">
-                      <button
-                        type="button"
-                        className={`${thSort} flex-1 text-left`}
-                        onClick={() => handleSort(letter)}
+                {columnOrder.map((field) => (
+                  <th
+                    key={field}
+                    draggable
+                    onDragStart={() => setDragCol(field)}
+                    onDragEnd={() => setDragCol(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleColDrop(field)}
+                    className={`group min-w-[5.5rem] align-top ${dragCol === field ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className={`${thSort} flex w-full items-center gap-0.5 text-left`}
+                      onClick={() => handleSort(field)}
+                    >
+                      <span
+                        className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
+                        aria-hidden
+                        title="드래그하여 열 이동"
                       >
-                        {headerLabelForLetter(letter)}
-                        <SortIcon col={letter} />
-                      </button>
-                      <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
-                        <button
-                          type="button"
-                          className={thColMoveBtn}
-                          aria-label={`${headerLabelForLetter(letter)} 열을 왼쪽으로`}
-                          disabled={idx === 0}
-                          onClick={() => movePlatformColumn(letter, -1)}
-                        >
-                          ◀
-                        </button>
-                        <button
-                          type="button"
-                          className={thColMoveBtn}
-                          aria-label={`${headerLabelForLetter(letter)} 열을 오른쪽으로`}
-                          disabled={idx === platformLetterOrder.length - 1}
-                          onClick={() => movePlatformColumn(letter, 1)}
-                        >
-                          ▶
-                        </button>
-                      </div>
-                    </div>
+                        ⋮⋮
+                      </span>
+                      <span className="truncate">{field}</span>
+                      <SortIcon col={field} />
+                    </button>
                   </th>
                 ))}
               </tr>
@@ -455,54 +621,60 @@ export function PlatformRowsClient() {
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={4 + dataColCount} className="px-3 py-8 text-center text-zinc-500">
-                    {filterText ? "조건에 맞는 항목이 없습니다" : "항목이 없습니다"}
+                  <td colSpan={tableColSpan} className="px-3 py-8 text-center text-zinc-500">
+                    {filterText || FILTER_TAG_FIELDS.some((f) => hiddenByField[f].size > 0)
+                      ? "조건에 맞는 항목이 없습니다"
+                      : "항목이 없습니다"}
                   </td>
                 </tr>
               ) : (
-                sorted.map((item) => {
-                  const attr = platformAttrLabel(item, sample);
-                  return (
-                    <tr
-                      key={item.id}
-                      className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40"
-                    >
-                      <td className="whitespace-nowrap px-2 py-1.5 align-top">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(item)}
-                          className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                sorted.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40"
+                  >
+                    <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(item)}
+                        className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                      >
+                        수정
+                      </button>
+                    </td>
+                    {columnOrder.map((field) => {
+                      const isBool = booleanFields.has(field);
+                      const readonly = READONLY_FIELDS.has(field);
+                      const wide = field.includes("비고") || field.includes("메모") || field.includes("링크") || field.includes("FTP");
+                      return (
+                        <td
+                          key={field}
+                          className={`max-w-[14rem] px-2 py-1.5 align-top ${isBool ? "text-center" : ""}`}
                         >
-                          수정
-                        </button>
-                      </td>
-                      {PLATFORM_DISPLAY_LETTERS.slice(0, 2).map((letter) => (
-                        <td key={letter} className="max-w-[14rem] px-2 py-1.5 align-top">
-                          <span className="line-clamp-3 break-words text-zinc-800 dark:text-zinc-200">
-                            {valueAtColumnLetter(item, sample, letter) || "—"}
-                          </span>
+                          <PlatformRowInlineCell
+                            value={item[field] ?? ""}
+                            field={field}
+                            rowId={item.id}
+                            boolean={isBool}
+                            required={field === "플랫폼명" || field === "회사명"}
+                            wide={wide}
+                            muted={field.includes("일") && field.includes("날짜")}
+                            tabular={isBool || field.includes("화수") || field.includes("회차")}
+                            disabled={readonly || isCellBusy(item.id, field)}
+                            onSave={handleInlineSave}
+                          />
                         </td>
-                      ))}
-                      <td className="max-w-[8rem] whitespace-nowrap px-2 py-1.5 align-top text-zinc-700 dark:text-zinc-300">
-                        {attr || "—"}
-                      </td>
-                      {platformLetterOrder.map((letter) => (
-                        <td key={letter} className="max-w-[12rem] px-2 py-1.5 align-top">
-                          <span className="line-clamp-3 break-words text-zinc-800 dark:text-zinc-200">
-                            {valueAtColumnLetter(item, sample, letter) || "—"}
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })
+                      );
+                    })}
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       )}
 
-      {state.kind === "ready" && !sample && (
+      {state.kind === "ready" && columnOrder.length === 0 && (
         <p className="text-sm text-zinc-500">표시할 플랫폼 행이 없습니다.</p>
       )}
 
@@ -510,22 +682,44 @@ export function PlatformRowsClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
             <h3 className="mb-1 text-base font-semibold text-zinc-900 dark:text-zinc-50">
-              {modalItem["회사명"] ?? ""} · 핵심 필드 수정
+              {rowTitle(modalItem)} · 전체 필드 수정
             </h3>
             <p className="mb-4 text-xs text-zinc-500 dark:text-zinc-400">
-              저장 시 마지막업데이트날짜(M열)가 자동으로 갱신됩니다.
+              저장 시 마지막업데이트날짜가 자동으로 갱신됩니다.
             </p>
             <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
-              {MODAL_FIELDS.map(({ key, label }) => (
-                <label key={key} className="block">
-                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
-                  <input
-                    type="text"
-                    value={modalForm[key] ?? ""}
-                    onChange={(e) => setModalForm({ ...modalForm, [key]: e.target.value })}
-                    className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                  />
-                </label>
+              {columnOrder.map((key) => (
+                <div key={key} className="block">
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {key}
+                    {READONLY_FIELDS.has(key) ? " (자동)" : ""}
+                  </span>
+                  {booleanFields.has(key) ? (
+                    <label className="mt-1 flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isPlatformBoolValue(modalForm[key])}
+                        disabled={READONLY_FIELDS.has(key)}
+                        onChange={(e) =>
+                          setModalForm((prev) => ({
+                            ...prev,
+                            [key]: boolToCell(e.target.checked),
+                          }))
+                        }
+                        className="h-4 w-4 accent-zinc-800 dark:accent-zinc-200"
+                      />
+                      <span className="text-sm text-zinc-700 dark:text-zinc-200">체크</span>
+                    </label>
+                  ) : (
+                    <input
+                      type="text"
+                      value={modalForm[key] ?? ""}
+                      disabled={READONLY_FIELDS.has(key)}
+                      onChange={(e) => setModalForm({ ...modalForm, [key]: e.target.value })}
+                      className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    />
+                  )}
+                </div>
               ))}
             </div>
             {actionError && (
@@ -558,12 +752,14 @@ export function PlatformRowsClient() {
           <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
             <h3 className="mb-1 text-base font-semibold text-zinc-900 dark:text-zinc-50">플랫폼 행 새로 만들기</h3>
             <p className="mb-4 text-xs text-zinc-500 dark:text-zinc-400">
-              회사명(A) 또는 플랫폼명(Q) 중 하나는 반드시 입력하세요. 마지막업데이트날짜는 수정 시에만 자동 반영됩니다.
+              회사명 또는 플랫폼명 중 하나는 반드시 입력하세요.
             </p>
             <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
-              {CREATE_MODAL_FIELDS.map(({ key, label }) => (
+              {CREATE_MODAL_FIELDS.map(({ key, label, required }) => (
                 <label key={key} className="block">
-                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                    {label}{required ? " *" : ""}
+                  </span>
                   <input
                     type="text"
                     value={createForm[key] ?? ""}
@@ -591,12 +787,42 @@ export function PlatformRowsClient() {
                 disabled={savingCreate}
                 className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                {savingCreate ? "저장 중…" : "저장"}
+                {savingCreate ? "저장 중…" : "생성"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {undoToast ? (
+        <div
+          className="fixed bottom-4 left-1/2 z-50 flex max-w-lg -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          role="status"
+        >
+          <span className="text-zinc-700 dark:text-zinc-200">
+            <span className="font-medium text-zinc-900 dark:text-zinc-50">
+              「{undoToast.title}」
+            </span>{" "}
+            {undoToast.field} 변경됨
+          </span>
+          <button
+            type="button"
+            onClick={() => void performUndo(undoToast)}
+            disabled={undoing}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            되돌리기
+          </button>
+          <button
+            type="button"
+            onClick={dismissUndoToast}
+            className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            닫기
+          </button>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ctrl+Z</span>
+        </div>
+      ) : null}
     </div>
   );
 }
