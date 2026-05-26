@@ -199,6 +199,51 @@ function TaskFormModal(props: {
   );
 }
 
+function FilterTagSection(props: {
+  title: string;
+  keys: string[];
+  hidden: Set<string>;
+  onToggle: (key: string) => void;
+  onShowAll: () => void;
+  onHideAll: () => void;
+  listLabel: (key: string) => string;
+  scrollable?: boolean;
+}) {
+  const { title, keys, hidden, onToggle, onShowAll, onHideAll, listLabel, scrollable } = props;
+  if (keys.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="shrink-0 text-xs font-semibold text-zinc-600 dark:text-zinc-400">{title}</span>
+        <button type="button" onClick={onShowAll}
+          className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+        <button type="button" onClick={onHideAll}
+          className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+      </div>
+      <div className={`flex flex-wrap gap-1.5 ${scrollable ? "max-h-28 overflow-y-auto pr-1" : ""}`}>
+        {keys.map(key => {
+          const active = !hidden.has(key);
+          return (
+            <button
+              key={key || `__${title}__`}
+              type="button"
+              onClick={() => onToggle(key)}
+              aria-pressed={active}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                active
+                  ? "border-zinc-800 bg-zinc-800 text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-900"
+                  : "border-zinc-300 bg-white text-zinc-500 line-through opacity-60 hover:opacity-80 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+              }`}
+            >
+              {listLabel(key)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TasksClient() {
   const [state, setState] = useState<ViewState>({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -219,9 +264,6 @@ export function TasksClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("마감일");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [platformFilterOpen, setPlatformFilterOpen] = useState(false);
-  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
-  const [priorityFilterOpen, setPriorityFilterOpen] = useState(false);
   const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -254,7 +296,6 @@ export function TasksClient() {
     } catch { /* ignore */ }
     return new Set<string>();
   });
-  const [fieldFilterOpen, setFieldFilterOpen] = useState(false);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -654,153 +695,13 @@ export function TasksClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <button type="button" onClick={() => setPriorityFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            우선순위 필터
-            {hiddenPriorities.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPriorities.size}</span>
-            )}
-            <span className="text-[10px]">{priorityFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {priorityFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 우선순위</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set(allPriorities))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allPriorities.map(key => (
-                  <li key={key || "__pr__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenPriorities.has(key)} onChange={() => togglePriority(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setPriorityFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
         <button onClick={() => { setActionError(null); setNewForm(EMPTY_FORM); setCreateOpen(true); }}
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           새 업무 추가
         </button>
         <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
           placeholder="업무명·플랫폼·분야·분류·정량화·마감일 등 검색"
-          className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
-
-        <div className="relative">
-          <button type="button" onClick={() => setFieldFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            분야 필터
-            {hiddenFields.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenFields.size}</span>
-            )}
-            <span className="text-[10px]">{fieldFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {fieldFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분야</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenFieldsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenFieldsSave(new Set(allFields))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allFields.map(key => (
-                  <li key={key || "__fld__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenFields.has(key)} onChange={() => toggleField(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setFieldFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <button type="button" onClick={() => setCategoryFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            분류 필터
-            {hiddenCategories.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenCategories.size}</span>
-            )}
-            <span className="text-[10px]">{categoryFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {categoryFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분류</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenCategoriesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenCategoriesSave(new Set(allCategories))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allCategories.map(key => (
-                  <li key={key || "__cat__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenCategories.has(key)} onChange={() => toggleCategory(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setCategoryFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            플랫폼 필터
-            {hiddenPlatforms.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
-            )}
-            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {platformFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allPlatforms.map(key => (
-                  <li key={key || "__pf__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
+          className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 sm:min-w-[16rem]" />
 
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
@@ -837,6 +738,52 @@ export function TasksClient() {
           </button>
         ))}
       </div>
+
+      {state.kind === "ready" &&
+        (allPriorities.length > 0 ||
+          allFields.length > 0 ||
+          allCategories.length > 0 ||
+          allPlatforms.length > 0) && (
+        <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <FilterTagSection
+            title="우선순위"
+            keys={allPriorities}
+            hidden={hiddenPriorities}
+            onToggle={togglePriority}
+            onShowAll={() => setHiddenPrioritiesSave(new Set())}
+            onHideAll={() => setHiddenPrioritiesSave(new Set(allPriorities))}
+            listLabel={listLabel}
+          />
+          <FilterTagSection
+            title="분야"
+            keys={allFields}
+            hidden={hiddenFields}
+            onToggle={toggleField}
+            onShowAll={() => setHiddenFieldsSave(new Set())}
+            onHideAll={() => setHiddenFieldsSave(new Set(allFields))}
+            listLabel={listLabel}
+          />
+          <FilterTagSection
+            title="분류"
+            keys={allCategories}
+            hidden={hiddenCategories}
+            onToggle={toggleCategory}
+            onShowAll={() => setHiddenCategoriesSave(new Set())}
+            onHideAll={() => setHiddenCategoriesSave(new Set(allCategories))}
+            listLabel={listLabel}
+          />
+          <FilterTagSection
+            title="플랫폼"
+            keys={allPlatforms}
+            hidden={hiddenPlatforms}
+            onToggle={togglePlatform}
+            onShowAll={() => setHiddenPlatformsSave(new Set())}
+            onHideAll={() => setHiddenPlatformsSave(new Set(allPlatforms))}
+            listLabel={listLabel}
+            scrollable
+          />
+        </div>
+      )}
 
       {actionError && !editItem && !createOpen &&
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
