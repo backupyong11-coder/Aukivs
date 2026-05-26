@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -199,47 +200,57 @@ function TaskFormModal(props: {
   );
 }
 
-function FilterTagSection(props: {
+type FilterTagGroup = {
   title: string;
   keys: string[];
   hidden: Set<string>;
   onToggle: (key: string) => void;
   onShowAll: () => void;
   onHideAll: () => void;
+};
+
+function filterTagBtnClass(active: boolean) {
+  return `rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+    active
+      ? "border-zinc-800 bg-white text-zinc-900 shadow-sm dark:border-zinc-300 dark:bg-zinc-950 dark:text-zinc-50"
+      : "border-zinc-800 bg-zinc-900 text-white opacity-80 hover:opacity-100 dark:border-zinc-400 dark:bg-zinc-200 dark:text-zinc-900"
+  }`;
+}
+
+function FilterTagsFlow(props: {
+  groups: FilterTagGroup[];
   listLabel: (key: string) => string;
-  scrollable?: boolean;
 }) {
-  const { title, keys, hidden, onToggle, onShowAll, onHideAll, listLabel, scrollable } = props;
-  if (keys.length === 0) return null;
+  const visible = props.groups.filter(g => g.keys.length > 0);
+  if (visible.length === 0) return null;
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="shrink-0 text-xs font-semibold text-zinc-600 dark:text-zinc-400">{title}</span>
-        <button type="button" onClick={onShowAll}
-          className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-        <button type="button" onClick={onHideAll}
-          className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-      </div>
-      <div className={`flex flex-wrap gap-1.5 ${scrollable ? "max-h-28 overflow-y-auto pr-1" : ""}`}>
-        {keys.map(key => {
-          const active = !hidden.has(key);
-          return (
-            <button
-              key={key || `__${title}__`}
-              type="button"
-              onClick={() => onToggle(key)}
-              aria-pressed={active}
-              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                active
-                  ? "border-zinc-800 bg-zinc-800 text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-zinc-900"
-                  : "border-zinc-300 bg-white text-zinc-500 line-through opacity-60 hover:opacity-80 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
-              }`}
-            >
-              {listLabel(key)}
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+      {visible.map((group, gi) => (
+        <Fragment key={group.title}>
+          {gi > 0 ? (
+            <span className="mx-0.5 hidden h-4 w-px shrink-0 bg-zinc-300 sm:inline-block dark:bg-zinc-600" aria-hidden />
+          ) : null}
+          <span className="shrink-0 text-xs font-semibold text-zinc-600 dark:text-zinc-400">{group.title}</span>
+          <button type="button" onClick={group.onShowAll}
+            className="shrink-0 text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+          <button type="button" onClick={group.onHideAll}
+            className="shrink-0 text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+          {group.keys.map(key => {
+            const active = !group.hidden.has(key);
+            return (
+              <button
+                key={`${group.title}-${key || "__empty__"}`}
+                type="button"
+                onClick={() => group.onToggle(key)}
+                aria-pressed={active}
+                className={filterTagBtnClass(active)}
+              >
+                {props.listLabel(key)}
+              </button>
+            );
+          })}
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -720,6 +731,46 @@ export function TasksClient() {
         ) : null}
       </div>
 
+      {state.kind === "ready" && (
+        <FilterTagsFlow
+          listLabel={listLabel}
+          groups={[
+            {
+              title: "우선순위",
+              keys: allPriorities,
+              hidden: hiddenPriorities,
+              onToggle: togglePriority,
+              onShowAll: () => setHiddenPrioritiesSave(new Set()),
+              onHideAll: () => setHiddenPrioritiesSave(new Set(allPriorities)),
+            },
+            {
+              title: "분야",
+              keys: allFields,
+              hidden: hiddenFields,
+              onToggle: toggleField,
+              onShowAll: () => setHiddenFieldsSave(new Set()),
+              onHideAll: () => setHiddenFieldsSave(new Set(allFields)),
+            },
+            {
+              title: "분류",
+              keys: allCategories,
+              hidden: hiddenCategories,
+              onToggle: toggleCategory,
+              onShowAll: () => setHiddenCategoriesSave(new Set()),
+              onHideAll: () => setHiddenCategoriesSave(new Set(allCategories)),
+            },
+            {
+              title: "플랫폼",
+              keys: allPlatforms,
+              hidden: hiddenPlatforms,
+              onToggle: togglePlatform,
+              onShowAll: () => setHiddenPlatformsSave(new Set()),
+              onHideAll: () => setHiddenPlatformsSave(new Set(allPlatforms)),
+            },
+          ]}
+        />
+      )}
+
       {/* 탭 */}
       <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
         {(["미완료", "완료", "전체"] as TabType[]).map(t => (
@@ -738,52 +789,6 @@ export function TasksClient() {
           </button>
         ))}
       </div>
-
-      {state.kind === "ready" &&
-        (allPriorities.length > 0 ||
-          allFields.length > 0 ||
-          allCategories.length > 0 ||
-          allPlatforms.length > 0) && (
-        <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <FilterTagSection
-            title="우선순위"
-            keys={allPriorities}
-            hidden={hiddenPriorities}
-            onToggle={togglePriority}
-            onShowAll={() => setHiddenPrioritiesSave(new Set())}
-            onHideAll={() => setHiddenPrioritiesSave(new Set(allPriorities))}
-            listLabel={listLabel}
-          />
-          <FilterTagSection
-            title="분야"
-            keys={allFields}
-            hidden={hiddenFields}
-            onToggle={toggleField}
-            onShowAll={() => setHiddenFieldsSave(new Set())}
-            onHideAll={() => setHiddenFieldsSave(new Set(allFields))}
-            listLabel={listLabel}
-          />
-          <FilterTagSection
-            title="분류"
-            keys={allCategories}
-            hidden={hiddenCategories}
-            onToggle={toggleCategory}
-            onShowAll={() => setHiddenCategoriesSave(new Set())}
-            onHideAll={() => setHiddenCategoriesSave(new Set(allCategories))}
-            listLabel={listLabel}
-          />
-          <FilterTagSection
-            title="플랫폼"
-            keys={allPlatforms}
-            hidden={hiddenPlatforms}
-            onToggle={togglePlatform}
-            onShowAll={() => setHiddenPlatformsSave(new Set())}
-            onHideAll={() => setHiddenPlatformsSave(new Set(allPlatforms))}
-            listLabel={listLabel}
-            scrollable
-          />
-        </div>
-      )}
 
       {actionError && !editItem && !createOpen &&
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
