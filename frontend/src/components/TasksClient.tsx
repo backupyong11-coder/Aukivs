@@ -10,6 +10,10 @@ import {
   type SetStateAction,
 } from "react";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import {
+  TaskInlineCell,
+  type EditableTaskField,
+} from "@/components/TaskInlineCell";
 
 type TaskRow = {
   id: string;
@@ -205,6 +209,7 @@ export function TasksClient() {
   const [newForm, setNewForm] = useState<TaskFormFields>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [patchingCell, setPatchingCell] = useState<string | null>(null);
   const [undoToast, setUndoToast] = useState<CompletionUndoEntry | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const [undoing, setUndoing] = useState(false);
@@ -560,6 +565,63 @@ export function TasksClient() {
     }
   };
 
+  const patchTaskField = useCallback(
+    async (taskId: string, field: EditableTaskField, newValue: string) => {
+      if (state.kind !== "ready") return;
+      const item = state.items.find((it) => it.id === taskId);
+      if (!item) return;
+      const prev = item[field] ?? "";
+      if (prev === newValue) return;
+      if (field === "업무명" && !newValue.trim()) {
+        throw new Error("업무명은 비울 수 없습니다.");
+      }
+      const cellKey = `${taskId}:${field}`;
+      setPatchingCell(cellKey);
+      setActionError(null);
+      setState((s) => {
+        if (s.kind !== "ready") return s;
+        return {
+          kind: "ready",
+          items: s.items.map((it) =>
+            it.id === taskId ? { ...it, [field]: newValue } : it,
+          ),
+        };
+      });
+      try {
+        await apiFetch("/tasks/update", { id: taskId, [field]: newValue });
+      } catch (e) {
+        setState((s) => {
+          if (s.kind !== "ready") return s;
+          return {
+            kind: "ready",
+            items: s.items.map((it) =>
+              it.id === taskId ? { ...it, [field]: prev } : it,
+            ),
+          };
+        });
+        throw e;
+      } finally {
+        setPatchingCell(null);
+      }
+    },
+    [state],
+  );
+
+  const handleInlineSave = useCallback(
+    async (taskId: string, field: EditableTaskField, newValue: string) => {
+      try {
+        await patchTaskField(taskId, field, newValue);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "저장 실패");
+        throw e;
+      }
+    },
+    [patchTaskField],
+  );
+
+  const isCellPatching = (taskId: string, field: EditableTaskField) =>
+    patchingCell === `${taskId}:${field}`;
+
   const handleToggleComplete = async (item: TaskRow, checked: boolean) => {
     const prevDone = item.완료 ?? "";
     const nextDone = doneToCell(checked);
@@ -838,7 +900,16 @@ export function TasksClient() {
                       수정
                     </button>
                   </td>
-                  <td className="max-w-[6rem] truncate px-3 py-1.5 text-zinc-500">{item.날짜그룹}</td>
+                  <td className="max-w-[6rem] px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.날짜그룹}
+                      field="날짜그룹"
+                      taskId={item.id}
+                      muted
+                      disabled={isCellPatching(item.id, "날짜그룹")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
                   <td className="px-3 py-1.5 text-center">
                     <input
                       type="checkbox"
@@ -849,27 +920,183 @@ export function TasksClient() {
                       className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
                     />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-center">{item.우선순위}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.마감일}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.분야}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.분류}</td>
-                  <td className="px-3 py-1.5 font-medium text-zinc-900 dark:text-zinc-50">
-                    <span className="block max-w-[320px] truncate">{item.업무명}</span>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.우선순위}
+                      field="우선순위"
+                      taskId={item.id}
+                      align="center"
+                      disabled={isCellPatching(item.id, "우선순위")}
+                      onSave={handleInlineSave}
+                    />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item["정량화 분"]}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.정량화}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item["정량화 구분"]}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{item.시간}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.시간변환}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.관련플랫폼}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.세부수치}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.세부단위}</td>
-                  <td className="max-w-[8rem] truncate px-3 py-1.5">{item.관련작품}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.난이도}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.피로도}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5">{item.상태}</td>
-                  <td className="max-w-[8rem] truncate px-3 py-1.5">{item.담당자}</td>
-                  <td className="max-w-[12rem] truncate px-3 py-1.5 text-zinc-600 dark:text-zinc-400">{item.메모}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
+                    <TaskInlineCell
+                      value={item.마감일}
+                      field="마감일"
+                      taskId={item.id}
+                      muted
+                      tabular
+                      disabled={isCellPatching(item.id, "마감일")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.분야}
+                      field="분야"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "분야")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.분류}
+                      field="분류"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "분류")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.업무명}
+                      field="업무명"
+                      taskId={item.id}
+                      wide
+                      disabled={isCellPatching(item.id, "업무명")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item["정량화 분"]}
+                      field="정량화 분"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "정량화 분")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.정량화}
+                      field="정량화"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "정량화")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item["정량화 구분"]}
+                      field="정량화 구분"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "정량화 구분")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
+                    <TaskInlineCell
+                      value={item.시간}
+                      field="시간"
+                      taskId={item.id}
+                      tabular
+                      disabled={isCellPatching(item.id, "시간")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.시간변환}
+                      field="시간변환"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "시간변환")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.관련플랫폼}
+                      field="관련플랫폼"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "관련플랫폼")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.세부수치}
+                      field="세부수치"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "세부수치")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.세부단위}
+                      field="세부단위"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "세부단위")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="max-w-[8rem] px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.관련작품}
+                      field="관련작품"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "관련작품")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.난이도}
+                      field="난이도"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "난이도")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.피로도}
+                      field="피로도"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "피로도")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.상태}
+                      field="상태"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "상태")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="max-w-[8rem] px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.담당자}
+                      field="담당자"
+                      taskId={item.id}
+                      disabled={isCellPatching(item.id, "담당자")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
+                  <td className="max-w-[12rem] px-3 py-1.5">
+                    <TaskInlineCell
+                      value={item.메모}
+                      field="메모"
+                      taskId={item.id}
+                      muted
+                      disabled={isCellPatching(item.id, "메모")}
+                      onSave={handleInlineSave}
+                    />
+                  </td>
                   <td className="px-2 py-1.5">
                     <button type="button" onClick={() => void handleDelete(item)}
                       className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
