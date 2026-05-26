@@ -134,7 +134,6 @@ function taskRowSubLines(t: TaskSheetRow): { label: string; value: string }[] {
     const v = (t[key] ?? "").trim();
     if (v) rows.push({ label, value: v });
   };
-  push("날짜그룹", "날짜그룹");
   push("우선순위", "우선순위");
   push("분야", "분야");
   push("분류", "분류");

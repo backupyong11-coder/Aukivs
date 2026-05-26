@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 
 export type EditableTaskField =
-  | "날짜그룹"
   | "우선순위"
   | "마감일"
   | "분야"

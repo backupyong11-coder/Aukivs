@@ -83,7 +83,6 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
 
 const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: boolean }[] = [
   { key: "업무명", label: "업무명", required: true },
-  { key: "날짜그룹", label: "날짜그룹 (A열)" },
   { key: "우선순위", label: "우선순위" },
   { key: "마감일", label: "마감일" },
   { key: "분야", label: "분야" },
@@ -460,8 +459,7 @@ export function TasksClient() {
     if (filterText) {
       const q = filterText;
       const hay = (it: TaskRow) =>
-        (it.날짜그룹 ?? "").includes(q)
-        || (it.업무명 ?? "").includes(q)
+        (it.업무명 ?? "").includes(q)
         || (it.관련플랫폼 ?? "").includes(q)
         || (it.분류 ?? "").includes(q)
         || (it.분야 ?? "").includes(q)
@@ -860,7 +858,6 @@ export function TasksClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thCls}>수정</th>
-                <th className={thCls}>날짜그룹</th>
                 <th className={thCls}>완료</th>
                 <th className={thSort} onClick={() => handleSort("우선순위")}>우선순위<SortIcon col="우선순위"/></th>
                 <th className={thSort} onClick={() => handleSort("마감일")}>마감일<SortIcon col="마감일"/></th>
@@ -886,7 +883,7 @@ export function TasksClient() {
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={23} className="px-3 py-8 text-center text-zinc-500">
+                <tr><td colSpan={22} className="px-3 py-8 text-center text-zinc-500">
                   {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0 || hiddenFields.size > 0
                     ? "조건에 맞는 항목이 없습니다"
                     : `${tab} 업무가 없습니다`}
@@ -899,16 +896,6 @@ export function TasksClient() {
                       className="whitespace-nowrap rounded border border-zinc-300 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800">
                       수정
                     </button>
-                  </td>
-                  <td className="max-w-[6rem] px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.날짜그룹}
-                      field="날짜그룹"
-                      taskId={item.id}
-                      muted
-                      disabled={isCellPatching(item.id, "날짜그룹")}
-                      onSave={handleInlineSave}
-                    />
                   </td>
                   <td className="px-3 py-1.5 text-center">
                     <input
