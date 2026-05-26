@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  fetchWeeklyAgendaFromServer,
+  saveWeeklyAgendaToServer,
+} from "@/lib/weeklyAgendaApi";
+import {
   createDefaultState,
   createDefaultWorkbook,
   createMajor,
@@ -19,6 +23,8 @@ import {
   type WeeklyAgendaWorkbook,
 } from "@/lib/weeklyAgendaStorage";
 import { WeeklyAgendaPersonGrid } from "@/components/WeeklyAgendaPersonGrid";
+
+type SyncStatus = "loading" | "synced" | "saving" | "local" | "error";
 
 function sortMajors(majors: MajorCategory[]): MajorCategory[] {
   return [...majors].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
@@ -58,18 +64,86 @@ export function WeeklyAgendaClient() {
   const [workbook, setWorkbook] = useState<WeeklyAgendaWorkbook | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [tabDragOverId, setTabDragOverId] = useState<string | null>(null);
   const [tabDragOverEnd, setTabDragOverEnd] = useState(false);
 
   useEffect(() => {
-    const loaded = loadWeeklyAgendaWorkbook();
-    setWorkbook(loaded ?? createDefaultWorkbook());
-    setHydrated(true);
+    let cancelled = false;
+
+    async function loadInitial() {
+      const server = await fetchWeeklyAgendaFromServer();
+      if (cancelled) return;
+
+      if (server.ok && server.workbook) {
+        setWorkbook(server.workbook);
+        saveWeeklyAgendaWorkbook(server.workbook);
+        setSyncStatus("synced");
+        setSyncMessage(null);
+        setHydrated(true);
+        return;
+      }
+
+      if (server.ok && !server.workbook) {
+        const local = loadWeeklyAgendaWorkbook();
+        if (local) {
+          setWorkbook(local);
+          setHydrated(true);
+          const pushed = await saveWeeklyAgendaToServer(local);
+          if (cancelled) return;
+          if (pushed.ok) {
+            saveWeeklyAgendaWorkbook(local);
+            setSyncStatus("synced");
+            setSyncMessage("이 브라우저 데이터를 서버에 올렸습니다.");
+          } else {
+            setSyncStatus("local");
+            setSyncMessage(pushed.message);
+          }
+          return;
+        }
+        const fresh = createDefaultWorkbook();
+        setWorkbook(fresh);
+        setHydrated(true);
+        const pushed = await saveWeeklyAgendaToServer(fresh);
+        if (cancelled) return;
+        setSyncStatus(pushed.ok ? "synced" : "local");
+        if (!pushed.ok) setSyncMessage(pushed.message);
+        return;
+      }
+
+      const local = loadWeeklyAgendaWorkbook() ?? createDefaultWorkbook();
+      setWorkbook(local);
+      setSyncStatus("local");
+      setSyncMessage(server.ok ? "서버에 문서가 없어 로컬을 열었습니다." : server.message);
+      setHydrated(true);
+    }
+
+    void loadInitial();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated || !workbook) return;
     saveWeeklyAgendaWorkbook(workbook);
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setSyncStatus((prev) => (prev === "error" ? "error" : "saving"));
+        const result = await saveWeeklyAgendaToServer(workbook);
+        if (result.ok) {
+          setSyncStatus("synced");
+          setSyncMessage(null);
+        } else {
+          setSyncStatus("error");
+          setSyncMessage(result.message);
+        }
+      })();
+    }, 700);
+
+    return () => window.clearTimeout(timer);
   }, [workbook, hydrated]);
 
   const sortedSheets = useMemo(() => {
@@ -331,8 +405,28 @@ export function WeeklyAgendaClient() {
     updateState(() => createDefaultState());
   }
 
+  const syncBanner =
+    syncStatus === "loading" ? (
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">서버에서 불러오는 중…</p>
+    ) : syncStatus === "saving" ? (
+      <p className="text-xs text-amber-700 dark:text-amber-400">서버에 저장하는 중…</p>
+    ) : syncStatus === "synced" ? (
+      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+        {syncMessage ?? "서버에 저장됨 — 다른 PC·브라우저에서도 같은 내용이 보입니다."}
+      </p>
+    ) : syncStatus === "local" ? (
+      <p className="text-xs text-amber-800 dark:text-amber-300">
+        {syncMessage ?? "서버에 연결되지 않아 이 브라우저에만 저장됩니다."}
+      </p>
+    ) : (
+      <p className="text-xs text-red-700 dark:text-red-400">
+        {syncMessage ?? "서버 저장에 실패했습니다. 로컬 캐시에는 남아 있습니다."}
+      </p>
+    );
+
   return (
     <div className="space-y-4 pb-[4.25rem] sm:pb-[4.5rem]">
+      {syncBanner}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="flex flex-1 items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           표 제목

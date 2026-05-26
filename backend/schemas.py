@@ -518,3 +518,23 @@ class MemoAppendRequest(BaseModel):
 
 class MemoAppendResponse(BaseModel):
     appended: bool = True
+
+
+class WeeklyAgendaGetResponse(BaseModel):
+    """GET /weekly-agenda — 서버에 문서가 없으면 workbook=null."""
+
+    workbook: dict[str, Any] | None = None
+    updated_at: str | None = None
+
+
+class WeeklyAgendaPutRequest(BaseModel):
+    """PUT /weekly-agenda — 전체 워크북 교체."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workbook: dict[str, Any]
+
+
+class WeeklyAgendaPutResponse(BaseModel):
+    ok: bool = True
+    updated_at: str | None = None

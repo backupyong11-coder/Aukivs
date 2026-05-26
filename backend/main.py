@@ -44,6 +44,9 @@ from schemas import (
     UploadNextEpisodeResponse,
     UploadUpdateRequest,
     UploadUpdateResponse,
+    WeeklyAgendaGetResponse,
+    WeeklyAgendaPutRequest,
+    WeeklyAgendaPutResponse,
 )
 from services.briefing_aggregate import aggregate_briefing_today
 from services.ai_checklist_suggest import suggest_checklist_ai
@@ -74,6 +77,7 @@ from repositories.memos_repo import delete_memo as delete_memo_supabase
 from repositories.memos_repo import list_memos as list_memos_supabase
 from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
+from repositories import weekly_agenda_repo
 from repositories import snapshot_repo
 from services.google_uploads_sheets import (
     advance_upload_next_episode,
@@ -1087,6 +1091,43 @@ def post_platform_rows_delete(body: dict[str, Any] = Body(...)):
         raise HTTPException(status_code=404, detail=str(e)) from e
     except SheetsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ── 주간 아젠다 (Supabase JSON 문서) ─────────────────────────────────
+@app.get("/weekly-agenda", response_model=WeeklyAgendaGetResponse)
+def get_weekly_agenda() -> WeeklyAgendaGetResponse:
+    settings = load_settings()
+    try:
+        row = weekly_agenda_repo.get_workbook(settings)
+        if not row:
+            return WeeklyAgendaGetResponse(workbook=None, updated_at=None)
+        ua = row.get("updated_at")
+        return WeeklyAgendaGetResponse(
+            workbook=row["workbook"],
+            updated_at=str(ua) if ua is not None else None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/weekly-agenda", response_model=WeeklyAgendaPutResponse)
+def put_weekly_agenda(body: WeeklyAgendaPutRequest) -> WeeklyAgendaPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = weekly_agenda_repo.upsert_workbook(settings, body.workbook)
+        return WeeklyAgendaPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ── 대시보드 통계 ────────────────────────────────────────────────────

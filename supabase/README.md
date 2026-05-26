@@ -19,6 +19,7 @@ Google Sheets 기반 데이터를 Supabase(Postgres)로 옮기기 위한 **1차 
 | P0 | `platform_rows` | `플랫폼정리` / `GOOGLE_PLATFORM_TAB` |
 | P1 | `memos` | `메모장` (`GOOGLE_MEMO_TAB`) |
 | P1 | `works` | `작품정리` (`GOOGLE_WORKS_TAB`) |
+| — | `weekly_agenda_documents` | 주간 아젠다 JSON (`003_weekly_agenda_documents.sql`) |
 
 **이번 DDL에 포함하지 않음 (P2):** `업로드운영` (`GOOGLE_UPLOADS_TAB`) → 레거시 `/uploads` API용.
 

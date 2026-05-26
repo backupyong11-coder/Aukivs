@@ -1,5 +1,6 @@
 /**
- * 주간 아젠다(Weekly Agenda) 로컬 전용 — 브라우저 localStorage.
+ * 주간 아젠다(Weekly Agenda) — 타입·로컬 캐시(localStorage).
+ * 기본 저장소는 서버(Supabase) `/weekly-agenda`; 오프라인·미설정 시 로컬 폴백.
  * v2: 기간(시트)별 탭·여러 개 저장.
  */
 
@@ -175,7 +176,8 @@ function migrateV1ToWorkbook(raw: WeeklyAgendaState): WeeklyAgendaWorkbook {
   };
 }
 
-function parseWorkbook(raw: unknown): WeeklyAgendaWorkbook | null {
+/** 서버·로컬 JSON 공통 파싱 */
+export function parseWeeklyAgendaWorkbook(raw: unknown): WeeklyAgendaWorkbook | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (o.version !== 2 || typeof o.activeSheetId !== "string" || !Array.isArray(o.sheets)) return null;
@@ -203,7 +205,7 @@ export function loadWeeklyAgendaWorkbook(): WeeklyAgendaWorkbook | null {
   try {
     const rawV2 = window.localStorage.getItem(STORAGE_KEY_V2);
     if (rawV2) {
-      const wb = parseWorkbook(JSON.parse(rawV2) as unknown);
+      const wb = parseWeeklyAgendaWorkbook(JSON.parse(rawV2) as unknown);
       if (wb) return wb;
     }
     const rawV1 = window.localStorage.getItem(STORAGE_KEY_V1);
