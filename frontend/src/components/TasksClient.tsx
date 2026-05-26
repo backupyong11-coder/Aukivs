@@ -654,43 +654,79 @@ export function TasksClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="업무명·플랫폼·분야·분류·정량화·마감일 등 검색"
-          className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
-        <button onClick={() => { setActionError(null); setNewForm(EMPTY_FORM); setCreateOpen(true); }}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-          새 업무 추가
-        </button>
         <div className="relative">
-          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
+          <button type="button" onClick={() => setPriorityFilterOpen(o => !o)}
             className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            플랫폼 필터
-            {hiddenPlatforms.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
+            우선순위 필터
+            {hiddenPriorities.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPriorities.size}</span>
             )}
-            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
+            <span className="text-[10px]">{priorityFilterOpen ? "▲" : "▼"}</span>
           </button>
-          {platformFilterOpen && (
+          {priorityFilterOpen && (
             <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
               <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 우선순위</span>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set(allPriorities))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
                 </div>
               </div>
               <ul className="max-h-60 overflow-y-auto py-1">
-                {allPlatforms.map(key => (
-                  <li key={key || "__pf__"}>
+                {allPriorities.map(key => (
+                  <li key={key || "__pr__"}>
                     <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
+                      <input type="checkbox" checked={!hiddenPriorities.has(key)} onChange={() => togglePriority(key)} className="accent-zinc-700" />
                       <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
                     </label>
                   </li>
                 ))}
               </ul>
               <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+                <button type="button" onClick={() => setPriorityFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button onClick={() => { setActionError(null); setNewForm(EMPTY_FORM); setCreateOpen(true); }}
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+          새 업무 추가
+        </button>
+        <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
+          placeholder="업무명·플랫폼·분야·분류·정량화·마감일 등 검색"
+          className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
+
+        <div className="relative">
+          <button type="button" onClick={() => setFieldFilterOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
+            분야 필터
+            {hiddenFields.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenFields.size}</span>
+            )}
+            <span className="text-[10px]">{fieldFilterOpen ? "▲" : "▼"}</span>
+          </button>
+          {fieldFilterOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분야</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setHiddenFieldsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenFieldsSave(new Set(allFields))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1">
+                {allFields.map(key => (
+                  <li key={key || "__fld__"}>
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                      <input type="checkbox" checked={!hiddenFields.has(key)} onChange={() => toggleField(key)} className="accent-zinc-700" />
+                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <button type="button" onClick={() => setFieldFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
               </div>
             </div>
           )}
@@ -732,70 +768,35 @@ export function TasksClient() {
         </div>
 
         <div className="relative">
-          <button type="button" onClick={() => setPriorityFilterOpen(o => !o)}
+          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
             className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            우선순위 필터
-            {hiddenPriorities.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPriorities.size}</span>
+            플랫폼 필터
+            {hiddenPlatforms.size > 0 && (
+              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
             )}
-            <span className="text-[10px]">{priorityFilterOpen ? "▲" : "▼"}</span>
+            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
           </button>
-          {priorityFilterOpen && (
+          {platformFilterOpen && (
             <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
               <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 우선순위</span>
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenPrioritiesSave(new Set(allPriorities))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
+                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
                 </div>
               </div>
               <ul className="max-h-60 overflow-y-auto py-1">
-                {allPriorities.map(key => (
-                  <li key={key || "__pr__"}>
+                {allPlatforms.map(key => (
+                  <li key={key || "__pf__"}>
                     <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenPriorities.has(key)} onChange={() => togglePriority(key)} className="accent-zinc-700" />
+                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
                       <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
                     </label>
                   </li>
                 ))}
               </ul>
               <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setPriorityFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <button type="button" onClick={() => setFieldFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            분야 필터
-            {hiddenFields.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenFields.size}</span>
-            )}
-            <span className="text-[10px]">{fieldFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {fieldFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 분야</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenFieldsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenFieldsSave(new Set(allFields))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allFields.map(key => (
-                  <li key={key || "__fld__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenFields.has(key)} onChange={() => toggleField(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setFieldFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
+                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
               </div>
             </div>
           )}
