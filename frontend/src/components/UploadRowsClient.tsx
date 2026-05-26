@@ -8,6 +8,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { getApiBaseUrl } from "@/lib/apiBase";
 
 export type UploadRow = {
@@ -17,6 +18,8 @@ export type UploadRow = {
   업로드일: string;
   플랫폼명: string;
   작품명: string;
+  업로드화수: string;
+  남은업로드화수: string;
   업로드완료여부: string;
   업로드주기: string;
   업로드요일: string;
@@ -24,14 +27,21 @@ export type UploadRow = {
   런칭일: string;
   마지막업로드일: string;
   다음업로드일: string;
-  // 다음업로드회수: string; — 시트에 열 없고 API도 빈 문자열만 줘 죽은 필드라 타입에서 제거
   원고준비: string;
   업로드링크: string;
   마지막업로드회수: string;
   비고: string;
 };
 
-type SortKey = "업로드일" | "플랫폼명" | "작품명" | "업로드완료여부" | "업로드방식" | "다음업로드일" | "비고";
+type SortKey =
+  | "업로드일"
+  | "플랫폼명"
+  | "작품명"
+  | "업로드완료여부"
+  | "남은업로드화수"
+  | "업로드방식"
+  | "다음업로드일"
+  | "비고";
 type SortDir = "asc" | "desc";
 type TabType = "미완료" | "완료" | "전체";
 
@@ -40,23 +50,61 @@ type ViewState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: UploadRow[] };
 
+/** 표에 노출하는 열 (id·sheet_row·완료 플래그는 별도 UI) */
+const TABLE_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "업로드일", label: "업로드일" },
+  { key: "플랫폼명", label: "플랫폼" },
+  { key: "작품명", label: "작품명" },
+  { key: "업로드완료여부", label: "완료여부" },
+  { key: "남은업로드화수", label: "남은화수" },
+  { key: "업로드방식", label: "업로드방식" },
+  { key: "다음업로드일", label: "다음업로드일" },
+  { key: "비고", label: "비고" },
+];
+
+/** 수정 모달 전용(표에는 숨김) */
+const FORM_EXTRA_FIELDS: { key: keyof UploadRow; label: string }[] = [
+  { key: "업로드화수", label: "업로드화수" },
+  { key: "업로드주기", label: "업로드주기" },
+  { key: "업로드요일", label: "업로드요일" },
+  { key: "런칭일", label: "런칭일" },
+  { key: "마지막업로드일", label: "마지막업로드일" },
+  { key: "원고준비", label: "원고준비" },
+  { key: "업로드링크", label: "업로드링크/제출처" },
+  { key: "마지막업로드회수", label: "마지막업로드회수" },
+];
+
 export const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
   { key: "작품명", label: "작품명", required: true },
   { key: "업로드일", label: "업로드일" },
   { key: "플랫폼명", label: "플랫폼명" },
   { key: "업로드완료여부", label: "업로드완료여부" },
+  { key: "남은업로드화수", label: "남은업로드화수" },
   { key: "업로드방식", label: "업로드방식" },
-  { key: "업로드주기", label: "업로드주기" },
-  { key: "업로드요일", label: "업로드요일" },
-  { key: "런칭일", label: "런칭일" },
-  { key: "마지막업로드일", label: "마지막업로드일" },
   { key: "다음업로드일", label: "다음업로드일" },
-  // { key: "다음업로드회수", label: "다음업로드회수" }, — 시트 미대응·미사용이라 폼 항목 제거
-  { key: "원고준비", label: "원고준비" },
-  { key: "업로드링크", label: "업로드링크/제출처" },
-  { key: "마지막업로드회수", label: "마지막업로드회수" },
   { key: "비고", label: "비고" },
+  ...FORM_EXTRA_FIELDS,
 ];
+
+const EMPTY_ROW: Omit<UploadRow, "id" | "sheet_row"> = {
+  완료: "",
+  업로드일: "",
+  플랫폼명: "",
+  작품명: "",
+  업로드화수: "",
+  남은업로드화수: "",
+  업로드완료여부: "",
+  업로드주기: "",
+  업로드요일: "",
+  업로드방식: "",
+  런칭일: "",
+  마지막업로드일: "",
+  다음업로드일: "",
+  원고준비: "",
+  업로드링크: "",
+  마지막업로드회수: "",
+  비고: "",
+};
 
 export type FormType = Partial<Record<keyof UploadRow, string>>;
 
@@ -142,8 +190,6 @@ export function UploadRowsClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("업로드일");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [platformFilterOpen, setPlatformFilterOpen] = useState(false);
-  const [workFilterOpen, setWorkFilterOpen] = useState(false);
   const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -164,8 +210,18 @@ export function UploadRowsClient() {
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      const items = await apiFetch("/upload-rows");
-      setState({ kind: "ready", items: items as UploadRow[] });
+      const raw = await apiFetch("/upload-rows");
+      const arr = Array.isArray(raw) ? raw : [];
+      const items: UploadRow[] = arr.map((row) => {
+        const r = row as UploadRow;
+        return {
+          ...EMPTY_ROW,
+          ...r,
+          id: String(r.id ?? ""),
+          sheet_row: String(r.sheet_row ?? ""),
+        };
+      });
+      setState({ kind: "ready", items });
     } catch (e) {
       setState({ kind: "error", message: e instanceof Error ? e.message : "불러오기 실패" });
     }
@@ -236,9 +292,13 @@ export function UploadRowsClient() {
     if (tab === "미완료") items = items.filter(it => !isDone(it));
     else if (tab === "완료") items = items.filter(isDone);
     if (filterText) {
+      const q = filterText;
       items = items.filter(it =>
-        it.작품명.includes(filterText) || it.플랫폼명.includes(filterText) ||
-        it.비고.includes(filterText)
+        (it.작품명 ?? "").includes(q) ||
+        (it.플랫폼명 ?? "").includes(q) ||
+        (it.비고 ?? "").includes(q) ||
+        (it.업로드방식 ?? "").includes(q) ||
+        (it.업로드완료여부 ?? "").includes(q)
       );
     }
     if (hiddenPlatforms.size > 0) {
@@ -250,6 +310,11 @@ export function UploadRowsClient() {
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
+      if (sortKey === "남은업로드화수") {
+        const na = Number.parseFloat(va) || 0;
+        const nb = Number.parseFloat(vb) || 0;
+        return sortDir === "asc" ? na - nb : nb - na;
+      }
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
   }, [state, tab, filterText, hiddenPlatforms, hiddenWorks, sortKey, sortDir]);
@@ -309,91 +374,47 @@ export function UploadRowsClient() {
   const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
   const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
 
+  const tableColSpan = 3 + TABLE_COLUMNS.length;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-          placeholder="작품명·플랫폼명·비고 검색"
-          className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100" />
         <button onClick={() => { setActionError(null); setNewForm({}); setCreateOpen(true); }}
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
           새 업로드 추가
         </button>
-        <div className="relative">
-          <button type="button" onClick={() => setPlatformFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            플랫폼 필터
-            {hiddenPlatforms.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenPlatforms.size}</span>
-            )}
-            <span className="text-[10px]">{platformFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {platformFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 플랫폼</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenPlatformsSave(new Set(allPlatforms))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allPlatforms.map(key => (
-                  <li key={key || "__p__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenPlatforms.has(key)} onChange={() => togglePlatform(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setPlatformFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <button type="button" onClick={() => setWorkFilterOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800">
-            작품명 필터
-            {hiddenWorks.size > 0 && (
-              <span className="rounded-full bg-zinc-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-zinc-400 dark:text-zinc-900">{hiddenWorks.size}</span>
-            )}
-            <span className="text-[10px]">{workFilterOpen ? "▲" : "▼"}</span>
-          </button>
-          {workFilterOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">표시할 작품명</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setHiddenWorksSave(new Set())} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체</button>
-                  <button type="button" onClick={() => setHiddenWorksSave(new Set(allWorks))} className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200">전체숨김</button>
-                </div>
-              </div>
-              <ul className="max-h-60 overflow-y-auto py-1">
-                {allWorks.map(key => (
-                  <li key={key || "__w__"}>
-                    <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                      <input type="checkbox" checked={!hiddenWorks.has(key)} onChange={() => toggleWork(key)} className="accent-zinc-700" />
-                      <span className="text-xs text-zinc-800 dark:text-zinc-200">{listLabel(key)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <button type="button" onClick={() => setWorkFilterOpen(false)} className="w-full rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300">닫기</button>
-              </div>
-            </div>
-          )}
-        </div>
-
+        <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
+          placeholder="작품명·플랫폼명·비고 검색"
+          className="min-w-[12rem] flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 sm:min-w-[16rem]" />
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
         </button>
       </div>
+
+      {state.kind === "ready" && (
+        <FilterTagsFlow
+          listLabel={listLabel}
+          groups={[
+            {
+              title: "플랫폼",
+              keys: allPlatforms,
+              hidden: hiddenPlatforms,
+              onToggle: togglePlatform,
+              onShowAll: () => setHiddenPlatformsSave(new Set()),
+              onHideAll: () => setHiddenPlatformsSave(new Set(allPlatforms)),
+            },
+            {
+              title: "작품명",
+              keys: allWorks,
+              hidden: hiddenWorks,
+              onToggle: toggleWork,
+              onShowAll: () => setHiddenWorksSave(new Set()),
+              onHideAll: () => setHiddenWorksSave(new Set(allWorks)),
+            },
+          ]}
+        />
+      )}
 
       {/* 탭 */}
       <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
@@ -431,24 +452,22 @@ export function UploadRowsClient() {
 
       {state.kind === "ready" && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[1280px] text-xs">
+          <table className="w-full min-w-[1200px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thCls}>수정</th>
                 <th className={thCls}>완료</th>
-                <th className={thSort} onClick={() => handleSort("업로드일")}>업로드일<SortIcon col="업로드일"/></th>
-                <th className={thSort} onClick={() => handleSort("플랫폼명")}>플랫폼<SortIcon col="플랫폼명"/></th>
-                <th className={thSort} onClick={() => handleSort("작품명")}>작품명<SortIcon col="작품명"/></th>
-                <th className={thSort} onClick={() => handleSort("업로드완료여부")}>완료여부<SortIcon col="업로드완료여부"/></th>
-                <th className={thSort} onClick={() => handleSort("업로드방식")}>업로드방식<SortIcon col="업로드방식"/></th>
-                <th className={thSort} onClick={() => handleSort("다음업로드일")}>다음업로드일<SortIcon col="다음업로드일"/></th>
-                <th className={thSort} onClick={() => handleSort("비고")}>비고<SortIcon col="비고"/></th>
+                {TABLE_COLUMNS.map(({ key, label }) => (
+                  <th key={key} className={thSort} onClick={() => handleSort(key)}>
+                    {label}<SortIcon col={key}/>
+                  </th>
+                ))}
                 <th className={thCls}>삭제</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-zinc-500">
+                <tr><td colSpan={tableColSpan} className="px-3 py-8 text-center text-zinc-500">
                   {filterText || hiddenPlatforms.size > 0 || hiddenWorks.size > 0 ? "조건에 맞는 항목이 없습니다" : `${tab} 업로드가 없습니다`}
                 </td></tr>
               ) : visible.map(item => (
@@ -474,6 +493,9 @@ export function UploadRowsClient() {
                         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
                         : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
                     }`}>{item.업로드완료여부 || "업로드 예정"}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-center font-semibold text-zinc-800 dark:text-zinc-200">
+                    {item.남은업로드화수 || "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">{item.업로드방식}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-500">{item.다음업로드일}</td>
