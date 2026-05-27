@@ -358,8 +358,9 @@ def transform_task(row: dict[str, Any]) -> dict[str, Any]:
         "related_work": _text_or_none(row.get("관련작품")),
         "difficulty": _text_or_none(row.get("난이도")),
         "fatigue": _text_or_none(row.get("피로도")),
-        "status": _text_or_none(row.get("상태")),
-        "assignee": _text_or_none(row.get("담당자")),
+        "work_assignee": _text_or_none(
+            row.get("업무담당") or row.get("상태") or row.get("담당자")
+        ),
         "memo": _text_or_none(row.get("메모")),
     }
 

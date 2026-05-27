@@ -32,6 +32,7 @@ import {
   TaskInlineCell,
   type EditableTaskField,
 } from "@/components/TaskInlineCell";
+import { TASK_ASSIGNEE_FIELD, readTaskAssignee } from "@/lib/taskAssignee";
 
 type TaskRow = {
   id: string;
@@ -55,8 +56,7 @@ type TaskRow = {
   관련작품: string;
   난이도: string;
   피로도: string;
-  상태: string;
-  담당자: string;
+  업무담당: string;
   메모: string;
 };
 
@@ -96,12 +96,11 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
   관련작품: "",
   난이도: "",
   피로도: "",
-  상태: "",
-  담당자: "",
+  업무담당: "",
   메모: "",
 };
 
-const COLUMN_ORDER_STORAGE_KEY = "tasks_col_order_v1";
+const COLUMN_ORDER_STORAGE_KEY = "tasks_col_order_v2";
 
 const TASK_DATA_COLUMNS: {
   key: EditableTaskField;
@@ -129,8 +128,7 @@ const TASK_DATA_COLUMNS: {
   { key: "관련작품", label: "관련작품" },
   { key: "난이도", label: "난이도" },
   { key: "피로도", label: "피로도" },
-  { key: "상태", label: "상태" },
-  { key: "담당자", label: "담당자" },
+  { key: "업무담당", label: "업무담당" },
   { key: "메모", label: "메모", wide: true, muted: true },
 ];
 
@@ -146,9 +144,10 @@ function loadColumnOrder(defaultKeys: EditableTaskField[]): EditableTaskField[] 
     const allowed = new Set(defaultKeys);
     const out: EditableTaskField[] = [];
     for (const k of parsed) {
-      if (typeof k === "string" && allowed.has(k as EditableTaskField) && !out.includes(k as EditableTaskField)) {
-        out.push(k as EditableTaskField);
-      }
+      if (typeof k !== "string") continue;
+      let key: EditableTaskField =
+        k === "상태" || k === "담당자" ? TASK_ASSIGNEE_FIELD : (k as EditableTaskField);
+      if (allowed.has(key) && !out.includes(key)) out.push(key);
     }
     for (const k of defaultKeys) {
       if (!out.includes(k)) out.push(k);
@@ -177,8 +176,7 @@ const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: bo
   { key: "관련작품", label: "관련작품" },
   { key: "난이도", label: "난이도" },
   { key: "피로도", label: "피로도" },
-  { key: "상태", label: "상태" },
-  { key: "담당자", label: "담당자/요청주체" },
+  { key: "업무담당", label: "업무담당" },
   { key: "메모", label: "메모" },
 ];
 
@@ -323,6 +321,14 @@ export function TasksClient() {
     } catch { /* ignore */ }
     return new Set<string>();
   });
+  const [hiddenAssignees, setHiddenAssignees] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = window.localStorage.getItem("tasks.hiddenAssignees");
+      if (saved) return new Set<string>(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -336,6 +342,7 @@ export function TasksClient() {
           ...r,
           id: String(r.id ?? ""),
           sheet_row: String(r.sheet_row ?? ""),
+          업무담당: readTaskAssignee(r as Record<string, string>),
         };
       });
       setState({ kind: "ready", items });
@@ -538,6 +545,11 @@ export function TasksClient() {
     return sortedKeys(state.items.map(it => (it.분야 ?? "").trim()));
   }, [state]);
 
+  const allAssignees = useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return sortedKeys(state.items.map(it => readTaskAssignee(it)));
+  }, [state]);
+
   const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
 
   const togglePlatform = (key: string) => {
@@ -588,6 +600,18 @@ export function TasksClient() {
     try { window.localStorage.setItem("tasks.hiddenFields", JSON.stringify([...next])); } catch { /* ignore */ }
     setHiddenFields(next);
   };
+  const toggleAssignee = (key: string) => {
+    setHiddenAssignees(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { window.localStorage.setItem("tasks.hiddenAssignees", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const setHiddenAssigneesSave = (next: Set<string>) => {
+    try { window.localStorage.setItem("tasks.hiddenAssignees", JSON.stringify([...next])); } catch { /* ignore */ }
+    setHiddenAssignees(next);
+  };
 
   const visible = useMemo(() => {
     if (state.kind !== "ready") return [];
@@ -609,8 +633,7 @@ export function TasksClient() {
         || (it.관련작품 ?? "").includes(q)
         || (it.난이도 ?? "").includes(q)
         || (it.피로도 ?? "").includes(q)
-        || (it.상태 ?? "").includes(q)
-        || (it.담당자 ?? "").includes(q)
+        || readTaskAssignee(it).includes(q)
         || (it.메모 ?? "").includes(q)
         || (it.마감일 ?? "").includes(q);
       items = items.filter(hay);
@@ -627,12 +650,15 @@ export function TasksClient() {
     if (hiddenFields.size > 0) {
       items = items.filter(it => !hiddenFields.has((it.분야 ?? "").trim()));
     }
+    if (hiddenAssignees.size > 0) {
+      items = items.filter(it => !hiddenAssignees.has(readTaskAssignee(it)));
+    }
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
       return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko");
     });
-  }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, hiddenFields, sortKey, sortDir]);
+  }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, hiddenFields, hiddenAssignees, sortKey, sortDir]);
 
   const list = useTableListDisplay("tasks", visible);
 
@@ -664,8 +690,7 @@ export function TasksClient() {
       관련작품: item.관련작품 ?? "",
       난이도: item.난이도 ?? "",
       피로도: item.피로도 ?? "",
-      상태: item.상태 ?? "",
-      담당자: item.담당자 ?? "",
+      업무담당: readTaskAssignee(item),
       메모: item.메모 ?? "",
     });
   };
@@ -865,6 +890,14 @@ export function TasksClient() {
               onToggle: togglePlatform,
               onShowAll: () => setHiddenPlatformsSave(new Set()),
               onHideAll: () => setHiddenPlatformsSave(new Set(allPlatforms)),
+            },
+            {
+              title: "업무담당",
+              keys: allAssignees,
+              hidden: hiddenAssignees,
+              onToggle: toggleAssignee,
+              onShowAll: () => setHiddenAssigneesSave(new Set()),
+              onHideAll: () => setHiddenAssigneesSave(new Set(allAssignees)),
             },
           ]}
         />

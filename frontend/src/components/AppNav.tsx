@@ -17,7 +17,7 @@ const links: NavLink[] = [
   { href: "/memo", label: "메모", title: "메모장 시트 목록·추가" },
   { href: "/calendar", label: "캘린더", title: "월·주·일 일정(시트 연동)" },
   { href: "/platform-matrix", label: "플랫폼", title: "작품×플랫폼 연동 매트릭스" },
-  { href: "/personnel", label: "인물별", title: "인물×제작·유통 표(로컬 저장)" },
+  { href: "/personnel", label: "인물별", title: "직원별 업무 대시보드·인물 보드" },
   { href: "/milestones", label: "마일스톤", title: "주요 일정 타임라인·간트(로컬 저장)" },
   {
     href: "/weekly-agenda",

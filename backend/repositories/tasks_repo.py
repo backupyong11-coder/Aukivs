@@ -8,15 +8,48 @@ from typing import Any
 
 from config import Settings
 from schemas import ChecklistItem
-from services.supabase_client import SupabaseRestClient
+from services.supabase_client import SupabaseRestClient, SupabaseRequestError
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 
-_SELECT_TASKS = (
+_SELECT_TASKS_BASE = (
     "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
     "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
-    "difficulty,fatigue,status,assignee,memo"
+    "difficulty,fatigue"
 )
+_SELECT_TASKS_NEW = f"{_SELECT_TASKS_BASE},work_assignee,memo"
+_SELECT_TASKS_LEGACY = f"{_SELECT_TASKS_BASE},status,assignee,memo"
+
+_tasks_select_cache: str | None = None
+_assignee_write_col_cache: str | None = None
+
+
+def _probe_tasks_schema(cli: SupabaseRestClient) -> tuple[str, str]:
+    """PostgREST select로 work_assignee 마이그레이션 여부 확인."""
+    global _tasks_select_cache, _assignee_write_col_cache
+    if _tasks_select_cache and _assignee_write_col_cache:
+        return _tasks_select_cache, _assignee_write_col_cache
+    try:
+        cli.get_json("/tasks", params={"select": "work_assignee", "limit": "1"})
+        _tasks_select_cache = _SELECT_TASKS_NEW
+        _assignee_write_col_cache = "work_assignee"
+    except SupabaseRequestError as exc:
+        if exc.status_code == 400:
+            _tasks_select_cache = _SELECT_TASKS_LEGACY
+            _assignee_write_col_cache = "status"
+        else:
+            raise
+    return _tasks_select_cache, _assignee_write_col_cache
+
+
+def _tasks_select(cli: SupabaseRestClient) -> str:
+    return _probe_tasks_schema(cli)[0]
+
+
+def _assignee_write_col(cli: SupabaseRestClient) -> str:
+    return _probe_tasks_schema(cli)[1]
+
+_ASSIGNEE_API_KEYS = ("업무담당", "상태", "담당자")
 
 _KOREAN_TO_DB: dict[str, str] = {
     "날짜그룹": "date_group",
@@ -38,8 +71,7 @@ _KOREAN_TO_DB: dict[str, str] = {
     "관련작품": "related_work",
     "난이도": "difficulty",
     "피로도": "fatigue",
-    "상태": "status",
-    "담당자": "assignee",
+    "업무담당": "work_assignee",
     "메모": "memo",
 }
 
@@ -62,8 +94,7 @@ _CREATE_RESPONSE_KEYS: tuple[str, ...] = (
     "관련작품",
     "난이도",
     "피로도",
-    "상태",
-    "담당자",
+    "업무담당",
     "메모",
 )
 
@@ -90,6 +121,17 @@ def _bool_from_sheet_val(v: object) -> bool | None:
     if isinstance(v, bool):
         return v
     return _truthy_cell(v)
+
+
+def _assignee_from_row(row: dict[str, Any]) -> str:
+    wa = row.get("work_assignee")
+    if wa is not None and str(wa).strip():
+        return str(wa).strip()
+    for legacy in ("status", "assignee"):
+        v = row.get(legacy)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ""
 
 
 def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
@@ -139,8 +181,7 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         "관련작품": opt_str("related_work"),
         "난이도": opt_str("difficulty"),
         "피로도": opt_str("fatigue"),
-        "상태": opt_str("status"),
-        "담당자": opt_str("assignee"),
+        "업무담당": _assignee_from_row(row),
         "메모": opt_str("memo"),
     }
 
@@ -184,7 +225,7 @@ def _db_row_to_checklist_item(row: dict[str, Any]) -> ChecklistItem | None:
         quantification=opt("quantification"),
         difficulty=opt("difficulty"),
         fatigue=opt("fatigue"),
-        work_status=opt("status"),
+        work_status=_assignee_from_row(row) or None,
         memo=opt("memo"),
     )
 
@@ -197,7 +238,7 @@ def _get_task_by_client_id(cli: SupabaseRestClient, client_id: str) -> dict[str,
     def one(extra: dict[str, Any]) -> dict[str, Any] | None:
         params = {
             **extra,
-            "select": _SELECT_TASKS,
+            "select": _tasks_select(cli),
             "limit": "1",
         }
         rows = cli.get_json("/tasks", params=params)
@@ -244,7 +285,7 @@ def list_tasks(settings: Settings) -> list[dict[str, Any]]:
 def list_tasks_limited(settings: Settings, *, limit: int | None = None) -> list[dict[str, Any]]:
     cli = _client(settings)
     params: dict[str, str] = {
-        "select": _SELECT_TASKS,
+        "select": _tasks_select(cli),
         "order": "sheet_row.asc.nullslast",
     }
     if limit is not None and limit > 0:
@@ -300,6 +341,16 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         else:
             insert[dbk] = str(raw).strip()
 
+    if "work_assignee" not in insert:
+        for kr in _ASSIGNEE_API_KEYS:
+            if kr not in fields:
+                continue
+            raw = fields[kr]
+            if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+                continue
+            insert[_assignee_write_col(cli)] = str(raw).strip()
+            break
+
     cli.post_json("/tasks", [insert], prefer="return=minimal")
 
     out: dict[str, Any] = {
@@ -311,6 +362,11 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         if k == "업무명":
             continue
         out[k] = str(fields.get(k, "")).strip()
+    if not out.get("업무담당"):
+        for kr in _ASSIGNEE_API_KEYS:
+            if kr != "업무담당" and fields.get(kr):
+                out["업무담당"] = str(fields[kr]).strip()
+                break
     out["업무명"] = title
     out["완료"] = _completed_to_cell(bool(insert.get("completed")))
     if "due_date" in insert:
@@ -320,9 +376,15 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _patch_body_from_fields(fields: dict[str, Any]) -> dict[str, Any]:
+def _patch_body_from_fields(
+    fields: dict[str, Any],
+    *,
+    assignee_col: str = "work_assignee",
+) -> dict[str, Any]:
     patch: dict[str, Any] = {}
     for kr, dbk in _KOREAN_TO_DB.items():
+        if kr in ("업무담당", "상태", "담당자"):
+            continue
         if kr not in fields:
             continue
         raw = fields[kr]
@@ -347,6 +409,15 @@ def _patch_body_from_fields(fields: dict[str, Any]) -> dict[str, Any]:
             patch[dbk] = None
         else:
             patch[dbk] = str(raw).strip()
+
+    for kr in _ASSIGNEE_API_KEYS:
+        if kr not in fields:
+            continue
+        raw = fields[kr]
+        s = "" if raw is None else str(raw).strip()
+        patch[assignee_col] = s or None
+        break
+
     return patch
 
 
@@ -358,7 +429,7 @@ def update_task(settings: Settings, task_id: str, fields: dict[str, Any]) -> Non
     tid = row.get("id")
     if not tid:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
-    patch = _patch_body_from_fields(fields)
+    patch = _patch_body_from_fields(fields, assignee_col=_assignee_write_col(cli))
     if not patch:
         return
     cli.patch_json("/tasks", params={"id": f"eq.{tid}"}, body=patch)
@@ -393,7 +464,7 @@ def fetch_checklist_from_supabase(settings: Settings) -> list[ChecklistItem]:
     rows = cli.get_json(
         "/tasks",
         params={
-            "select": _SELECT_TASKS,
+            "select": _tasks_select(cli),
             "completed": "eq.false",
             "order": "sheet_row.asc.nullslast",
         },
@@ -417,7 +488,7 @@ def fetch_checklist_for_briefing_supabase(
     rows = cli.get_json(
         "/tasks",
         params={
-            "select": _SELECT_TASKS,
+            "select": _tasks_select(cli),
             "completed": "eq.false",
             "order": "sheet_row.asc.nullslast",
         },

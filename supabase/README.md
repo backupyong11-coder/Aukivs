@@ -21,6 +21,11 @@ Google Sheets 기반 데이터를 Supabase(Postgres)로 옮기기 위한 **1차 
 | P1 | `works` | `작품정리` (`GOOGLE_WORKS_TAB`) |
 | — | `weekly_agenda_documents` | 주간 아젠다 JSON (`003_weekly_agenda_documents.sql`) |
 | — | `table_list_preferences` | 정리 표 열 너비 등 UI (`005_table_list_preferences.sql`) |
+| — | `tasks.work_assignee` | 업무담당 (`006_task_work_assignee.sql`, 구 `status`+`assignee` 통합) |
+
+**006 적용:** Dashboard SQL Editor에서 `migrations/006_task_work_assignee.sql` 실행, 또는
+`backend/.env`에 `SUPABASE_DB_PASSWORD` 설정 후
+`python backend/scripts/apply_supabase_migration.py 006_task_work_assignee`
 
 **이번 DDL에 포함하지 않음 (P2):** `업로드운영` (`GOOGLE_UPLOADS_TAB`) → 레거시 `/uploads` API용.
 

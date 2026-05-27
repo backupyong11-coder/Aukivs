@@ -1,15 +1,16 @@
 import Link from "next/link";
-import { PersonnelBoardClient } from "@/components/PersonnelBoardClient";
+import { PersonnelHubClient } from "@/components/PersonnelHubClient";
 
 export default function PersonnelPage() {
   return (
     <div className="w-full min-w-0 px-4 py-6 sm:px-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">로컬 전용</p>
+          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">직원 · 업무</p>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">인물별</h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            제작·유통·기타업무 등 열을 바꿔 가며 인물(행)별로 정리합니다. 마일스톤과 같은 브라우저에만 저장됩니다.
+            업무정리 DB의 업무담당과 연동된 직원별 할 일 대시보드와, 제작·유통 메모용 인물 보드를
+            함께 씁니다.
           </p>
         </div>
         <Link
@@ -19,7 +20,7 @@ export default function PersonnelPage() {
           마일스톤·간트 보기 →
         </Link>
       </div>
-      <PersonnelBoardClient />
+      <PersonnelHubClient />
     </div>
   );
 }

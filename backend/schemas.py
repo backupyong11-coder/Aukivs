@@ -48,7 +48,7 @@ class ChecklistItem(BaseModel):
     )
     work_status: str | None = Field(
         default=None,
-        description="상태(레거시: 미사용 / 업무정리: S열), 비어 있으면 null",
+        description="업무담당(구 status·담당자 / 업무정리 S·T열), 비어 있으면 null",
     )
     memo: str | None = Field(
         default=None,
