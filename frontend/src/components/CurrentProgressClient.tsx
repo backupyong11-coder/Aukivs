@@ -43,7 +43,7 @@ const DISPLAY_LETTERS = ["N", "C", "B", "R", "M", "O", "P", "Q"] as const;
 
 /** 탭별 필터 열(원문): 불가 G / 예정 H / 진행중 I / 완료 J */
 const TAB_CONFIG = [
-  { id: "running" as const, label: "현재진행", letter: "I" },
+  { id: "running" as const, label: "지속진행", letter: "I" },
   { id: "scheduled" as const, label: "예정", letter: "H" },
   { id: "blocked" as const, label: "불가", letter: "G" },
   { id: "done" as const, label: "완료", letter: "J" },
@@ -807,7 +807,7 @@ export function CurrentProgressClient() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => setRefreshKey((k) => k + 1)}
-        title="현재진행 행 새로 만들기"
+        title="지속진행 행 새로 만들기"
       />
 
       {undoToast ? (

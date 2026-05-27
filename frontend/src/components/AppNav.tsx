@@ -26,7 +26,7 @@ const links: NavLink[] = [
     dividerAfter: true,
   },
   { href: "/announcement-date", label: "발표일 DB", title: "발표 일정" },
-  { href: "/progress", label: "현재진행 DB", title: "현재 진행 현황" },
+  { href: "/progress", label: "지속진행 DB", title: "지속 진행 현황" },
   { href: "/launching", label: "런칭정리 DB", title: "런칭 일정·정리" },
   { href: "/contracts", label: "계약정리 DB", title: "계약 관련 정리" },
   { href: "/tasks", label: "업무정리 DB", title: "업무정리 시트 작업" },
