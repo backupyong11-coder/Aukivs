@@ -10,7 +10,7 @@ import {
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
-import { useColumnLabels } from "@/hooks/useColumnLabels";
+import { useTableListColumnMeta } from "@/hooks/useTableListColumnMeta";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
@@ -504,7 +504,7 @@ export function LaunchingClient() {
 
   const list = useTableListDisplay("launching", visible);
   const colVis = useTableColumnVisibility("launching", columnOrder);
-  const colLabels = useColumnLabels("launching");
+  const { colLabels, colMajors, columnVisibilityFor } = useTableListColumnMeta("launching");
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -651,13 +651,7 @@ export function LaunchingClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS.launching.join(" · ")}
-          columnVisibility={{
-            allKeys: columnOrder,
-            hiddenColumns: colVis.hiddenColumns,
-            onSetVisible: colVis.setColumnVisible,
-            onShowAllColumns: colVis.showAllColumns,
-            columnLabel: colLabels.getLabel,
-          }}
+          columnVisibility={columnVisibilityFor(columnOrder, colVis)}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2200px] text-xs">
@@ -680,6 +674,12 @@ export function LaunchingClient() {
                     onSort={() => handleSort(field)}
                     onHide={() => colVis.setColumnVisible(field, false)}
                     onEdit={() => colLabels.editLabel(field)}
+                    onSetMajor={() => colMajors.pickMajorForColumn(field)}
+                    majorHint={
+                      colMajors.majors.length > 1
+                        ? colMajors.getMajorName(colMajors.getMajorIdForColumn(field))
+                        : undefined
+                    }
                     onDelete={() => {
                       const name = colLabels.getLabel(field);
                       if (

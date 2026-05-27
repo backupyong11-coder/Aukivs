@@ -34,6 +34,14 @@ function IconEdit() {
   );
 }
 
+function IconMajor() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M2 4h5v8H2V4zm7 0h5v5h-5V4zm0 7h5v1h-5v-1z" />
+    </svg>
+  );
+}
+
 function IconDelete() {
   return (
     <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
@@ -56,6 +64,8 @@ export function TableColumnHeader(props: {
   onSort?: () => void;
   onHide: () => void;
   onEdit: () => void;
+  onSetMajor?: () => void;
+  majorHint?: string;
   onDelete: () => void;
 }) {
   const {
@@ -71,6 +81,8 @@ export function TableColumnHeader(props: {
     onSort,
     onHide,
     onEdit,
+    onSetMajor,
+    majorHint,
     onDelete,
   } = props;
 
@@ -93,8 +105,13 @@ export function TableColumnHeader(props: {
         >
           ⋮⋮
         </span>
-        <span className="min-w-0 flex-1 truncate text-left text-[11px]" title={label}>
-          {label}
+        <span className="min-w-0 flex-1 truncate text-left text-[11px]" title={majorHint ? `${label} · ${majorHint}` : label}>
+          <span className="block truncate">{label}</span>
+          {majorHint ? (
+            <span className="block truncate text-[9px] font-normal text-zinc-400 dark:text-zinc-500">
+              {majorHint}
+            </span>
+          ) : null}
         </span>
         <div className="flex shrink-0 items-center gap-px opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {sortable && onSort ? (
@@ -123,6 +140,20 @@ export function TableColumnHeader(props: {
           >
             <IconEye />
           </button>
+          {onSetMajor ? (
+            <button
+              type="button"
+              className={iconBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetMajor();
+              }}
+              title="대분류 지정"
+              aria-label={`${label} 대분류`}
+            >
+              <IconMajor />
+            </button>
+          ) : null}
           <button
             type="button"
             className={iconBtn}

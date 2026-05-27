@@ -50,6 +50,16 @@ export function TableListControls(props: {
     onSetVisible: (key: string, visible: boolean) => void;
     onShowAllColumns: () => void;
     columnLabel?: (key: string) => string;
+    majorGroups?: {
+      majors: { id: string; name: string; order: number }[];
+      majorForKey: (key: string) => string;
+      majorName: (majorId: string) => string;
+      onSetColumnMajor: (key: string, majorId: string) => void;
+      onAddMajor: (name: string) => string | null;
+      onRenameMajor: (majorId: string) => void;
+      onDeleteMajor: (majorId: string) => void;
+      groupKeys: (keys: string[]) => { major: { id: string; name: string; order: number }; keys: string[] }[];
+    };
   };
 }) {
   const {
@@ -189,6 +199,7 @@ export function TableListControls(props: {
               onSetVisible={columnVisibility.onSetVisible}
               onShowAll={columnVisibility.onShowAllColumns}
               labelForKey={columnVisibility.columnLabel}
+              majorGroups={columnVisibility.majorGroups}
             />
           ) : null}
         </div>

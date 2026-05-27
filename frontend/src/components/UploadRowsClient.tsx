@@ -12,7 +12,7 @@ import {
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
-import { useColumnLabels } from "@/hooks/useColumnLabels";
+import { useTableListColumnMeta } from "@/hooks/useTableListColumnMeta";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
@@ -298,7 +298,7 @@ export function UploadRowsClient() {
   }, [columnOrder]);
 
   const colVis = useTableColumnVisibility("upload-rows", columnOrder);
-  const colLabels = useColumnLabels("upload-rows");
+  const { colLabels, colMajors, columnVisibilityFor } = useTableListColumnMeta("upload-rows");
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys
@@ -755,14 +755,9 @@ export function UploadRowsClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS["upload-rows"].join(" · ")}
-          columnVisibility={{
-            allKeys: columnOrder,
-            hiddenColumns: colVis.hiddenColumns,
-            onSetVisible: colVis.setColumnVisible,
-            onShowAllColumns: colVis.showAllColumns,
-            columnLabel: (k) =>
-              colLabels.getLabel(k, TABLE_COLUMNS.find((c) => c.key === k)?.label),
-          }}
+          columnVisibility={columnVisibilityFor(columnOrder, colVis, (k) =>
+            colLabels.getLabel(k, TABLE_COLUMNS.find((c) => c.key === k)?.label),
+          )}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2200px] text-xs">
@@ -785,6 +780,12 @@ export function UploadRowsClient() {
                     onSort={() => handleSort(key)}
                     onHide={() => colVis.setColumnVisible(key, false)}
                     onEdit={() => colLabels.editLabel(key, label)}
+                    onSetMajor={() => colMajors.pickMajorForColumn(key)}
+                    majorHint={
+                      colMajors.majors.length > 1
+                        ? colMajors.getMajorName(colMajors.getMajorIdForColumn(key))
+                        : undefined
+                    }
                     onDelete={() => {
                       const name = colLabels.getLabel(key, label);
                       if (
