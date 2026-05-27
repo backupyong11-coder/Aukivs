@@ -170,6 +170,9 @@ def _api_dict(r: dict[str, Any]) -> dict[str, Any]:
             out[key] = json.dumps(v, ensure_ascii=False)
         else:
             out[key] = str(v).strip() if str(v).strip() else ""
+    for known in _KNOWN_PLATFORM_EXTRA_HEADERS:
+        if known not in out:
+            out[known] = ""
     return out
 
 

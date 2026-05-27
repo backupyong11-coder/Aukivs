@@ -24,6 +24,12 @@ import {
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import {
+  isPlatformProgressTrue,
+  isPlatformRowDone,
+  isPlatformRowInProgress,
+  isPlatformRowOnHold,
+} from "@/lib/platformProgress";
 import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
 import {
   UNDO_TOAST_MS,
@@ -152,12 +158,6 @@ function rowTitle(item: PlatformRow): string {
   return (item["플랫폼명"] ?? item["회사명"] ?? "").trim() || "(이름 없음)";
 }
 
-function isTrueCell(v: unknown): boolean {
-  if (v === true) return true;
-  const s = String(v ?? "").trim().toUpperCase();
-  return s === "TRUE" || s === "1" || s === "YES" || s === "Y" || s === "O" || s === "✓";
-}
-
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
   const res = await fetch(`${base}${path}`, {
@@ -243,9 +243,6 @@ export function CurrentProgressClient() {
       return {
         category: "",
         platform: "",
-        progress: "",
-        done: "",
-        onHold: "",
         scheduled: "",
         blocked: "",
       };
@@ -253,9 +250,6 @@ export function CurrentProgressClient() {
     return {
       category: fieldKey(sample, "분류", "B"),
       platform: fieldKey(sample, "플랫폼명", "Q"),
-      progress: fieldKey(sample, "진행", "") || fieldKey(sample, "진행중", "H"),
-      done: fieldKey(sample, "완료", "I"),
-      onHold: fieldKey(sample, "보류", ""),
       scheduled: fieldKey(sample, "예정", "G"),
       blocked: fieldKey(sample, "불가", "F"),
     };
@@ -379,14 +373,16 @@ export function CurrentProgressClient() {
     if (state.kind !== "ready" || !sample || columnOrder.length === 0) {
       return [];
     }
-    const { progress, done, onHold, scheduled, blocked } = fieldKeys;
+    const { scheduled, blocked } = fieldKeys;
 
     return state.items.filter((row) => {
-      if (!columnOrder.some((key) => cell(row, key))) return false;
+      const held = isPlatformRowOnHold(row);
+      const inProgress = isPlatformRowInProgress(row);
+      const completed = isPlatformRowDone(row);
 
-      const held = onHold ? isTrueCell(row[onHold]) : false;
-      const inProgress = progress ? isTrueCell(row[progress]) : false;
-      const completed = done ? isTrueCell(row[done]) : false;
+      if (activeTab !== "onHold" && !columnOrder.some((key) => cell(row, key))) {
+        return false;
+      }
 
       switch (activeTab) {
         case "running":
@@ -398,9 +394,9 @@ export function CurrentProgressClient() {
         case "onHold":
           return held;
         case "scheduled":
-          return scheduled ? isTrueCell(row[scheduled]) : false;
+          return scheduled ? isPlatformProgressTrue(row[scheduled]) : false;
         case "blocked":
-          return blocked ? isTrueCell(row[blocked]) : false;
+          return blocked ? isPlatformProgressTrue(row[blocked]) : false;
         case "done":
           return completed;
         default:
