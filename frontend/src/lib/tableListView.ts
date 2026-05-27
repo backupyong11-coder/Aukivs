@@ -87,12 +87,17 @@ export function rowMatchesDateRange(
   to: string,
 ): boolean {
   if (!from || !to) return true;
+  let sawDate = false;
   for (const name of dateFieldNames) {
     const raw = row[name];
     if (raw == null || String(raw).trim() === "") continue;
     const ymd = normalizeSheetDateYmd(String(raw));
+    if (!ymd) continue;
+    sawDate = true;
     if (ymdInRange(ymd, from, to)) return true;
   }
+  // 날짜 열이 모두 비어 있으면 기간 필터에서 제외하지 않음
+  if (!sawDate) return true;
   return false;
 }
 

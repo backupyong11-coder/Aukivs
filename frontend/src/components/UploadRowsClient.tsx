@@ -148,7 +148,7 @@ export type FormType = Partial<Record<keyof UploadRow, string>>;
 
 function isDoneValue(raw: string | undefined): boolean {
   const v = (raw ?? "").trim().toUpperCase();
-  return v === "TRUE" || v === "1" || v === "YES" || v === "Y" || v === "완료" || v === "✓";
+  return v === "TRUE" || v === "1" || v === "YES" || v === "Y" || v === "O" || v === "완료" || v === "✓";
 }
 
 function isDone(item: UploadRow) {
@@ -450,8 +450,9 @@ export function UploadRowsClient() {
 
   const counts = useMemo(() => {
     if (state.kind !== "ready") return { 미완료: 0, 완료: 0, 전체: 0 };
-    const done = state.items.filter(isDone).length;
-    return { 미완료: state.items.length - done, 완료: done, 전체: state.items.length };
+    const all = state.items;
+    const done = all.filter(isDone).length;
+    return { 미완료: all.length - done, 완료: done, 전체: all.length };
   }, [state]);
 
   const allPlatforms = useMemo(() => {
@@ -537,6 +538,8 @@ export function UploadRowsClient() {
   }, [state, tab, filterText, hiddenPlatforms, hiddenWorks, sortKey, sortDir]);
 
   const list = useTableListDisplay("upload-rows", visible);
+
+  const dateExcludedCount = Math.max(0, visible.length - list.totalFiltered);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -776,14 +779,14 @@ export function UploadRowsClient() {
           onPageSizeChange={list.setPageSize}
           showAll={list.showAll}
           onShowAll={list.loadAll}
-          totalFiltered={list.totalFiltered}
+          totalFiltered={visible.length}
           hiddenCount={list.hiddenCount}
           displayedCount={list.displayed.length}
           dateFilter={list.dateFilter}
           onDatePresetChange={list.setDatePreset}
           onCustomFromChange={list.setCustomFrom}
           onCustomToChange={list.setCustomTo}
-          dateExcludedCount={list.dateExcludedCount}
+          dateExcludedCount={dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS["upload-rows"].join(" · ")}
           columnVisibility={{
             allKeys: columnOrder,
