@@ -42,7 +42,8 @@ const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
 const COLUMN_ORDER_STORAGE_KEY = "contracts_col_order_v1";
 const COMPLETE_COLUMN_MIGRATION_KEY = "contracts.complete_as_column_v1";
 
-const CONTRACT_TABS = CONTRACT_STATUS_OPTIONS;
+const CONTRACT_TABS = [...CONTRACT_STATUS_OPTIONS, "비어있음"] as const;
+const EMPTY_CONTRACT_TAB = "비어있음";
 type ContractTab = (typeof CONTRACT_TABS)[number];
 
 const CHECKBOX_FIELD_CANDIDATES = new Set([
@@ -507,6 +508,9 @@ export function ContractsClient() {
 
   const tabFiltered = useMemo(() => {
     if (state.kind !== "ready" || !fieldKeys.contract) return [];
+    if (activeTab === EMPTY_CONTRACT_TAB) {
+      return state.items.filter((row) => cell(row, fieldKeys.contract) === "");
+    }
     return state.items.filter((row) => cell(row, fieldKeys.contract) === activeTab);
   }, [state, activeTab, fieldKeys.contract]);
 
@@ -525,6 +529,7 @@ export function ContractsClient() {
     ];
     for (const { title, key } of filterMap) {
       if (!key) continue;
+      if (activeTab === EMPTY_CONTRACT_TAB && title === "계약") continue;
       const hidden = hiddenFilters[title];
       if (hidden.size > 0) {
         items = items.filter((it) => !hidden.has(cell(it, key)));
@@ -544,6 +549,7 @@ export function ContractsClient() {
     fieldKeys,
     sortKey,
     sortDir,
+    activeTab,
   ]);
 
   const list = useTableListDisplay("contracts", visible);
