@@ -13,7 +13,7 @@ from services.supabase_client import SupabaseRestClient
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 
 _SELECT = (
-    "id,legacy_id,sheet_row,completed,upload_date,upload_date_raw,platform_name,work_title,"
+    "id,legacy_id,sheet_row,completed,upload_date,upload_date_raw,platform_name,major_category,work_title,"
     "uploaded_episodes,remaining_episodes,upload_status,upload_cycle,upload_weekday,"
     "upload_method,launch_date,launch_date_raw,last_upload_date,last_upload_date_raw,"
     "next_upload_date,next_upload_date_raw,manuscript_ready,upload_link,last_upload_episode,note"
@@ -100,6 +100,7 @@ def _api_dict(r: dict[str, Any]) -> dict[str, Any]:
         "완료": ("TRUE" if r.get("completed") else ""),
         "업로드일": _fmt_date_col(r.get("upload_date"), r.get("upload_date_raw")),
         "플랫폼명": (r.get("platform_name") or ""),
+        "대분류": str(r.get("major_category") or "").strip(),
         "작품명": (r.get("work_title") or ""),
         "업로드화수": _opt_episode_cell(r.get("uploaded_episodes")),
         "남은업로드화수": _opt_episode_cell(r.get("remaining_episodes")),
@@ -210,6 +211,10 @@ def _insert_body_from_fields(fields: dict[str, Any]) -> dict[str, Any]:
     if "플랫폼명" in fields:
         body["platform_name"] = (
             str(fields.get("플랫폼명") or "").strip() or None
+        )
+    if "대분류" in fields:
+        body["major_category"] = (
+            str(fields.get("대분류") or "").strip() or None
         )
     if "작품명" in fields:
         body["work_title"] = str(fields.get("작품명") or "").strip() or None

@@ -20,6 +20,7 @@ import {
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
 
 const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
@@ -92,7 +93,8 @@ function cell(row: PlatformRow, key: string): string {
 }
 
 function defaultColumnOrder(sample: PlatformRow): string[] {
-  return DISPLAY_LETTERS.map((L) => headerKeyAtLetter(sample, L)).filter((k) => k !== "");
+  const keys = DISPLAY_LETTERS.map((L) => headerKeyAtLetter(sample, L)).filter((k) => k !== "");
+  return ensureMajorCategoryInColumnOrder(keys);
 }
 
 function loadColumnOrder(defaultKeys: string[]): string[] {

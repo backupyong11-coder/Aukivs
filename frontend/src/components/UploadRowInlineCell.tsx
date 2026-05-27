@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 export type EditableUploadRowField =
   | "업로드일"
   | "플랫폼명"
+  | "대분류"
   | "작품명"
   | "업로드화수"
   | "남은업로드화수"

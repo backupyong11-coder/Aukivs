@@ -28,6 +28,7 @@ export type UploadRow = {
   완료: string;
   업로드일: string;
   플랫폼명: string;
+  대분류: string;
   작품명: string;
   업로드화수: string;
   남은업로드화수: string;
@@ -64,6 +65,7 @@ const TABLE_COLUMNS: {
 }[] = [
   { key: "업로드일", label: "업로드일", muted: true, tabular: true },
   { key: "플랫폼명", label: "플랫폼" },
+  { key: "대분류", label: "대분류" },
   { key: "작품명", label: "작품명", wide: true },
   { key: "업로드화수", label: "업로드화수", tabular: true },
   { key: "남은업로드화수", label: "남은화수", tabular: true },
@@ -114,6 +116,7 @@ const EMPTY_ROW: Omit<UploadRow, "id" | "sheet_row"> = {
   완료: "",
   업로드일: "",
   플랫폼명: "",
+  대분류: "",
   작품명: "",
   업로드화수: "",
   남은업로드화수: "",

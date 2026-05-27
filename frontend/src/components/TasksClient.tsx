@@ -31,6 +31,7 @@ type TaskRow = {
   마감일: string;
   분야: string;
   분류: string;
+  대분류: string;
   "정량화 분": string;
   업무명: string;
   정량화: string;
@@ -71,6 +72,7 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
   마감일: "",
   분야: "",
   분류: "",
+  대분류: "",
   "정량화 분": "",
   업무명: "",
   정량화: "",
@@ -103,6 +105,7 @@ const TASK_DATA_COLUMNS: {
   { key: "마감일", label: "마감일", sortable: true, muted: true, tabular: true },
   { key: "분야", label: "분야", sortable: true },
   { key: "분류", label: "분류", sortable: true },
+  { key: "대분류", label: "대분류", sortable: true },
   { key: "업무명", label: "업무명", sortable: true, wide: true },
   { key: "정량화 분", label: "정량화 분" },
   { key: "정량화", label: "정량화" },
@@ -151,6 +154,7 @@ const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: bo
   { key: "마감일", label: "마감일" },
   { key: "분야", label: "분야" },
   { key: "분류", label: "분류" },
+  { key: "대분류", label: "대분류" },
   { key: "정량화 분", label: "정량화 분" },
   { key: "정량화", label: "정량화" },
   { key: "정량화 구분", label: "정량화 구분" },
@@ -621,6 +625,7 @@ export function TasksClient() {
       마감일: item.마감일 ?? "",
       분야: item.분야 ?? "",
       분류: item.분류 ?? "",
+      대분류: item.대분류 ?? "",
       "정량화 분": item["정량화 분"] ?? "",
       업무명: item.업무명 ?? "",
       정량화: item.정량화 ?? "",

@@ -21,6 +21,7 @@ import {
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
 
 const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const COMPLETE_FIELD = "완료";
@@ -85,7 +86,9 @@ function cell(row: PlatformRow, key: string): string {
 }
 
 function defaultDataColumnOrder(row: PlatformRow): string[] {
-  return orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD);
+  return ensureMajorCategoryInColumnOrder(
+    orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD),
+  );
 }
 
 function loadColumnOrder(defaultKeys: string[]): string[] {

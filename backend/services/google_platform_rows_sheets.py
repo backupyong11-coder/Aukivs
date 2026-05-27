@@ -62,6 +62,7 @@ _SEOUL = ZoneInfo("Asia/Seoul")
 # API 필드 키 → 시트 1행에서 찾을 헤더 후보(첫 매칭 열 사용)
 _EDITABLE_HEADER_CANDIDATES: dict[str, tuple[str, ...]] = {
     "분류": ("분류",),
+    "대분류": ("대분류",),
     "발표일": ("발표일",),
     "플랫폼명": ("플랫폼명",),
     "현재단계": ("현재단계",),
@@ -82,6 +83,7 @@ _PLATFORM_CREATE_HEADER_CANDIDATES: dict[str, tuple[str, ...]] = {
 _PLATFORM_CREATE_FIELD_ORDER: tuple[str, ...] = (
     "회사명",
     "분류",
+    "대분류",
     "발표일",
     "플랫폼명",
     "현재단계",

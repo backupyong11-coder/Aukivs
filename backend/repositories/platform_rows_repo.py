@@ -19,6 +19,7 @@ _CORE_SHEET_HEADERS: frozenset[str] = frozenset(
     {
         "회사명",
         "분류",
+        "대분류",
         "발표일",
         "지원사업",
         "일반계약",
@@ -42,7 +43,7 @@ _CORE_SHEET_HEADERS: frozenset[str] = frozenset(
 )
 
 _SELECT = (
-    "id,legacy_id,sheet_row,company_name,category,announcement_date,subsidy_program,"
+    "id,legacy_id,sheet_row,company_name,category,major_category,announcement_date,subsidy_program,"
     "contract_general,blocked,scheduled,in_progress,done,contract_status,meeting,"
     "current_stage,last_updated_at,last_updated_at_raw,last_situation,waiting_reason,"
     "next_action,platform_name,priority,note,extra"
@@ -130,6 +131,7 @@ def _api_dict(r: dict[str, Any]) -> dict[str, Any]:
         "sheet_row": sheet_row,
         "회사명": str(r.get("company_name") or "").strip(),
         "분류": str(r.get("category") or "").strip(),
+        "대분류": str(r.get("major_category") or "").strip(),
         "발표일": str(r.get("announcement_date") or "").strip(),
         "지원사업": _bool_cell(bool(r.get("subsidy_program"))),
         "일반계약": str(r.get("contract_general") or "").strip(),
@@ -323,6 +325,8 @@ def _merge_core_into_patch(
         patch["company_name"] = _opt_text(fields.get("회사명"))
     if "분류" in fields:
         patch["category"] = _opt_text(fields.get("분류"))
+    if "대분류" in fields:
+        patch["major_category"] = _opt_text(fields.get("대분류"))
     if "발표일" in fields:
         patch["announcement_date"] = _opt_text(fields.get("발표일"))
     if "지원사업" in fields:

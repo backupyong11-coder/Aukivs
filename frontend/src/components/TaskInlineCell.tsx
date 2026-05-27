@@ -7,6 +7,7 @@ export type EditableTaskField =
   | "마감일"
   | "분야"
   | "분류"
+  | "대분류"
   | "정량화 분"
   | "업무명"
   | "정량화"

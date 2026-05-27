@@ -13,6 +13,7 @@ import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
+import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   PlatformRowInlineCell,
@@ -60,6 +61,7 @@ const EMPTY_ROW: Omit<UploadRow, "id" | "sheet_row"> = {
   완료: "",
   업로드일: "",
   플랫폼명: "",
+  대분류: "",
   작품명: "",
   업로드화수: "",
   남은업로드화수: "",
@@ -91,7 +93,9 @@ function orderedHeaderKeys(row: UploadRow): string[] {
 }
 
 function defaultDataColumnOrder(row: UploadRow): string[] {
-  return orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD);
+  return ensureMajorCategoryInColumnOrder(
+    orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD),
+  );
 }
 
 function rowField(row: UploadRow, key: string): string {

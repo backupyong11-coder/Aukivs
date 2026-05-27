@@ -13,7 +13,7 @@ from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 
 _SELECT_TASKS = (
     "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
-    "domain,category,quantification_minutes,title,quantification,quantification_type,"
+    "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
     "difficulty,fatigue,status,assignee,memo"
 )
@@ -25,6 +25,7 @@ _KOREAN_TO_DB: dict[str, str] = {
     "마감일": "due_date",
     "분야": "domain",
     "분류": "category",
+    "대분류": "major_category",
     "정량화 분": "quantification_minutes",
     "업무명": "title",
     "정량화": "quantification",
@@ -49,6 +50,7 @@ _CREATE_RESPONSE_KEYS: tuple[str, ...] = (
     "마감일",
     "분야",
     "분류",
+    "대분류",
     "정량화 분",
     "정량화",
     "정량화 구분",
@@ -124,6 +126,7 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         "마감일": due_s,
         "분야": opt_str("domain"),
         "분류": opt_str("category"),
+        "대분류": opt_str("major_category"),
         "정량화 분": opt_str("quantification_minutes"),
         "업무명": opt_str("title"),
         "정량화": opt_str("quantification"),

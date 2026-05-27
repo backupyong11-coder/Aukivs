@@ -20,6 +20,7 @@ import {
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
 
 type PlatformRow = Record<string, string> & { id: string; sheet_row: string };
 
@@ -48,6 +49,7 @@ const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] 
   { key: "발표일", label: "발표일" },
   { key: "플랫폼명", label: "플랫폼명" },
   { key: "분류", label: "분류" },
+  { key: "대분류", label: "대분류" },
   { key: "현재단계", label: "현재단계" },
   { key: "마지막상황", label: "마지막상황" },
   { key: "대기사유", label: "대기사유" },
@@ -67,7 +69,9 @@ const UNDO_TOAST_MS = 10_000;
 const MAX_UNDO_STACK = 10;
 
 function orderedHeaderKeys(row: PlatformRow): string[] {
-  return Object.keys(row).filter((k) => !INTERNAL_KEYS.has(k));
+  return ensureMajorCategoryInColumnOrder(
+    Object.keys(row).filter((k) => !INTERNAL_KEYS.has(k)),
+  );
 }
 
 function loadHiddenSet(storageKey: string): Set<string> {
