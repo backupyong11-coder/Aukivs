@@ -23,6 +23,14 @@ import {
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
+import {
+  UNDO_TOAST_MS,
+  isColumnHideUndo,
+  pushUndoEntry,
+  undoToastDescription,
+  type FieldUndoEntry,
+  type TableUndoEntry,
+} from "@/lib/tableListUndo";
 
 const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
@@ -50,16 +58,6 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "계약",
   "미팅",
 ]);
-
-type FieldUndoEntry = {
-  id: string;
-  field: string;
-  title: string;
-  previousValue: string;
-};
-
-const UNDO_TOAST_MS = 10_000;
-const MAX_UNDO_STACK = 10;
 
 function colLettersToZeroBased(letters: string): number {
   const s = letters.toUpperCase();
@@ -187,10 +185,10 @@ export function CurrentProgressClient() {
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [patchingCell, setPatchingCell] = useState<string | null>(null);
   const [togglingCell, setTogglingCell] = useState<string | null>(null);
-  const [undoToast, setUndoToast] = useState<FieldUndoEntry | null>(null);
+  const [undoToast, setUndoToast] = useState<TableUndoEntry | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const [undoing, setUndoing] = useState(false);
-  const undoStackRef = useRef<FieldUndoEntry[]>([]);
+  const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editItem, setEditItem] = useState<PlatformRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -258,11 +256,8 @@ export function CurrentProgressClient() {
     setUndoCount(undoStackRef.current.length);
   }, []);
 
-  const showUndoToast = useCallback((entry: FieldUndoEntry) => {
-    undoStackRef.current = [
-      entry,
-      ...undoStackRef.current.filter((e) => !(e.id === entry.id && e.field === entry.field)),
-    ].slice(0, MAX_UNDO_STACK);
+  const showUndoToast = useCallback((entry: TableUndoEntry) => {
+    undoStackRef.current = pushUndoEntry(undoStackRef.current, entry);
     syncUndoCount();
     setUndoToast(entry);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -330,6 +325,7 @@ export function CurrentProgressClient() {
         await apiFetch("/platform-rows/update", { id: rowId, [field]: newValue });
         if (opts?.withUndo) {
           showUndoToast({
+            kind: "field",
             id: rowId,
             field,
             title: rowTitle(item),
@@ -360,56 +356,6 @@ export function CurrentProgressClient() {
     },
     [booleanFields, dismissUndoToast, patchField],
   );
-
-  const performUndo = useCallback(
-    async (entry?: FieldUndoEntry) => {
-      const target = entry ?? undoStackRef.current[0];
-      if (!target || undoing) return;
-      setUndoing(true);
-      setActionError(null);
-      dismissUndoToast();
-      setFieldInState(target.id, target.field, target.previousValue);
-      setTogglingCell(`${target.id}:${target.field}`);
-      try {
-        await apiFetch("/platform-rows/update", {
-          id: target.id,
-          [target.field]: target.previousValue,
-        });
-        undoStackRef.current = undoStackRef.current.filter(
-          (e) => !(e.id === target.id && e.field === target.field),
-        );
-        syncUndoCount();
-      } catch (e) {
-        setActionError(e instanceof Error ? e.message : "되돌리기 실패");
-        showUndoToast(target);
-      } finally {
-        setTogglingCell(null);
-        setUndoing(false);
-      }
-    },
-    [dismissUndoToast, setFieldInState, showUndoToast, syncUndoCount, undoing],
-  );
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
-      const el = e.target;
-      if (
-        el instanceof HTMLElement &&
-        (el.tagName === "INPUT" ||
-          el.tagName === "TEXTAREA" ||
-          el.tagName === "SELECT" ||
-          el.isContentEditable)
-      ) {
-        return;
-      }
-      if (undoStackRef.current.length === 0 && !undoToast) return;
-      e.preventDefault();
-      void performUndo();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [performUndo, undoToast]);
 
   const tabFiltered = useMemo(() => {
     if (state.kind !== "ready" || !sample || columnOrder.length === 0 || !fieldKeys.tabFilter) {
@@ -491,6 +437,78 @@ export function CurrentProgressClient() {
   const colVis = useTableColumnVisibility("progress", columnOrder);
   const colLabels = useColumnLabels("progress");
   const colWidths = useTableColumnWidths("progress", colVis.visibleKeys, colLabels.getLabel);
+
+  const hideColumn = useCallback(
+    (field: string) => {
+      colVis.setColumnVisible(field, false);
+      showUndoToast({
+        kind: "column-hide",
+        field,
+        label: colLabels.getLabel(field),
+      });
+    },
+    [colVis, colLabels, showUndoToast],
+  );
+
+  const performUndo = useCallback(
+    async (entry?: TableUndoEntry) => {
+      const target = entry ?? undoStackRef.current[0];
+      if (!target || undoing) return;
+      setUndoing(true);
+      setActionError(null);
+      dismissUndoToast();
+      if (isColumnHideUndo(target)) {
+        colVis.setColumnVisible(target.field, true);
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => !isColumnHideUndo(e) || e.field !== target.field,
+        );
+        syncUndoCount();
+        setUndoing(false);
+        return;
+      }
+      const fieldTarget = target as FieldUndoEntry;
+      setFieldInState(fieldTarget.id, fieldTarget.field, fieldTarget.previousValue);
+      setTogglingCell(`${fieldTarget.id}:${fieldTarget.field}`);
+      try {
+        await apiFetch("/platform-rows/update", {
+          id: fieldTarget.id,
+          [fieldTarget.field]: fieldTarget.previousValue,
+        });
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => e.kind !== "field" || !(e.id === fieldTarget.id && e.field === fieldTarget.field),
+        );
+        syncUndoCount();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "되돌리기 실패");
+        showUndoToast(fieldTarget);
+      } finally {
+        setTogglingCell(null);
+        setUndoing(false);
+      }
+    },
+    [colVis, dismissUndoToast, setFieldInState, showUndoToast, syncUndoCount, undoing],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      const el = e.target;
+      if (
+        el instanceof HTMLElement &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      if (undoStackRef.current.length === 0 && !undoToast) return;
+      e.preventDefault();
+      void performUndo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [performUndo, undoToast]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -680,7 +698,7 @@ export function CurrentProgressClient() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(field)}
                     onSort={() => handleSort(field)}
-                    onHide={() => colVis.setColumnVisible(field, false)}
+                    onHide={() => hideColumn(field)}
                     onEdit={() => colLabels.editLabel(field)}
                     onDelete={() => {
                       const name = colLabels.getLabel(field);
@@ -689,7 +707,7 @@ export function CurrentProgressClient() {
                           `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
                         )
                       ) {
-                        colVis.setColumnVisible(field, false);
+                        hideColumn(field);
                       }
                     }}
                   />
@@ -778,10 +796,7 @@ export function CurrentProgressClient() {
           role="status"
         >
           <span className="text-zinc-700 dark:text-zinc-200">
-            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-              「{undoToast.title}」
-            </span>{" "}
-            {undoToast.field} 변경됨
+            {undoToastDescription(undoToast)}
           </span>
           <button
             type="button"

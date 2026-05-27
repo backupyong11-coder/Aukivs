@@ -23,6 +23,14 @@ import {
   type EditableUploadRowField,
 } from "@/components/UploadRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import {
+  UNDO_TOAST_MS,
+  isColumnHideUndo,
+  pushUndoEntry,
+  undoToastDescription,
+  type CompletionUndoEntry,
+  type TableUndoEntry,
+} from "@/lib/tableListUndo";
 
 export type UploadRow = {
   id: string;
@@ -150,15 +158,6 @@ function doneToCell(checked: boolean): string {
   return checked ? "TRUE" : "";
 }
 
-type CompletionUndoEntry = {
-  id: string;
-  title: string;
-  previousDone: string;
-};
-
-const UNDO_TOAST_MS = 10_000;
-const MAX_UNDO_STACK = 10;
-
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
   const res = await fetch(`${base}${path}`, {
@@ -242,10 +241,10 @@ export function UploadRowsClient() {
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [patchingCell, setPatchingCell] = useState<string | null>(null);
-  const [undoToast, setUndoToast] = useState<CompletionUndoEntry | null>(null);
+  const [undoToast, setUndoToast] = useState<TableUndoEntry | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const [undoing, setUndoing] = useState(false);
-  const undoStackRef = useRef<CompletionUndoEntry[]>([]);
+  const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
@@ -365,11 +364,8 @@ export function UploadRowsClient() {
     });
   }, []);
 
-  const showUndoToast = useCallback((entry: CompletionUndoEntry) => {
-    undoStackRef.current = [
-      entry,
-      ...undoStackRef.current.filter((e) => e.id !== entry.id),
-    ].slice(0, MAX_UNDO_STACK);
+  const showUndoToast = useCallback((entry: TableUndoEntry) => {
+    undoStackRef.current = pushUndoEntry(undoStackRef.current, entry);
     syncUndoCount();
     setUndoToast(entry);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -381,29 +377,53 @@ export function UploadRowsClient() {
     setUndoToast(null);
   }, []);
 
+  const hideColumn = useCallback(
+    (key: EditableUploadRowField, label: string) => {
+      colVis.setColumnVisible(key, false);
+      showUndoToast({
+        kind: "column-hide",
+        field: key,
+        label: colLabels.getLabel(key, label),
+      });
+    },
+    [colVis, colLabels, showUndoToast],
+  );
+
   const performUndo = useCallback(
-    async (entry?: CompletionUndoEntry) => {
+    async (entry?: TableUndoEntry) => {
       const target = entry ?? undoStackRef.current[0];
       if (!target || undoing) return;
       setUndoing(true);
       setActionError(null);
       dismissUndoToast();
-      const revertTo = target.previousDone;
-      setCompletionInState(target.id, revertTo);
-      setTogglingId(target.id);
+      if (isColumnHideUndo(target)) {
+        colVis.setColumnVisible(target.field, true);
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => !isColumnHideUndo(e) || e.field !== target.field,
+        );
+        syncUndoCount();
+        setUndoing(false);
+        return;
+      }
+      const completionTarget = target as CompletionUndoEntry;
+      const revertTo = completionTarget.previousDone;
+      setCompletionInState(completionTarget.id, revertTo);
+      setTogglingId(completionTarget.id);
       try {
-        await apiFetch("/upload-rows/update", { id: target.id, 완료: revertTo });
-        undoStackRef.current = undoStackRef.current.filter((e) => e.id !== target.id);
+        await apiFetch("/upload-rows/update", { id: completionTarget.id, 완료: revertTo });
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => e.kind !== "completion" || e.id !== completionTarget.id,
+        );
         syncUndoCount();
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "되돌리기 실패");
-        showUndoToast(target);
+        showUndoToast(completionTarget);
       } finally {
         setTogglingId(null);
         setUndoing(false);
       }
     },
-    [dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
+    [colVis, dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
   );
 
   useEffect(() => {
@@ -632,6 +652,7 @@ export function UploadRowsClient() {
     try {
       await apiFetch("/upload-rows/update", { id: item.id, 완료: nextDone });
       showUndoToast({
+        kind: "completion",
         id: item.id,
         title: item.작품명?.trim() || "(제목 없음)",
         previousDone: prevDone,
@@ -803,7 +824,7 @@ export function UploadRowsClient() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(key)}
                     onSort={() => handleSort(key)}
-                    onHide={() => colVis.setColumnVisible(key, false)}
+                    onHide={() => hideColumn(key, label)}
                     onEdit={() => colLabels.editLabel(key, label)}
                     onDelete={() => {
                       const name = colLabels.getLabel(key, label);
@@ -812,7 +833,7 @@ export function UploadRowsClient() {
                           `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
                         )
                       ) {
-                        colVis.setColumnVisible(key, false);
+                        hideColumn(key, label);
                       }
                     }}
                   />
@@ -904,10 +925,7 @@ export function UploadRowsClient() {
           role="status"
         >
           <span className="text-zinc-700 dark:text-zinc-200">
-            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-              「{undoToast.title}」
-            </span>{" "}
-            완료 상태를 변경했습니다.
+            {undoToastDescription(undoToast)}
           </span>
           <button
             type="button"

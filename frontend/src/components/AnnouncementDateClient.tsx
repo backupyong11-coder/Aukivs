@@ -23,6 +23,14 @@ import {
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
+import {
+  UNDO_TOAST_MS,
+  isColumnHideUndo,
+  pushUndoEntry,
+  undoToastDescription,
+  type FieldUndoEntry,
+  type TableUndoEntry,
+} from "@/lib/tableListUndo";
 
 const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
@@ -41,16 +49,6 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "계약",
   "미팅",
 ]);
-
-type FieldUndoEntry = {
-  id: string;
-  field: string;
-  title: string;
-  previousValue: string;
-};
-
-const UNDO_TOAST_MS = 10_000;
-const MAX_UNDO_STACK = 10;
 
 function colLettersToZeroBased(letters: string): number {
   const s = letters.toUpperCase();
@@ -177,10 +175,10 @@ export function AnnouncementDateClient() {
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [patchingCell, setPatchingCell] = useState<string | null>(null);
   const [togglingCell, setTogglingCell] = useState<string | null>(null);
-  const [undoToast, setUndoToast] = useState<FieldUndoEntry | null>(null);
+  const [undoToast, setUndoToast] = useState<TableUndoEntry | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const [undoing, setUndoing] = useState(false);
-  const undoStackRef = useRef<FieldUndoEntry[]>([]);
+  const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editItem, setEditItem] = useState<PlatformRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -244,15 +242,15 @@ export function AnnouncementDateClient() {
     return set;
   }, [state, columnOrder]);
 
+  const colVis = useTableColumnVisibility("announcement-date", columnOrder);
+  const colLabels = useColumnLabels("announcement-date");
+
   const syncUndoCount = useCallback(() => {
     setUndoCount(undoStackRef.current.length);
   }, []);
 
-  const showUndoToast = useCallback((entry: FieldUndoEntry) => {
-    undoStackRef.current = [
-      entry,
-      ...undoStackRef.current.filter((e) => !(e.id === entry.id && e.field === entry.field)),
-    ].slice(0, MAX_UNDO_STACK);
+  const showUndoToast = useCallback((entry: TableUndoEntry) => {
+    undoStackRef.current = pushUndoEntry(undoStackRef.current, entry);
     syncUndoCount();
     setUndoToast(entry);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -263,6 +261,18 @@ export function AnnouncementDateClient() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     setUndoToast(null);
   }, []);
+
+  const hideColumn = useCallback(
+    (field: string) => {
+      colVis.setColumnVisible(field, false);
+      showUndoToast({
+        kind: "column-hide",
+        field,
+        label: colLabels.getLabel(field),
+      });
+    },
+    [colVis, colLabels, showUndoToast],
+  );
 
   const setFieldInState = useCallback((id: string, field: string, value: string) => {
     setState((s) => {
@@ -320,6 +330,7 @@ export function AnnouncementDateClient() {
         await apiFetch("/platform-rows/update", { id: rowId, [field]: newValue });
         if (opts?.withUndo) {
           showUndoToast({
+            kind: "field",
             id: rowId,
             field,
             title: rowTitle(item),
@@ -352,32 +363,42 @@ export function AnnouncementDateClient() {
   );
 
   const performUndo = useCallback(
-    async (entry?: FieldUndoEntry) => {
+    async (entry?: TableUndoEntry) => {
       const target = entry ?? undoStackRef.current[0];
       if (!target || undoing) return;
       setUndoing(true);
       setActionError(null);
       dismissUndoToast();
-      setFieldInState(target.id, target.field, target.previousValue);
-      setTogglingCell(`${target.id}:${target.field}`);
+      if (isColumnHideUndo(target)) {
+        colVis.setColumnVisible(target.field, true);
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => !isColumnHideUndo(e) || e.field !== target.field,
+        );
+        syncUndoCount();
+        setUndoing(false);
+        return;
+      }
+      const fieldTarget = target as FieldUndoEntry;
+      setFieldInState(fieldTarget.id, fieldTarget.field, fieldTarget.previousValue);
+      setTogglingCell(`${fieldTarget.id}:${fieldTarget.field}`);
       try {
         await apiFetch("/platform-rows/update", {
-          id: target.id,
-          [target.field]: target.previousValue,
+          id: fieldTarget.id,
+          [fieldTarget.field]: fieldTarget.previousValue,
         });
         undoStackRef.current = undoStackRef.current.filter(
-          (e) => !(e.id === target.id && e.field === target.field),
+          (e) => e.kind !== "field" || !(e.id === fieldTarget.id && e.field === fieldTarget.field),
         );
         syncUndoCount();
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "되돌리기 실패");
-        showUndoToast(target);
+        showUndoToast(fieldTarget);
       } finally {
         setTogglingCell(null);
         setUndoing(false);
       }
     },
-    [dismissUndoToast, setFieldInState, showUndoToast, syncUndoCount, undoing],
+    [colVis, dismissUndoToast, setFieldInState, showUndoToast, syncUndoCount, undoing],
   );
 
   useEffect(() => {
@@ -480,8 +501,6 @@ export function AnnouncementDateClient() {
   const list = useTableListDisplay("announcement-date", visible, {
     dateFields: fieldKeys.announcement ? [fieldKeys.announcement] : TABLE_LIST_DATE_FIELDS["announcement-date"],
   });
-  const colVis = useTableColumnVisibility("announcement-date", columnOrder);
-  const colLabels = useColumnLabels("announcement-date");
   const colWidths = useTableColumnWidths(
     "announcement-date",
     colVis.visibleKeys,
@@ -657,7 +676,7 @@ export function AnnouncementDateClient() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(field)}
                     onSort={() => handleSort(field)}
-                    onHide={() => colVis.setColumnVisible(field, false)}
+                    onHide={() => hideColumn(field)}
                     onEdit={() => colLabels.editLabel(field)}
                     onDelete={() => {
                       const name = colLabels.getLabel(field);
@@ -666,7 +685,7 @@ export function AnnouncementDateClient() {
                           `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
                         )
                       ) {
-                        colVis.setColumnVisible(field, false);
+                        hideColumn(field);
                       }
                     }}
                   />
@@ -754,10 +773,7 @@ export function AnnouncementDateClient() {
           role="status"
         >
           <span className="text-zinc-700 dark:text-zinc-200">
-            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-              「{undoToast.title}」
-            </span>{" "}
-            {undoToast.field} 변경됨
+            {undoToastDescription(undoToast)}
           </span>
           <button
             type="button"

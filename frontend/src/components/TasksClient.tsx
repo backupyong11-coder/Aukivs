@@ -20,6 +20,14 @@ import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
+  UNDO_TOAST_MS,
+  isColumnHideUndo,
+  pushUndoEntry,
+  undoToastDescription,
+  type CompletionUndoEntry,
+  type TableUndoEntry,
+} from "@/lib/tableListUndo";
+import {
   TaskInlineCell,
   type EditableTaskField,
 } from "@/components/TaskInlineCell";
@@ -186,15 +194,6 @@ function doneToCell(checked: boolean): string {
   return checked ? "TRUE" : "";
 }
 
-type CompletionUndoEntry = {
-  id: string;
-  title: string;
-  previousDone: string;
-};
-
-const UNDO_TOAST_MS = 10_000;
-const MAX_UNDO_STACK = 10;
-
 async function apiFetch(path: string, body?: object) {
   const base = getApiBaseUrl();
   const res = await fetch(`${base}${path}`, {
@@ -279,10 +278,10 @@ export function TasksClient() {
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [patchingCell, setPatchingCell] = useState<string | null>(null);
-  const [undoToast, setUndoToast] = useState<CompletionUndoEntry | null>(null);
+  const [undoToast, setUndoToast] = useState<TableUndoEntry | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const [undoing, setUndoing] = useState(false);
-  const undoStackRef = useRef<CompletionUndoEntry[]>([]);
+  const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
@@ -418,11 +417,8 @@ export function TasksClient() {
     });
   }, []);
 
-  const showUndoToast = useCallback((entry: CompletionUndoEntry) => {
-    undoStackRef.current = [
-      entry,
-      ...undoStackRef.current.filter((e) => e.id !== entry.id),
-    ].slice(0, MAX_UNDO_STACK);
+  const showUndoToast = useCallback((entry: TableUndoEntry) => {
+    undoStackRef.current = pushUndoEntry(undoStackRef.current, entry);
     syncUndoCount();
     setUndoToast(entry);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -434,29 +430,53 @@ export function TasksClient() {
     setUndoToast(null);
   }, []);
 
+  const hideColumn = useCallback(
+    (field: EditableTaskField, fallbackLabel?: string) => {
+      colVis.setColumnVisible(field, false);
+      showUndoToast({
+        kind: "column-hide",
+        field,
+        label: colLabels.getLabel(field, fallbackLabel),
+      });
+    },
+    [colVis, colLabels, showUndoToast],
+  );
+
   const performUndo = useCallback(
-    async (entry?: CompletionUndoEntry) => {
+    async (entry?: TableUndoEntry) => {
       const target = entry ?? undoStackRef.current[0];
       if (!target || undoing) return;
       setUndoing(true);
       setActionError(null);
       dismissUndoToast();
-      const revertTo = target.previousDone;
-      setCompletionInState(target.id, revertTo);
-      setTogglingId(target.id);
+      if (isColumnHideUndo(target)) {
+        colVis.setColumnVisible(target.field, true);
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => !isColumnHideUndo(e) || e.field !== target.field,
+        );
+        syncUndoCount();
+        setUndoing(false);
+        return;
+      }
+      const completionTarget = target as CompletionUndoEntry;
+      const revertTo = completionTarget.previousDone;
+      setCompletionInState(completionTarget.id, revertTo);
+      setTogglingId(completionTarget.id);
       try {
-        await apiFetch("/tasks/update", { id: target.id, 완료: revertTo });
-        undoStackRef.current = undoStackRef.current.filter((e) => e.id !== target.id);
+        await apiFetch("/tasks/update", { id: completionTarget.id, 완료: revertTo });
+        undoStackRef.current = undoStackRef.current.filter(
+          (e) => e.kind !== "completion" || e.id !== completionTarget.id,
+        );
         syncUndoCount();
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "되돌리기 실패");
-        showUndoToast(target);
+        showUndoToast(completionTarget);
       } finally {
         setTogglingId(null);
         setUndoing(false);
       }
     },
-    [dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
+    [colVis, dismissUndoToast, setCompletionInState, showUndoToast, syncUndoCount, undoing],
   );
 
   useEffect(() => {
@@ -751,6 +771,7 @@ export function TasksClient() {
     try {
       await apiFetch("/tasks/update", { id: item.id, 완료: nextDone });
       showUndoToast({
+        kind: "completion",
         id: item.id,
         title: item.업무명?.trim() || "(제목 없음)",
         previousDone: prevDone,
@@ -939,7 +960,7 @@ export function TasksClient() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(col.key)}
                     onSort={col.sortable ? () => handleSort(col.key as SortKey) : undefined}
-                    onHide={() => colVis.setColumnVisible(col.key, false)}
+                    onHide={() => hideColumn(col.key, col.label)}
                     onEdit={() => colLabels.editLabel(col.key, col.label)}
                     onDelete={() => {
                       const name = colLabels.getLabel(col.key, col.label);
@@ -948,7 +969,7 @@ export function TasksClient() {
                           `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
                         )
                       ) {
-                        colVis.setColumnVisible(col.key, false);
+                        hideColumn(col.key, col.label);
                       }
                     }}
                   />
@@ -1045,10 +1066,7 @@ export function TasksClient() {
           role="status"
         >
           <span className="text-zinc-700 dark:text-zinc-200">
-            <span className="font-medium text-zinc-900 dark:text-zinc-50">
-              「{undoToast.title}」
-            </span>{" "}
-            완료 상태를 변경했습니다.
+            {undoToastDescription(undoToast)}
           </span>
           <button
             type="button"
