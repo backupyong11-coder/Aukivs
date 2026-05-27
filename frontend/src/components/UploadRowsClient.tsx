@@ -11,6 +11,7 @@ import {
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableListControls } from "@/components/TableListControls";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
@@ -293,6 +294,14 @@ export function UploadRowsClient() {
     const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
     return columnOrder.map((k) => map.get(k)).filter((c): c is (typeof TABLE_COLUMNS)[number] => !!c);
   }, [columnOrder]);
+
+  const colVis = useTableColumnVisibility("upload-rows", columnOrder);
+  const visibleDisplayColumns = useMemo(() => {
+    const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
+    return colVis.visibleKeys
+      .map((k) => map.get(k as EditableUploadRowField))
+      .filter((c): c is (typeof TABLE_COLUMNS)[number] => !!c);
+  }, [colVis.visibleKeys]);
 
   const persistColumnOrder = useCallback((next: EditableUploadRowField[]) => {
     if (typeof window === "undefined") return;
@@ -633,7 +642,7 @@ export function UploadRowsClient() {
   const thSort =
     "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
 
-  const tableColSpan = 3 + displayColumns.length;
+  const tableColSpan = 3 + visibleDisplayColumns.length;
 
   return (
     <div className="space-y-4">
@@ -743,6 +752,13 @@ export function UploadRowsClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS["upload-rows"].join(" · ")}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+            columnLabel: (k) => TABLE_COLUMNS.find((c) => c.key === k)?.label ?? k,
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2200px] text-xs">
@@ -750,7 +766,7 @@ export function UploadRowsClient() {
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
                 <th className={thAction}>완료</th>
-                {displayColumns.map(({ key, label }) => (
+                {visibleDisplayColumns.map(({ key, label }) => (
                   <th
                     key={key}
                     draggable
@@ -804,7 +820,7 @@ export function UploadRowsClient() {
                       className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
                     />
                   </td>
-                  {displayColumns.map(({ key, wide, muted, tabular }) => (
+                  {visibleDisplayColumns.map(({ key, wide, muted, tabular }) => (
                     <td
                       key={key}
                       className={`px-3 py-1.5 ${tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"} ${wide ? "max-w-[280px]" : ""}`}

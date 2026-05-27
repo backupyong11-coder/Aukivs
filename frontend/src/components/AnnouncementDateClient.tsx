@@ -9,6 +9,7 @@ import {
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableListControls } from "@/components/TableListControls";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import { PlatformRowEditModal, type PlatformRow } from "@/components/PlatformRowEditModal";
@@ -473,6 +474,7 @@ export function AnnouncementDateClient() {
   const list = useTableListDisplay("announcement-date", visible, {
     dateFields: fieldKeys.announcement ? [fieldKeys.announcement] : TABLE_LIST_DATE_FIELDS["announcement-date"],
   });
+  const colVis = useTableColumnVisibility("announcement-date", columnOrder);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -506,7 +508,7 @@ export function AnnouncementDateClient() {
   const isCellBusy = (rowId: string, field: string) =>
     patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const tableColSpan = columnOrder.length + 2;
+  const tableColSpan = colVis.visibleKeys.length + 2;
 
   return (
     <div className="space-y-3">
@@ -605,13 +607,19 @@ export function AnnouncementDateClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={(fieldKeys.announcement || "발표일") + " · 캘린더"}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[800px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
-                {columnOrder.map((field) => (
+                {colVis.visibleKeys.map((field) => (
                   <th
                     key={field}
                     draggable
@@ -665,7 +673,7 @@ export function AnnouncementDateClient() {
                         수정
                       </button>
                     </td>
-                    {columnOrder.map((field) => {
+                    {colVis.visibleKeys.map((field) => {
                       const isBool = booleanFields.has(field);
                       const readonly = READONLY_FIELDS.has(field);
                       const wide =

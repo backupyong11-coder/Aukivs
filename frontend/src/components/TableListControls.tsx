@@ -1,5 +1,6 @@
 "use client";
 
+import { TableColumnProperties } from "@/components/TableColumnProperties";
 import {
   TABLE_PAGE_SIZE_OPTIONS,
   type DateRangeFilter,
@@ -43,6 +44,13 @@ export function TableListControls(props: {
   onCustomToChange: (ymd: string) => void;
   dateExcludedCount?: number;
   dateFieldHint?: string;
+  columnVisibility?: {
+    allKeys: string[];
+    hiddenColumns: Set<string>;
+    onSetVisible: (key: string, visible: boolean) => void;
+    onShowAllColumns: () => void;
+    columnLabel?: (key: string) => string;
+  };
 }) {
   const {
     pageSize,
@@ -58,6 +66,7 @@ export function TableListControls(props: {
     onCustomToChange,
     dateExcludedCount = 0,
     dateFieldHint,
+    columnVisibility,
   } = props;
 
   const showMore = hiddenCount > 0 && !showAll;
@@ -142,38 +151,47 @@ export function TableListControls(props: {
           </button>
         ))}
 
-        <p className="ml-auto min-w-0 shrink-0 text-[10px] text-zinc-600 dark:text-zinc-400">
-          {totalFiltered === 0 ? (
-            "표시할 항목 없음"
-          ) : (
-            <>
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">{totalFiltered}건</span>
-              {dateExcludedCount > 0 ? (
-                <span className="text-zinc-400 dark:text-zinc-500">
-                  {" "}
-                  (기간 제외 {dateExcludedCount}건)
-                </span>
-              ) : null}
-              {" · "}
-              {displayedCount}건 표시
-              {showMore ? (
-                <>
-                  {" "}
-                  <span className="text-zinc-400">… 외 {hiddenCount}건</span>
-                  <button
-                    type="button"
-                    onClick={onShowAll}
-                    className={`ml-0.5 ${chipBtn(false)}`}
-                  >
-                    더보기
-                  </button>
-                </>
-              ) : showAll && pageSize !== "all" && typeof pageSize === "number" && totalFiltered > pageSize ? (
-                <span className="text-zinc-400"> (전체)</span>
-              ) : null}
-            </>
-          )}
-        </p>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <p className="min-w-0 text-[10px] text-zinc-600 dark:text-zinc-400">
+            {totalFiltered === 0 ? (
+              "표시할 항목 없음"
+            ) : (
+              <>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">{totalFiltered}건</span>
+                {dateExcludedCount > 0 ? (
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    {" "}
+                    (기간 제외 {dateExcludedCount}건)
+                  </span>
+                ) : null}
+                {" · "}
+                {displayedCount}건 표시
+                {showMore ? (
+                  <span className="text-zinc-400"> … 외 {hiddenCount}건</span>
+                ) : showAll &&
+                    pageSize !== "all" &&
+                    typeof pageSize === "number" &&
+                    totalFiltered > pageSize ? (
+                  <span className="text-zinc-400"> (전체)</span>
+                ) : null}
+              </>
+            )}
+          </p>
+          {showMore ? (
+            <button type="button" onClick={onShowAll} className={chipBtn(false)}>
+              더보기
+            </button>
+          ) : null}
+          {columnVisibility ? (
+            <TableColumnProperties
+              allKeys={columnVisibility.allKeys}
+              hiddenColumns={columnVisibility.hiddenColumns}
+              onSetVisible={columnVisibility.onSetVisible}
+              onShowAll={columnVisibility.onShowAllColumns}
+              labelForKey={columnVisibility.columnLabel}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );

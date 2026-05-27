@@ -11,6 +11,7 @@ import {
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableListControls } from "@/components/TableListControls";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
@@ -345,6 +346,14 @@ export function TasksClient() {
     const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
     return columnOrder.map((k) => map.get(k)).filter((c): c is (typeof TASK_DATA_COLUMNS)[number] => !!c);
   }, [columnOrder]);
+
+  const colVis = useTableColumnVisibility("tasks", columnOrder);
+  const visibleDisplayColumns = useMemo(() => {
+    const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
+    return colVis.visibleKeys
+      .map((k) => map.get(k as EditableTaskField))
+      .filter((c): c is (typeof TASK_DATA_COLUMNS)[number] => !!c);
+  }, [colVis.visibleKeys]);
 
   const persistColumnOrder = useCallback((next: EditableTaskField[]) => {
     if (typeof window === "undefined") return;
@@ -749,7 +758,7 @@ export function TasksClient() {
   const thAction = "whitespace-nowrap px-2 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
   const thSort =
     "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
-  const tableColSpan = 3 + displayColumns.length;
+  const tableColSpan = 3 + visibleDisplayColumns.length;
 
   return (
     <div className="space-y-4">
@@ -876,6 +885,13 @@ export function TasksClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS.tasks.join(" · ")}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+            columnLabel: (k) => TASK_DATA_COLUMNS.find((c) => c.key === k)?.label ?? k,
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2600px] text-xs">
@@ -883,7 +899,7 @@ export function TasksClient() {
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
                 <th className={thAction}>완료</th>
-                {displayColumns.map((col) => (
+                {visibleDisplayColumns.map((col) => (
                   <th
                     key={col.key}
                     draggable
@@ -952,7 +968,7 @@ export function TasksClient() {
                       className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
                     />
                   </td>
-                  {displayColumns.map((col) => (
+                  {visibleDisplayColumns.map((col) => (
                     <td
                       key={col.key}
                       className={`px-3 py-1.5 ${

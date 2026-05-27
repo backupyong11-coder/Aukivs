@@ -9,6 +9,7 @@ import {
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableListControls } from "@/components/TableListControls";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import { PlatformRowEditModal, type PlatformRow } from "@/components/PlatformRowEditModal";
@@ -503,6 +504,7 @@ export function ContractsClient() {
   ]);
 
   const list = useTableListDisplay("contracts", visible);
+  const colVis = useTableColumnVisibility("contracts", columnOrder);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -536,7 +538,7 @@ export function ContractsClient() {
   const isCellBusy = (rowId: string, field: string) =>
     patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const tableColSpan = 2 + (hasCompleteColumn ? 1 : 0) + columnOrder.length + 1;
+  const tableColSpan = 2 + (hasCompleteColumn ? 1 : 0) + colVis.visibleKeys.length + 1;
 
   return (
     <div className="space-y-3">
@@ -660,6 +662,12 @@ export function ContractsClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS.contracts.join(" · ")}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2200px] text-xs">
@@ -669,7 +677,7 @@ export function ContractsClient() {
                 {hasCompleteColumn ? (
                   <th className={thAction}>완료</th>
                 ) : null}
-                {columnOrder.map((field) => (
+                {colVis.visibleKeys.map((field) => (
                   <th
                     key={field}
                     draggable
@@ -741,7 +749,7 @@ export function ContractsClient() {
                         />
                       </td>
                     ) : null}
-                    {columnOrder.map((field) => {
+                    {colVis.visibleKeys.map((field) => {
                       const isBool = booleanFields.has(field);
                       const readonly = READONLY_FIELDS.has(field);
                       const wide =

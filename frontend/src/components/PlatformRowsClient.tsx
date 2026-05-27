@@ -9,6 +9,7 @@ import {
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableListControls } from "@/components/TableListControls";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
@@ -435,6 +436,7 @@ export function PlatformRowsClient() {
   }, [state, filterText, hiddenByField, sortKey, sortDir, columnOrder]);
 
   const list = useTableListDisplay("platforms", sorted);
+  const colVis = useTableColumnVisibility("platforms", columnOrder);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -505,7 +507,7 @@ export function PlatformRowsClient() {
   const isCellBusy = (rowId: string, field: string) =>
     patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const tableColSpan = 1 + columnOrder.length;
+  const tableColSpan = 1 + colVis.visibleKeys.length;
 
   return (
     <div className="space-y-3">
@@ -604,13 +606,19 @@ export function PlatformRowsClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS.platforms.join(" · ")}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2400px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
-                {columnOrder.map((field) => (
+                {colVis.visibleKeys.map((field) => (
                   <th
                     key={field}
                     draggable
@@ -663,7 +671,7 @@ export function PlatformRowsClient() {
                         수정
                       </button>
                     </td>
-                    {columnOrder.map((field) => {
+                    {colVis.visibleKeys.map((field) => {
                       const isBool = booleanFields.has(field);
                       const readonly = READONLY_FIELDS.has(field);
                       const wide = field.includes("비고") || field.includes("메모") || field.includes("링크") || field.includes("FTP");
