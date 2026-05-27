@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { ContractStatusInlineCell } from "@/components/ContractStatusInlineCell";
 import { PlatformRowCreateModal } from "@/components/PlatformRowCreateModal";
 import { TableColgroup } from "@/components/TableColgroup";
 import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
@@ -25,7 +26,8 @@ import {
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
-import { ensureMajorCategoryInColumnOrder } from "@/lib/majorCategoryColumn";
+import { CONTRACT_STATUS_OPTIONS } from "@/lib/contractStatus";
+import { ensureMajorCategoryInColumnOrder, MAJOR_CATEGORY_FIELD } from "@/lib/majorCategoryColumn";
 import {
   UNDO_TOAST_MS,
   isColumnHideUndo,
@@ -40,7 +42,7 @@ const COMPLETE_FIELD = "완료";
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
 const COLUMN_ORDER_STORAGE_KEY = "contracts_col_order_v1";
 
-const CONTRACT_TABS = ["계약완료", "계약진행중", "계약미정", "계약불가", "추후접촉"] as const;
+const CONTRACT_TABS = CONTRACT_STATUS_OPTIONS;
 type ContractTab = (typeof CONTRACT_TABS)[number];
 
 const CHECKBOX_FIELD_CANDIDATES = new Set([
@@ -50,7 +52,6 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "예정",
   "진행중",
   "완료",
-  "계약",
   "미팅",
   "성인웹툰",
   "성인웹툰(구 일반계약)",
@@ -87,9 +88,25 @@ function cell(row: PlatformRow, key: string): string {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function ensureContractInColumnOrder(keys: string[], contractKey: string): string[] {
+  if (!contractKey) {
+    return ensureMajorCategoryInColumnOrder(keys);
+  }
+  const ordered = ensureMajorCategoryInColumnOrder(keys.filter((k) => k !== contractKey));
+  const majorIdx = ordered.indexOf(MAJOR_CATEGORY_FIELD);
+  if (majorIdx >= 0) {
+    const next = [...ordered];
+    next.splice(majorIdx + 1, 0, contractKey);
+    return next;
+  }
+  return [contractKey, ...ordered];
+}
+
 function defaultDataColumnOrder(row: PlatformRow): string[] {
-  return ensureMajorCategoryInColumnOrder(
+  const contractKey = fieldKey(row, "계약", "K");
+  return ensureContractInColumnOrder(
     orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD),
+    contractKey,
   );
 }
 
@@ -129,7 +146,8 @@ function saveHiddenSet(storageKey: string, next: Set<string>) {
   } catch { /* ignore */ }
 }
 
-function fieldIsBoolean(field: string, items: PlatformRow[]): boolean {
+function fieldIsBoolean(field: string, items: PlatformRow[], contractFieldKey = ""): boolean {
+  if (field && field === contractFieldKey) return false;
   if (CHECKBOX_FIELD_CANDIDATES.has(field)) return true;
   const samples = items
     .map((it) => String(it[field] ?? "").trim())
@@ -249,13 +267,20 @@ export function ContractsClient() {
     const set = new Set<string>();
     const allCols = hasCompleteColumn ? [COMPLETE_FIELD, ...columnOrder] : columnOrder;
     for (const key of allCols) {
-      if (fieldIsBoolean(key, state.items)) set.add(key);
+      if (fieldIsBoolean(key, state.items, fieldKeys.contract)) set.add(key);
     }
     return set;
-  }, [state, columnOrder, hasCompleteColumn]);
+  }, [state, columnOrder, hasCompleteColumn, fieldKeys.contract]);
 
   const colVis = useTableColumnVisibility("contracts", columnOrder);
   const colLabels = useColumnLabels("contracts");
+
+  useEffect(() => {
+    if (!fieldKeys.contract) return;
+    if (colVis.hiddenColumns.has(fieldKeys.contract)) {
+      colVis.setColumnVisible(fieldKeys.contract, true);
+    }
+  }, [fieldKeys.contract, colVis.hiddenColumns, colVis.setColumnVisible]);
 
   const syncUndoCount = useCallback(() => {
     setUndoCount(undoStackRef.current.length);
@@ -811,17 +836,27 @@ export function ContractsClient() {
                           key={field}
                           className={`${tableDataCellClass} ${isBool ? "text-center" : ""}`}
                         >
-                          <PlatformRowInlineCell
-                            value={item[field] ?? ""}
-                            field={field}
-                            rowId={item.id}
-                            boolean={isBool}
-                            wide={wide}
-                            muted={field.includes("일") && field.includes("날짜")}
-                            tabular={isBool}
-                            disabled={readonly || isCellBusy(item.id, field)}
-                            onSave={handleInlineSave}
-                          />
+                          {field === fieldKeys.contract ? (
+                            <ContractStatusInlineCell
+                              value={item[field] ?? ""}
+                              field={field}
+                              rowId={item.id}
+                              disabled={readonly || isCellBusy(item.id, field)}
+                              onSave={handleInlineSave}
+                            />
+                          ) : (
+                            <PlatformRowInlineCell
+                              value={item[field] ?? ""}
+                              field={field}
+                              rowId={item.id}
+                              boolean={isBool}
+                              wide={wide}
+                              muted={field.includes("일") && field.includes("날짜")}
+                              tabular={isBool}
+                              disabled={readonly || isCellBusy(item.id, field)}
+                              onSave={handleInlineSave}
+                            />
+                          )}
                         </td>
                       );
                     })}
