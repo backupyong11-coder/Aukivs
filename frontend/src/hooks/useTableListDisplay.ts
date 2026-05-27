@@ -18,8 +18,14 @@ import {
 export function useTableListDisplay<T extends Record<string, unknown>>(
   pageId: TableListPageId,
   items: T[],
-  options?: { dateFields?: string[]; defaultDateFilter?: DateRangeFilter },
+  options?: {
+    dateFields?: string[];
+    defaultDateFilter?: DateRangeFilter;
+    /** false면 기간 필터를 localStorage에 저장하지 않고, 진입 시 defaultDateFilter로 시작 */
+    persistDateFilter?: boolean;
+  },
 ) {
+  const persistDateFilter = options?.persistDateFilter !== false;
   const dateFieldNames = useMemo(
     () =>
       (options?.dateFields?.length ? options.dateFields : TABLE_LIST_DATE_FIELDS[pageId]).filter(
@@ -31,7 +37,9 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
   const [pageSize, setPageSizeState] = useState<TablePageSize>(() => loadTablePageSize(pageId));
   const [showAll, setShowAll] = useState(false);
   const [dateFilter, setDateFilterState] = useState<DateRangeFilter>(() =>
-    loadDateRangeFilter(pageId, options?.defaultDateFilter),
+    persistDateFilter
+      ? loadDateRangeFilter(pageId, options?.defaultDateFilter)
+      : (options?.defaultDateFilter ?? { preset: "all", fromYmd: "", toYmd: "" }),
   );
 
   const setPageSize = useCallback(
@@ -46,46 +54,46 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
   const setDateFilter = useCallback(
     (next: DateRangeFilter) => {
       setDateFilterState(next);
-      saveDateRangeFilter(pageId, next);
+      if (persistDateFilter) saveDateRangeFilter(pageId, next);
       setShowAll(false);
     },
-    [pageId],
+    [pageId, persistDateFilter],
   );
 
   const setDatePreset = useCallback(
     (preset: DateRangePreset) => {
       setDateFilterState((prev) => {
         const next = { ...prev, preset };
-        saveDateRangeFilter(pageId, next);
+        if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
       setShowAll(false);
     },
-    [pageId],
+    [pageId, persistDateFilter],
   );
 
   const setCustomFrom = useCallback(
     (fromYmd: string) => {
       setDateFilterState((prev) => {
         const next = { ...prev, preset: "custom" as const, fromYmd };
-        saveDateRangeFilter(pageId, next);
+        if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
       setShowAll(false);
     },
-    [pageId],
+    [pageId, persistDateFilter],
   );
 
   const setCustomTo = useCallback(
     (toYmd: string) => {
       setDateFilterState((prev) => {
         const next = { ...prev, preset: "custom" as const, toYmd };
-        saveDateRangeFilter(pageId, next);
+        if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
       setShowAll(false);
     },
-    [pageId],
+    [pageId, persistDateFilter],
   );
 
   const dateFiltered = useMemo(

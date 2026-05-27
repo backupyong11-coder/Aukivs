@@ -506,12 +506,18 @@ export function AnnouncementDateClient() {
   const list = useTableListDisplay("announcement-date", visible, {
     dateFields: fieldKeys.announcement ? [fieldKeys.announcement] : TABLE_LIST_DATE_FIELDS["announcement-date"],
     defaultDateFilter: DEFAULT_ANNOUNCEMENT_DATE_FILTER,
+    persistDateFilter: false,
   });
   const colWidths = useTableColumnWidths(
     "announcement-date",
     colVis.visibleKeys,
     colLabels.getLabel,
   );
+
+  const handleRefresh = () => {
+    list.setDateFilter(DEFAULT_ANNOUNCEMENT_DATE_FILTER);
+    setRefreshKey((k) => k + 1);
+  };
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -552,7 +558,7 @@ export function AnnouncementDateClient() {
         />
         <button
           type="button"
-          onClick={() => setRefreshKey((k) => k + 1)}
+          onClick={handleRefresh}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300"
         >
           새로고침

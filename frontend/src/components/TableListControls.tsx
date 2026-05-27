@@ -16,8 +16,8 @@ const chipBtn = (active: boolean) =>
   }`;
 
 const PERIOD_PRESETS: { id: DateRangePreset; label: string }[] = [
-  { id: "all", label: "전체" },
   { id: "future", label: "오늘 이후" },
+  { id: "all", label: "전체" },
   { id: "today", label: "오늘" },
   { id: "week", label: "이번 주" },
   { id: "month", label: "이번 달" },
