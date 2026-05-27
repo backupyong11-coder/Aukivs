@@ -22,7 +22,6 @@ import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import { PlatformRowEditModal, type PlatformRow } from "@/components/PlatformRowEditModal";
 import {
   PlatformRowInlineCell,
-  boolToCell,
   isPlatformBoolValue,
 } from "@/components/PlatformRowInlineCell";
 import { getApiBaseUrl } from "@/lib/apiBase";
@@ -41,6 +40,7 @@ const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const COMPLETE_FIELD = "완료";
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
 const COLUMN_ORDER_STORAGE_KEY = "contracts_col_order_v1";
+const COMPLETE_COLUMN_MIGRATION_KEY = "contracts.complete_as_column_v1";
 
 const CONTRACT_TABS = CONTRACT_STATUS_OPTIONS;
 type ContractTab = (typeof CONTRACT_TABS)[number];
@@ -104,10 +104,7 @@ function ensureContractInColumnOrder(keys: string[], contractKey: string): strin
 
 function defaultDataColumnOrder(row: PlatformRow): string[] {
   const contractKey = fieldKey(row, "계약", "K");
-  return ensureContractInColumnOrder(
-    orderedHeaderKeys(row).filter((k) => k !== COMPLETE_FIELD),
-    contractKey,
-  );
+  return ensureContractInColumnOrder(orderedHeaderKeys(row), contractKey);
 }
 
 function loadColumnOrder(defaultKeys: string[]): string[] {
@@ -257,20 +254,14 @@ export function ContractsClient() {
     };
   }, [sample]);
 
-  const hasCompleteColumn = useMemo(() => {
-    if (state.kind !== "ready" || state.items.length === 0) return false;
-    return COMPLETE_FIELD in state.items[0];
-  }, [state]);
-
   const booleanFields = useMemo(() => {
     if (state.kind !== "ready") return new Set<string>();
     const set = new Set<string>();
-    const allCols = hasCompleteColumn ? [COMPLETE_FIELD, ...columnOrder] : columnOrder;
-    for (const key of allCols) {
+    for (const key of columnOrder) {
       if (fieldIsBoolean(key, state.items, fieldKeys.contract)) set.add(key);
     }
     return set;
-  }, [state, columnOrder, hasCompleteColumn, fieldKeys.contract]);
+  }, [state, columnOrder, fieldKeys.contract]);
 
   const colVis = useTableColumnVisibility("contracts", columnOrder);
   const colLabels = useColumnLabels("contracts");
@@ -281,6 +272,16 @@ export function ContractsClient() {
       colVis.setColumnVisible(fieldKeys.contract, true);
     }
   }, [fieldKeys.contract, colVis.hiddenColumns, colVis.setColumnVisible]);
+
+  useEffect(() => {
+    if (state.kind !== "ready" || !sample) return;
+    if (!(COMPLETE_FIELD in sample)) return;
+    if (!columnOrder.includes(COMPLETE_FIELD)) return;
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(COMPLETE_COLUMN_MIGRATION_KEY)) return;
+    window.localStorage.setItem(COMPLETE_COLUMN_MIGRATION_KEY, "1");
+    colVis.setColumnVisible(COMPLETE_FIELD, false);
+  }, [state.kind, sample, columnOrder, colVis]);
 
   const syncUndoCount = useCallback(() => {
     setUndoCount(undoStackRef.current.length);
@@ -399,18 +400,6 @@ export function ContractsClient() {
     [booleanFields, dismissUndoToast, patchField],
   );
 
-  const handleToggleComplete = async (item: PlatformRow, checked: boolean) => {
-    const prevDone = item[COMPLETE_FIELD] ?? "";
-    const nextDone = boolToCell(checked);
-    if (prevDone === nextDone) return;
-    dismissUndoToast();
-    try {
-      await patchField(item.id, COMPLETE_FIELD, nextDone, { withUndo: true });
-    } catch {
-      /* reverted in patchField */
-    }
-  };
-
   const performUndo = useCallback(
     async (entry?: TableUndoEntry) => {
       const target = entry ?? undoStackRef.current[0];
@@ -526,8 +515,7 @@ export function ContractsClient() {
     if (filterText.trim()) {
       const q = filterText.trim().toLowerCase();
       items = items.filter((it) =>
-        columnOrder.some((key) => (it[key] ?? "").toLowerCase().includes(q)) ||
-        (hasCompleteColumn && (it[COMPLETE_FIELD] ?? "").toLowerCase().includes(q)),
+        columnOrder.some((key) => (it[key] ?? "").toLowerCase().includes(q)),
       );
     }
     const filterMap: { title: string; key: string }[] = [
@@ -552,7 +540,6 @@ export function ContractsClient() {
     tabFiltered,
     filterText,
     columnOrder,
-    hasCompleteColumn,
     hiddenFilters,
     fieldKeys,
     sortKey,
@@ -561,7 +548,6 @@ export function ContractsClient() {
 
   const list = useTableListDisplay("contracts", visible);
   const colWidths = useTableColumnWidths("contracts", colVis.visibleKeys, colLabels.getLabel);
-  const contractLeadingActions = hasCompleteColumn ? 2 : 1;
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -595,7 +581,7 @@ export function ContractsClient() {
   const isCellBusy = (rowId: string, field: string) =>
     patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const tableColSpan = 2 + (hasCompleteColumn ? 1 : 0) + colVis.visibleKeys.length + 1;
+  const tableColSpan = 2 + colVis.visibleKeys.length + 1;
 
   return (
     <div className="space-y-3">
@@ -733,11 +719,11 @@ export function ContractsClient() {
             className="w-full text-xs"
             style={{
               ...colWidths.tableStyle,
-              minWidth: colWidths.tableMinWidth(contractLeadingActions, 1),
+              minWidth: colWidths.tableMinWidth(1, 1),
             }}
           >
             <TableColgroup
-              leadingActionCols={contractLeadingActions}
+              leadingActionCols={1}
               trailingActionCols={1}
               dataKeys={colVis.visibleKeys}
               getWidth={colWidths.getWidth}
@@ -746,9 +732,6 @@ export function ContractsClient() {
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
-                {hasCompleteColumn ? (
-                  <th className={thAction}>완료</th>
-                ) : null}
                 {colVis.visibleKeys.map((field) => (
                   <TableColumnHeader
                     key={field}
@@ -799,7 +782,7 @@ export function ContractsClient() {
                   <tr
                     key={item.id}
                     className={`border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40 ${
-                      hasCompleteColumn && isDoneValue(item[COMPLETE_FIELD]) ? "opacity-50" : ""
+                      COMPLETE_FIELD in item && isDoneValue(item[COMPLETE_FIELD]) ? "opacity-50" : ""
                     }`}
                   >
                     <td className="whitespace-nowrap px-2 py-1.5 align-top">
@@ -811,18 +794,6 @@ export function ContractsClient() {
                         수정
                       </button>
                     </td>
-                    {hasCompleteColumn ? (
-                      <td className="px-2 py-1.5 text-center align-top">
-                        <input
-                          type="checkbox"
-                          checked={isDoneValue(item[COMPLETE_FIELD])}
-                          disabled={isCellBusy(item.id, COMPLETE_FIELD)}
-                          onChange={(e) => void handleToggleComplete(item, e.target.checked)}
-                          aria-label={`${rowTitle(item)} 완료`}
-                          className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
-                        />
-                      </td>
-                    ) : null}
                     {colVis.visibleKeys.map((field) => {
                       const isBool = booleanFields.has(field);
                       const readonly = READONLY_FIELDS.has(field);
