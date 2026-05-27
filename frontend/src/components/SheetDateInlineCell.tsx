@@ -1,9 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SheetMiniCalendar } from "@/components/SheetMiniCalendar";
 import { normalizeSheetDateYmd } from "@/lib/sheetDates";
+
+const VIEWPORT_PADDING = 8;
+const ANCHOR_GAP = 4;
+const EST_CALENDAR_HEIGHT = 280;
+const EST_CALENDAR_WIDTH = 248;
 
 type Props = {
   value: string;
@@ -23,6 +28,37 @@ function displayDate(raw: string): string {
   if (ymd) return ymd;
   const t = raw.trim();
   return t || "";
+}
+
+function computePopoverPosition(
+  anchor: DOMRect,
+  popW: number,
+  popH: number,
+): { top: number; left: number } {
+  const spaceBelow = window.innerHeight - anchor.bottom - VIEWPORT_PADDING;
+  const spaceAbove = anchor.top - VIEWPORT_PADDING;
+
+  let top: number;
+  if (spaceBelow >= popH + ANCHOR_GAP) {
+    top = anchor.bottom + ANCHOR_GAP;
+  } else if (spaceAbove >= popH + ANCHOR_GAP) {
+    top = anchor.top - popH - ANCHOR_GAP;
+  } else if (spaceAbove > spaceBelow) {
+    top = Math.max(VIEWPORT_PADDING, anchor.top - popH - ANCHOR_GAP);
+  } else {
+    top = Math.min(
+      anchor.bottom + ANCHOR_GAP,
+      window.innerHeight - popH - VIEWPORT_PADDING,
+    );
+  }
+
+  let left = anchor.left;
+  if (left + popW > window.innerWidth - VIEWPORT_PADDING) {
+    left = window.innerWidth - popW - VIEWPORT_PADDING;
+  }
+  left = Math.max(VIEWPORT_PADDING, left);
+
+  return { top, left };
 }
 
 export function SheetDateInlineCell({
@@ -48,8 +84,16 @@ export function SheetDateInlineCell({
     const el = anchorRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setMenuPos({ top: r.bottom + 4, left: r.left });
+    const pop = popRef.current;
+    const popH = pop?.offsetHeight ?? EST_CALENDAR_HEIGHT;
+    const popW = pop?.offsetWidth ?? EST_CALENDAR_WIDTH;
+    setMenuPos(computePopoverPosition(r, popW, popH));
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
