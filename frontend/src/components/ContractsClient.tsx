@@ -8,7 +8,9 @@ import {
   useState,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
+import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
@@ -505,6 +507,7 @@ export function ContractsClient() {
 
   const list = useTableListDisplay("contracts", visible);
   const colVis = useTableColumnVisibility("contracts", columnOrder);
+  const colLabels = useColumnLabels("contracts");
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -667,6 +670,7 @@ export function ContractsClient() {
             hiddenColumns: colVis.hiddenColumns,
             onSetVisible: colVis.setColumnVisible,
             onShowAllColumns: colVis.showAllColumns,
+            columnLabel: colLabels.getLabel,
           }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -678,31 +682,31 @@ export function ContractsClient() {
                   <th className={thAction}>완료</th>
                 ) : null}
                 {colVis.visibleKeys.map((field) => (
-                  <th
+                  <TableColumnHeader
                     key={field}
-                    draggable
+                    field={field}
+                    label={colLabels.getLabel(field)}
+                    dragActive={dragCol === field}
+                    sortActive={sortKey === field}
+                    sortDir={sortDir}
                     onDragStart={() => setDragCol(field)}
                     onDragEnd={() => setDragCol(null)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(field)}
-                    className={`group min-w-[5.5rem] align-top ${dragCol === field ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className={`${thSort} flex w-full items-center gap-0.5 text-left`}
-                      onClick={() => handleSort(field)}
-                    >
-                      <span
-                        className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
-                        aria-hidden
-                        title="드래그하여 열 이동"
-                      >
-                        ⋮⋮
-                      </span>
-                      <span className="truncate">{field}</span>
-                      <SortIcon col={field} />
-                    </button>
-                  </th>
+                    onSort={() => handleSort(field)}
+                    onHide={() => colVis.setColumnVisible(field, false)}
+                    onEdit={() => colLabels.editLabel(field)}
+                    onDelete={() => {
+                      const name = colLabels.getLabel(field);
+                      if (
+                        window.confirm(
+                          `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
+                        )
+                      ) {
+                        colVis.setColumnVisible(field, false);
+                      }
+                    }}
+                  />
                 ))}
                 <th className={thAction}>삭제</th>
               </tr>

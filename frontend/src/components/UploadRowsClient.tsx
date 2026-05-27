@@ -10,7 +10,9 @@ import {
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
+import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
@@ -296,6 +298,7 @@ export function UploadRowsClient() {
   }, [columnOrder]);
 
   const colVis = useTableColumnVisibility("upload-rows", columnOrder);
+  const colLabels = useColumnLabels("upload-rows");
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys
@@ -757,7 +760,8 @@ export function UploadRowsClient() {
             hiddenColumns: colVis.hiddenColumns,
             onSetVisible: colVis.setColumnVisible,
             onShowAllColumns: colVis.showAllColumns,
-            columnLabel: (k) => TABLE_COLUMNS.find((c) => c.key === k)?.label ?? k,
+            columnLabel: (k) =>
+              colLabels.getLabel(k, TABLE_COLUMNS.find((c) => c.key === k)?.label),
           }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -767,31 +771,31 @@ export function UploadRowsClient() {
                 <th className={thAction}>수정</th>
                 <th className={thAction}>완료</th>
                 {visibleDisplayColumns.map(({ key, label }) => (
-                  <th
+                  <TableColumnHeader
                     key={key}
-                    draggable
+                    field={key}
+                    label={colLabels.getLabel(key, label)}
+                    dragActive={dragCol === key}
+                    sortActive={sortKey === key}
+                    sortDir={sortDir}
                     onDragStart={() => setDragCol(key)}
                     onDragEnd={() => setDragCol(null)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(key)}
-                    className={`group min-w-[5.5rem] align-top ${dragCol === key ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className={`${thSort} flex w-full items-center gap-0.5 text-left`}
-                      onClick={() => handleSort(key)}
-                    >
-                      <span
-                        className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
-                        aria-hidden
-                        title="드래그하여 열 이동"
-                      >
-                        ⋮⋮
-                      </span>
-                      <span className="truncate">{label}</span>
-                      <SortIcon col={key} />
-                    </button>
-                  </th>
+                    onSort={() => handleSort(key)}
+                    onHide={() => colVis.setColumnVisible(key, false)}
+                    onEdit={() => colLabels.editLabel(key, label)}
+                    onDelete={() => {
+                      const name = colLabels.getLabel(key, label);
+                      if (
+                        window.confirm(
+                          `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
+                        )
+                      ) {
+                        colVis.setColumnVisible(key, false);
+                      }
+                    }}
+                  />
                 ))}
                 <th className={thAction}>삭제</th>
               </tr>

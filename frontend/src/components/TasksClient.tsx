@@ -10,7 +10,9 @@ import {
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
+import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { getApiBaseUrl } from "@/lib/apiBase";
@@ -348,6 +350,7 @@ export function TasksClient() {
   }, [columnOrder]);
 
   const colVis = useTableColumnVisibility("tasks", columnOrder);
+  const colLabels = useColumnLabels("tasks");
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys
@@ -890,7 +893,8 @@ export function TasksClient() {
             hiddenColumns: colVis.hiddenColumns,
             onSetVisible: colVis.setColumnVisible,
             onShowAllColumns: colVis.showAllColumns,
-            columnLabel: (k) => TASK_DATA_COLUMNS.find((c) => c.key === k)?.label ?? k,
+            columnLabel: (k) =>
+              colLabels.getLabel(k, TASK_DATA_COLUMNS.find((c) => c.key === k)?.label),
           }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -900,44 +904,32 @@ export function TasksClient() {
                 <th className={thAction}>수정</th>
                 <th className={thAction}>완료</th>
                 {visibleDisplayColumns.map((col) => (
-                  <th
+                  <TableColumnHeader
                     key={col.key}
-                    draggable
+                    field={col.key}
+                    label={colLabels.getLabel(col.key, col.label)}
+                    dragActive={dragCol === col.key}
+                    sortable={col.sortable}
+                    sortActive={sortKey === col.key}
+                    sortDir={sortDir}
                     onDragStart={() => setDragCol(col.key)}
                     onDragEnd={() => setDragCol(null)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleColDrop(col.key)}
-                    className={`group min-w-[5.5rem] align-top ${dragCol === col.key ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
-                  >
-                    {col.sortable ? (
-                      <button
-                        type="button"
-                        className={`${thSort} flex w-full items-center gap-0.5 text-left`}
-                        onClick={() => handleSort(col.key as SortKey)}
-                      >
-                        <span
-                          className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
-                          aria-hidden
-                          title="드래그하여 열 이동"
-                        >
-                          ⋮⋮
-                        </span>
-                        <span className="truncate">{col.label}</span>
-                        <SortIcon col={col.key as SortKey} />
-                      </button>
-                    ) : (
-                      <span className={`${thSort} flex w-full items-center gap-0.5 px-0 py-0`}>
-                        <span
-                          className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
-                          aria-hidden
-                          title="드래그하여 열 이동"
-                        >
-                          ⋮⋮
-                        </span>
-                        <span className="truncate">{col.label}</span>
-                      </span>
-                    )}
-                  </th>
+                    onSort={col.sortable ? () => handleSort(col.key as SortKey) : undefined}
+                    onHide={() => colVis.setColumnVisible(col.key, false)}
+                    onEdit={() => colLabels.editLabel(col.key, col.label)}
+                    onDelete={() => {
+                      const name = colLabels.getLabel(col.key, col.label);
+                      if (
+                        window.confirm(
+                          `「${name}」 열을 목록에서 숨길까요? 속성 패널에서 다시 켤 수 있습니다.`,
+                        )
+                      ) {
+                        colVis.setColumnVisible(col.key, false);
+                      }
+                    }}
+                  />
                 ))}
                 <th className={thAction}>삭제</th>
               </tr>
