@@ -72,11 +72,11 @@ export function TableColumnHeader(props: {
         minWidth: widthPx,
         maxWidth: widthPx,
       }}
-      className={`group relative align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
+      className={`group relative overflow-visible align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
         dragActive ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""
       }`}
     >
-      <div className="relative flex min-h-[2.125rem] w-max max-w-full items-center overflow-hidden py-1 pl-4 pr-0">
+      <div className="relative flex min-h-[2.125rem] w-max max-w-full items-center overflow-visible py-1 pl-4 pr-2">
         <span
           draggable
           onDragStart={(e) => {
@@ -106,13 +106,18 @@ export function TableColumnHeader(props: {
 
           <div
             ref={menuRef}
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[:focus-visible]:opacity-100"
-            style={menuOpen ? { opacity: 1 } : undefined}
+            className={`relative z-20 shrink-0 transition-opacity ${
+              menuOpen
+                ? "pointer-events-auto opacity-100"
+                : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100"
+            }`}
           >
           <button
             type="button"
             className={`${menuBtn} ${menuOpen ? "bg-zinc-200/80 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200" : ""}`}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               setMenuOpen((o) => !o);
             }}
@@ -188,7 +193,7 @@ export function TableColumnHeader(props: {
         aria-orientation="vertical"
         aria-label={`${label} 열 너비 조절`}
         title="드래그하여 열 너비 조절"
-        className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize touch-none hover:bg-zinc-400/50 active:bg-zinc-500/60 dark:hover:bg-zinc-500/50"
+        className="absolute right-0 top-0 z-[5] h-full w-1.5 cursor-col-resize touch-none hover:bg-zinc-400/50 active:bg-zinc-500/60 dark:hover:bg-zinc-500/50"
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
