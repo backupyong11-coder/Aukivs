@@ -45,6 +45,8 @@ function IconDelete() {
 export function TableColumnHeader(props: {
   field: string;
   label: string;
+  widthPx: number;
+  onResizeStart: (clientX: number) => void;
   dragActive?: boolean;
   sortable?: boolean;
   sortActive?: boolean;
@@ -60,6 +62,8 @@ export function TableColumnHeader(props: {
 }) {
   const {
     label,
+    widthPx,
+    onResizeStart,
     dragActive,
     sortable = true,
     sortActive,
@@ -76,17 +80,21 @@ export function TableColumnHeader(props: {
 
   return (
     <th
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`group min-w-[6.5rem] align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
+      style={{ width: widthPx, minWidth: widthPx, maxWidth: widthPx }}
+      className={`group relative overflow-hidden align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
         dragActive ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""
       }`}
     >
-      <div className="flex items-center gap-0.5 px-1.5 py-1.5">
+      <div className="flex items-center gap-0.5 px-1.5 py-1.5 pr-2">
         <span
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            onDragStart();
+          }}
+          onDragEnd={onDragEnd}
           className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
           aria-hidden
           title="드래그하여 열 이동"
@@ -149,6 +157,21 @@ export function TableColumnHeader(props: {
           </button>
         </div>
       </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`${label} 열 너비 조절`}
+        title="드래그하여 열 너비 조절"
+        className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize touch-none hover:bg-zinc-400/50 active:bg-zinc-500/60 dark:hover:bg-zinc-500/50"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onResizeStart(e.clientX);
+        }}
+      />
     </th>
   );
 }
+
+/** 데이터 셀 — colgroup 너비에 맞춰 넘침 숨김 */
+export const tableDataCellClass = "overflow-hidden px-2 py-1.5 align-top";

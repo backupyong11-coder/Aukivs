@@ -8,7 +8,9 @@ import {
   useState,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
-import { TableColumnHeader } from "@/components/TableColumnHeader";
+import { TableColgroup } from "@/components/TableColgroup";
+import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
+import { useTableColumnWidths } from "@/hooks/useTableColumnWidths";
 import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
@@ -509,6 +511,8 @@ export function LaunchingClient() {
   const list = useTableListDisplay("launching", visible);
   const colVis = useTableColumnVisibility("launching", columnOrder);
   const colLabels = useColumnLabels("launching");
+  const colWidths = useTableColumnWidths("launching", colVis.visibleKeys);
+  const launchingLeadingActions = hasCompleteColumn ? 2 : 1;
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -664,7 +668,20 @@ export function LaunchingClient() {
           }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[2200px] text-xs">
+          <table
+            className="w-full text-xs"
+            style={{
+              ...colWidths.tableStyle,
+              minWidth: colWidths.tableMinWidth(launchingLeadingActions, 1),
+            }}
+          >
+            <TableColgroup
+              leadingActionCols={launchingLeadingActions}
+              trailingActionCols={1}
+              dataKeys={colVis.visibleKeys}
+              getWidth={colWidths.getWidth}
+              actionWidthPx={colWidths.actionWidth}
+            />
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
@@ -674,6 +691,8 @@ export function LaunchingClient() {
                     key={field}
                     field={field}
                     label={colLabels.getLabel(field)}
+                    widthPx={colWidths.getWidth(field)}
+                    onResizeStart={(x) => colWidths.startResize(field, x)}
                     dragActive={dragCol === field}
                     sortActive={sortKey === field}
                     sortDir={sortDir}
@@ -751,7 +770,7 @@ export function LaunchingClient() {
                       return (
                         <td
                           key={field}
-                          className={`max-w-[14rem] px-2 py-1.5 align-top ${isBool ? "text-center" : ""}`}
+                          className={`${tableDataCellClass} ${isBool ? "text-center" : ""}`}
                         >
                           <PlatformRowInlineCell
                             value={rowField(item, field)}

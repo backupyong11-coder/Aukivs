@@ -10,7 +10,9 @@ import {
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
-import { TableColumnHeader } from "@/components/TableColumnHeader";
+import { TableColgroup } from "@/components/TableColgroup";
+import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
+import { useTableColumnWidths } from "@/hooks/useTableColumnWidths";
 import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
@@ -302,6 +304,7 @@ export function UploadRowsClient() {
 
   const colVis = useTableColumnVisibility("upload-rows", columnOrder);
   const colLabels = useColumnLabels("upload-rows");
+  const colWidths = useTableColumnWidths("upload-rows", colVis.visibleKeys);
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys
@@ -768,7 +771,17 @@ export function UploadRowsClient() {
           }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full min-w-[2200px] text-xs">
+          <table
+            className="w-full text-xs"
+            style={{ ...colWidths.tableStyle, minWidth: colWidths.tableMinWidth(2, 1) }}
+          >
+            <TableColgroup
+              leadingActionCols={2}
+              trailingActionCols={1}
+              dataKeys={colVis.visibleKeys}
+              getWidth={colWidths.getWidth}
+              actionWidthPx={colWidths.actionWidth}
+            />
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
                 <th className={thAction}>수정</th>
@@ -778,6 +791,8 @@ export function UploadRowsClient() {
                     key={key}
                     field={key}
                     label={colLabels.getLabel(key, label)}
+                    widthPx={colWidths.getWidth(key)}
+                    onResizeStart={(x) => colWidths.startResize(key, x)}
                     dragActive={dragCol === key}
                     sortActive={sortKey === key}
                     sortDir={sortDir}
@@ -830,7 +845,7 @@ export function UploadRowsClient() {
                   {visibleDisplayColumns.map(({ key, wide, muted, tabular }) => (
                     <td
                       key={key}
-                      className={`px-3 py-1.5 ${tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"} ${wide ? "max-w-[280px]" : ""}`}
+                      className={`${tableDataCellClass} ${tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"}`}
                     >
                       <UploadRowInlineCell
                         value={item[key] ?? ""}
