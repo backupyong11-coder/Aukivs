@@ -87,7 +87,7 @@ export function useTableColumnWidths(
     (key: string) => {
       const stored = widths[key] ?? defaultWidthForField(key);
       const label = labelForKey(key);
-      return effectiveColumnWidth(stored, label, key);
+      return effectiveColumnWidth(stored, label);
     },
     [widths, labelForKey],
   );
@@ -151,7 +151,7 @@ export function useTableColumnWidths(
   );
 
   const tableStyle = useMemo(
-    () => ({ tableLayout: "fixed" as const, width: "100%" as const }),
+    () => ({ tableLayout: "fixed" as const, width: "auto" as const }),
     [],
   );
 

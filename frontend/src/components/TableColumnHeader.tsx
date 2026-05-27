@@ -76,7 +76,7 @@ export function TableColumnHeader(props: {
         dragActive ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""
       }`}
     >
-      <div className="relative flex min-h-[2.125rem] items-center overflow-hidden py-1 pl-4 pr-1">
+      <div className="relative flex min-h-[2.125rem] w-max max-w-full items-center overflow-hidden py-1 pl-4 pr-0">
         <span
           draggable
           onDragStart={(e) => {
@@ -91,7 +91,10 @@ export function TableColumnHeader(props: {
           ⋮⋮
         </span>
 
-        <span className="relative inline-block min-w-0 max-w-full shrink" title={label}>
+        <span
+          className="inline-flex min-w-0 max-w-full shrink items-center gap-px"
+          title={label}
+        >
           <span className="whitespace-nowrap text-left text-[11px] leading-snug text-zinc-700 dark:text-zinc-200">
             {label}
             {sortActive ? (
@@ -103,7 +106,7 @@ export function TableColumnHeader(props: {
 
           <div
             ref={menuRef}
-            className="absolute left-full top-1/2 z-20 ml-px -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[:focus-visible]:opacity-100"
+            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[:focus-visible]:opacity-100"
             style={menuOpen ? { opacity: 1 } : undefined}
           >
           <button

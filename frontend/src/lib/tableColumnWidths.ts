@@ -9,14 +9,16 @@ function storageKey(pageId: TableListPageId) {
   return `table_list.${pageId}.columnWidths`;
 }
 
-/** 헤더 라벨 최소 너비(⋯ 메뉴는 라벨 오른쪽에 겹침) */
-export function minWidthForLabel(label: string): number {
+/** 헤더: ⋮⋮ 여백 + 라벨 + ⋯ 버튼(20px) + 리사이즈 여백 */
+export function minWidthForLabel(label: string, sortActive = false): number {
   const text = label.trim() || "열";
-  return clampColumnWidth(22 + text.length * 11 + 8);
+  const sortExtra = sortActive ? 10 : 0;
+  return clampColumnWidth(18 + text.length * 11 + 22 + sortExtra);
 }
 
-export function effectiveColumnWidth(stored: number, label: string, field: string): number {
-  return Math.max(stored, minWidthForLabel(label), defaultWidthForField(field));
+/** 저장/드래그 너비만 반영. default 최소(112px)로 다시 넓히지 않음 */
+export function effectiveColumnWidth(stored: number, label: string, sortActive = false): number {
+  return clampColumnWidth(Math.max(stored, minWidthForLabel(label, sortActive)));
 }
 
 export function defaultWidthForField(field: string): number {
