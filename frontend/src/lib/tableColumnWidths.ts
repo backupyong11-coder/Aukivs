@@ -1,7 +1,7 @@
 import type { TableListPageId } from "@/lib/tableListView";
 
 export const DEFAULT_COLUMN_WIDTH_PX = 112;
-export const MIN_COLUMN_WIDTH_PX = 72;
+export const MIN_COLUMN_WIDTH_PX = 56;
 export const MAX_COLUMN_WIDTH_PX = 560;
 export const TABLE_ACTION_COLUMN_WIDTH_PX = 72;
 
@@ -9,10 +9,10 @@ function storageKey(pageId: TableListPageId) {
   return `table_list.${pageId}.columnWidths`;
 }
 
-/** 헤더 라벨이 잘리지 않도록 하는 최소 너비(⋮⋮ + ⋯ 메뉴 + 글자) */
+/** 헤더 라벨 최소 너비(⋯ 메뉴는 라벨 오른쪽에 겹침) */
 export function minWidthForLabel(label: string): number {
   const text = label.trim() || "열";
-  return clampColumnWidth(48 + text.length * 12);
+  return clampColumnWidth(22 + text.length * 11 + 8);
 }
 
 export function effectiveColumnWidth(stored: number, label: string, field: string): number {
