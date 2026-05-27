@@ -8,6 +8,7 @@ import {
   type TableListPageId,
   type TablePageSize,
   filterRowsByDateRange,
+  initialTableDisplayLimit,
   loadDateRangeFilter,
   loadTablePageSize,
   saveDateRangeFilter,
@@ -35,18 +36,24 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
   );
 
   const [pageSize, setPageSizeState] = useState<TablePageSize>(() => loadTablePageSize(pageId));
-  const [showAll, setShowAll] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState(() =>
+    initialTableDisplayLimit(loadTablePageSize(pageId)),
+  );
   const [dateFilter, setDateFilterState] = useState<DateRangeFilter>(() =>
     persistDateFilter
       ? loadDateRangeFilter(pageId, options?.defaultDateFilter)
       : (options?.defaultDateFilter ?? { preset: "all", fromYmd: "", toYmd: "" }),
   );
 
+  const resetDisplayLimit = useCallback((size: TablePageSize = pageSize) => {
+    setDisplayLimit(initialTableDisplayLimit(size));
+  }, [pageSize]);
+
   const setPageSize = useCallback(
     (size: TablePageSize) => {
       setPageSizeState(size);
       saveTablePageSize(pageId, size);
-      setShowAll(false);
+      setDisplayLimit(initialTableDisplayLimit(size));
     },
     [pageId],
   );
@@ -55,9 +62,9 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
     (next: DateRangeFilter) => {
       setDateFilterState(next);
       if (persistDateFilter) saveDateRangeFilter(pageId, next);
-      setShowAll(false);
+      resetDisplayLimit();
     },
-    [pageId, persistDateFilter],
+    [pageId, persistDateFilter, resetDisplayLimit],
   );
 
   const setDatePreset = useCallback(
@@ -67,9 +74,9 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
         if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
-      setShowAll(false);
+      resetDisplayLimit();
     },
-    [pageId, persistDateFilter],
+    [pageId, persistDateFilter, resetDisplayLimit],
   );
 
   const setCustomFrom = useCallback(
@@ -79,9 +86,9 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
         if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
-      setShowAll(false);
+      resetDisplayLimit();
     },
-    [pageId, persistDateFilter],
+    [pageId, persistDateFilter, resetDisplayLimit],
   );
 
   const setCustomTo = useCallback(
@@ -91,9 +98,9 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
         if (persistDateFilter) saveDateRangeFilter(pageId, next);
         return next;
       });
-      setShowAll(false);
+      resetDisplayLimit();
     },
-    [pageId, persistDateFilter],
+    [pageId, persistDateFilter, resetDisplayLimit],
   );
 
   const dateFiltered = useMemo(
@@ -101,16 +108,32 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
     [items, dateFieldNames, dateFilter],
   );
 
-  const { displayed, hiddenCount, total } = useMemo(
-    () => sliceTableRows(dateFiltered, pageSize, showAll),
-    [dateFiltered, pageSize, showAll],
+  const { displayed, hiddenCount, total, canLoadMore } = useMemo(
+    () => sliceTableRows(dateFiltered, pageSize, displayLimit),
+    [dateFiltered, pageSize, displayLimit],
   );
+
+  const loadMore = useCallback(() => {
+    if (pageSize === "all") return;
+    const step = typeof pageSize === "number" ? pageSize : 10;
+    setDisplayLimit((prev) => prev + step);
+  }, [pageSize]);
+
+  const loadAll = useCallback(() => {
+    setDisplayLimit(dateFiltered.length);
+  }, [dateFiltered.length]);
+
+  const showAll =
+    pageSize !== "all" && typeof pageSize === "number" && displayLimit >= dateFiltered.length;
 
   return {
     pageSize,
     setPageSize,
     showAll,
-    setShowAll,
+    setShowAll: loadAll,
+    loadMore,
+    loadAll,
+    canLoadMore,
     dateFilter,
     setDateFilter,
     setDatePreset,

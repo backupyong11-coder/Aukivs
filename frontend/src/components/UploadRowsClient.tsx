@@ -12,6 +12,7 @@ import {
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableColgroup } from "@/components/TableColgroup";
 import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
+import { TableListFooter } from "@/components/TableListFooter";
 import { useTableColumnWidths } from "@/hooks/useTableColumnWidths";
 import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
@@ -890,6 +891,16 @@ export function UploadRowsClient() {
                   </td>
                 </tr>
               ))}
+              <TableListFooter
+                colSpan={tableColSpan}
+                canLoadMore={list.canLoadMore}
+                onLoadMore={list.loadMore}
+                onNewPage={() => {
+                  setActionError(null);
+                  setNewForm({});
+                  setCreateOpen(true);
+                }}
+              />
             </tbody>
           </table>
         </div>

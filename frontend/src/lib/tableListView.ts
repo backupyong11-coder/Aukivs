@@ -207,14 +207,29 @@ export function saveDateRangeFilter(pageId: TableListPageId, filter: DateRangeFi
   }
 }
 
-export function sliceTableRows<T>(items: T[], pageSize: TablePageSize, showAll: boolean): {
+export function sliceTableRows<T>(
+  items: T[],
+  pageSize: TablePageSize,
+  displayLimit: number,
+): {
   displayed: T[];
   hiddenCount: number;
   total: number;
+  canLoadMore: boolean;
 } {
   const total = items.length;
-  const limit = pageSize === "all" || showAll ? total : pageSize;
+  const limit = pageSize === "all" ? total : Math.min(displayLimit, total);
   const displayed = items.slice(0, limit);
   const hiddenCount = Math.max(0, total - displayed.length);
-  return { displayed, hiddenCount, total };
+  return {
+    displayed,
+    hiddenCount,
+    total,
+    canLoadMore: pageSize !== "all" && hiddenCount > 0,
+  };
+}
+
+export function initialTableDisplayLimit(pageSize: TablePageSize): number {
+  if (pageSize === "all") return Number.MAX_SAFE_INTEGER;
+  return pageSize;
 }

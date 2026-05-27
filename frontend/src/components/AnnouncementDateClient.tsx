@@ -8,8 +8,10 @@ import {
   useState,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { PlatformRowCreateModal } from "@/components/PlatformRowCreateModal";
 import { TableColgroup } from "@/components/TableColgroup";
 import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
+import { TableListFooter } from "@/components/TableListFooter";
 import { useTableColumnWidths } from "@/hooks/useTableColumnWidths";
 import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
@@ -186,6 +188,7 @@ export function AnnouncementDateClient() {
   const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editItem, setEditItem] = useState<PlatformRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [hiddenFilters, setHiddenFilters] = useState<Record<string, Set<string>>>(() => ({
@@ -607,7 +610,7 @@ export function AnnouncementDateClient() {
         />
       )}
 
-      {actionError && !editItem && (
+      {actionError && !editItem && !createOpen && (
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>
       )}
 
@@ -760,6 +763,15 @@ export function AnnouncementDateClient() {
                   </tr>
                 ))
               )}
+              <TableListFooter
+                colSpan={tableColSpan}
+                canLoadMore={list.canLoadMore}
+                onLoadMore={list.loadMore}
+                onNewPage={() => {
+                  setActionError(null);
+                  setCreateOpen(true);
+                }}
+              />
             </tbody>
           </table>
         </div>
@@ -770,6 +782,13 @@ export function AnnouncementDateClient() {
         item={editItem}
         onClose={() => setEditItem(null)}
         onSaved={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <PlatformRowCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+        title="발표일 행 새로 만들기"
       />
 
       {undoToast ? (

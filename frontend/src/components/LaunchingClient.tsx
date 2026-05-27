@@ -10,6 +10,7 @@ import {
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableColgroup } from "@/components/TableColgroup";
 import { TableColumnHeader, tableDataCellClass } from "@/components/TableColumnHeader";
+import { TableListFooter } from "@/components/TableListFooter";
 import { useTableColumnWidths } from "@/hooks/useTableColumnWidths";
 import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
@@ -202,6 +203,8 @@ export function LaunchingClient() {
   const undoStackRef = useRef<TableUndoEntry[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editItem, setEditItem] = useState<UploadRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newForm, setNewForm] = useState<FormType>({});
   const [form, setForm] = useState<FormType>({});
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -576,6 +579,21 @@ export function LaunchingClient() {
     }
   };
 
+  const handleCreate = async () => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      await apiFetch("/upload-rows/create", newForm);
+      setCreateOpen(false);
+      setNewForm({});
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "추가 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDelete = async (item: UploadRow) => {
     if (!window.confirm(`"${item.작품명}" (${item.플랫폼명}) 행을 삭제할까요?`)) return;
     try {
@@ -642,7 +660,7 @@ export function LaunchingClient() {
         />
       )}
 
-      {actionError && !editItem && (
+      {actionError && !editItem && !createOpen && (
         <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>
       )}
 
@@ -818,6 +836,16 @@ export function LaunchingClient() {
                   </tr>
                 ))
               )}
+              <TableListFooter
+                colSpan={tableColSpan}
+                canLoadMore={list.canLoadMore}
+                onLoadMore={list.loadMore}
+                onNewPage={() => {
+                  setActionError(null);
+                  setNewForm({});
+                  setCreateOpen(true);
+                }}
+              />
             </tbody>
           </table>
         </div>
@@ -831,6 +859,18 @@ export function LaunchingClient() {
           setFields={setForm}
           onSave={() => void handleSaveEdit()}
           onClose={() => setEditItem(null)}
+          saving={saving}
+          actionError={actionError}
+        />
+      )}
+
+      {createOpen && (
+        <UploadRowFormModal
+          title="새 런칭 행 추가"
+          fields={newForm}
+          setFields={setNewForm}
+          onSave={() => void handleCreate()}
+          onClose={() => setCreateOpen(false)}
           saving={saving}
           actionError={actionError}
         />
