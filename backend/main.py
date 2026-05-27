@@ -299,7 +299,7 @@ def get_hub_platform_matrix_bootstrap() -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, str]:
     """배포 확인용: 실행 중 프로세스가 최신 번들인지 구분."""
-    return {"status": "ok", "bundle": "worksheet-ops-cloud-deploy-v1"}
+    return {"status": "ok", "bundle": "worksheet-ops-cloud-deploy-v2-tasks-schema"}
 
 
 @app.get("/checklist", response_model=list[ChecklistItem])

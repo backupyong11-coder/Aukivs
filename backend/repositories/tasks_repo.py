@@ -51,17 +51,6 @@ def _reset_tasks_schema_cache() -> None:
 def _fetch_tasks(cli: SupabaseRestClient, params: dict[str, Any]) -> Any:
     """GET /tasks — work_assignee 마이그레이션 전·후 스키마 자동 전환."""
     base = {k: v for k, v in params.items() if k != "select"}
-    if _tasks_select_cache:
-        try:
-            return cli.get_json(
-                "/tasks",
-                params={**base, "select": _tasks_select_cache},
-            )
-        except SupabaseRequestError as exc:
-            if not _is_missing_column_error(exc):
-                raise
-            _reset_tasks_schema_cache()
-
     last_exc: SupabaseRequestError | None = None
     for use_new in (True, False):
         select, _ = _set_tasks_schema(use_new=use_new)

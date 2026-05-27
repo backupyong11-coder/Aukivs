@@ -24,12 +24,6 @@ _UPLOAD_CALENDAR_SELECT = (
     "uploaded_episodes,launch_date,launch_date_raw"
 )
 
-_TASK_CALENDAR_SELECT = (
-    "id,legacy_id,sheet_row,title,due_date,due_date_raw,completed,platform,domain,category,"
-    "priority,status,assignee,memo,related_work,quantification,quantification_type,"
-    "detail_value,detail_unit,difficulty,fatigue,time_raw,time_converted,date_group"
-)
-
 
 def _parse_ymd(s: str) -> date:
     return date.fromisoformat(s.strip()[:10])
@@ -112,10 +106,9 @@ def _tasks_in_range_supabase(
 ) -> list[dict[str, Any]]:
     cli = tasks_repo._client(settings)
     d0, d1 = _parse_ymd(from_ymd), _parse_ymd(to_ymd)
-    rows = cli.get_json(
-        "/tasks",
-        params={
-            "select": _TASK_CALENDAR_SELECT,
+    rows = tasks_repo._fetch_tasks(
+        cli,
+        {
             "and": f"(due_date.gte.{d0.isoformat()},due_date.lte.{d1.isoformat()})",
             "order": "due_date.asc.nullslast",
             "limit": "800",
