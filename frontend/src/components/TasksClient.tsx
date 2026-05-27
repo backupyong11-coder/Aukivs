@@ -12,7 +12,7 @@ import {
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
 import { TableColumnHeader } from "@/components/TableColumnHeader";
 import { TableListControls } from "@/components/TableListControls";
-import { useTableListColumnMeta } from "@/hooks/useTableListColumnMeta";
+import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { getApiBaseUrl } from "@/lib/apiBase";
@@ -350,7 +350,7 @@ export function TasksClient() {
   }, [columnOrder]);
 
   const colVis = useTableColumnVisibility("tasks", columnOrder);
-  const { colLabels, colMajors, columnVisibilityFor } = useTableListColumnMeta("tasks");
+  const colLabels = useColumnLabels("tasks");
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys
@@ -888,9 +888,14 @@ export function TasksClient() {
           onCustomToChange={list.setCustomTo}
           dateExcludedCount={list.dateExcludedCount}
           dateFieldHint={TABLE_LIST_DATE_FIELDS.tasks.join(" · ")}
-          columnVisibility={columnVisibilityFor(columnOrder, colVis, (k) =>
-            colLabels.getLabel(k, TASK_DATA_COLUMNS.find((c) => c.key === k)?.label),
-          )}
+          columnVisibility={{
+            allKeys: columnOrder,
+            hiddenColumns: colVis.hiddenColumns,
+            onSetVisible: colVis.setColumnVisible,
+            onShowAllColumns: colVis.showAllColumns,
+            columnLabel: (k) =>
+              colLabels.getLabel(k, TASK_DATA_COLUMNS.find((c) => c.key === k)?.label),
+          }}
         />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2600px] text-xs">
@@ -914,12 +919,6 @@ export function TasksClient() {
                     onSort={col.sortable ? () => handleSort(col.key as SortKey) : undefined}
                     onHide={() => colVis.setColumnVisible(col.key, false)}
                     onEdit={() => colLabels.editLabel(col.key, col.label)}
-                    onSetMajor={() => colMajors.pickMajorForColumn(col.key)}
-                    majorHint={
-                      colMajors.majors.length > 1
-                        ? colMajors.getMajorName(colMajors.getMajorIdForColumn(col.key))
-                        : undefined
-                    }
                     onDelete={() => {
                       const name = colLabels.getLabel(col.key, col.label);
                       if (
