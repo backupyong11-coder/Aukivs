@@ -45,6 +45,7 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "일반계약",
   "불가",
   "예정",
+  "진행",
   "진행중",
   "완료",
   "계약",
@@ -55,8 +56,9 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
 ]);
 
 const ON_HOLD_FIELD = "보류";
+const PROGRESS_FIELD = "진행";
 /** Supabase extra에 값이 없어도 플랫폼정리 표에 항상 노출할 시트 속성 */
-const PINNED_PLATFORM_FIELDS = [ON_HOLD_FIELD] as const;
+const PINNED_PLATFORM_FIELDS = [PROGRESS_FIELD, ON_HOLD_FIELD] as const;
 
 const COLUMN_ORDER_STORAGE_KEY = "platform_rows_col_order_v2";
 
@@ -74,22 +76,21 @@ const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] 
   { key: "비고", label: "비고" },
 ];
 
-function ensureOnHoldInColumnOrder(keys: string[]): string[] {
-  if (!keys.includes(ON_HOLD_FIELD)) return keys;
-  const rest = keys.filter((k) => k !== ON_HOLD_FIELD);
-  const afterMeeting = rest.indexOf("미팅");
-  if (afterMeeting >= 0) {
+function ensureStatusExtraInColumnOrder(keys: string[]): string[] {
+  const insertAfter = (list: string[], field: string, anchor: string, fallback: string) => {
+    if (!list.includes(field)) return list;
+    const rest = list.filter((k) => k !== field);
+    const idx = rest.indexOf(anchor);
+    const at = idx >= 0 ? idx : rest.indexOf(fallback);
+    if (at < 0) return list;
     const next = [...rest];
-    next.splice(afterMeeting + 1, 0, ON_HOLD_FIELD);
+    next.splice(at + 1, 0, field);
     return next;
-  }
-  const afterDone = rest.indexOf("완료");
-  if (afterDone >= 0) {
-    const next = [...rest];
-    next.splice(afterDone + 1, 0, ON_HOLD_FIELD);
-    return next;
-  }
-  return keys;
+  };
+  let ordered = keys;
+  ordered = insertAfter(ordered, PROGRESS_FIELD, "완료", "진행중");
+  ordered = insertAfter(ordered, ON_HOLD_FIELD, PROGRESS_FIELD, "미팅");
+  return ordered;
 }
 
 function mergeHeaderKeys(items: PlatformRow[]): string[] {
@@ -109,7 +110,7 @@ function mergeHeaderKeys(items: PlatformRow[]): string[] {
       out.push(pinned);
     }
   }
-  return ensureOnHoldInColumnOrder(ensureMajorCategoryInColumnOrder(out));
+  return ensureStatusExtraInColumnOrder(ensureMajorCategoryInColumnOrder(out));
 }
 
 function loadHiddenSet(storageKey: string): Set<string> {
@@ -232,7 +233,7 @@ export function PlatformRowsClient() {
       setUndoToast(null);
       if (list.length > 0) {
         const defaultKeys = mergeHeaderKeys(list);
-        setColumnOrder(ensureOnHoldInColumnOrder(loadColumnOrder(defaultKeys)));
+        setColumnOrder(ensureStatusExtraInColumnOrder(loadColumnOrder(defaultKeys)));
       } else {
         setColumnOrder([]);
       }
@@ -299,7 +300,7 @@ export function PlatformRowsClient() {
 
   const resetColumnOrder = useCallback(() => {
     if (state.kind !== "ready" || state.items.length === 0) return;
-    const next = ensureOnHoldInColumnOrder(mergeHeaderKeys(state.items));
+    const next = ensureStatusExtraInColumnOrder(mergeHeaderKeys(state.items));
     persistColumnOrder(next);
     setColumnOrder(next);
   }, [persistColumnOrder, state]);

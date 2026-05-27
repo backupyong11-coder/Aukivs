@@ -41,13 +41,15 @@ const COLUMN_ORDER_STORAGE_KEY = "current_progress_col_order_v1";
 /** 플랫폼정리 시트 열 문자 순서(원문): N → C → B → R → M → O → P → Q */
 const DISPLAY_LETTERS = ["N", "C", "B", "R", "M", "O", "P", "Q"] as const;
 
-/** 탭별 필터 열(원문): 불가 G / 예정 H / 진행중 I / 완료 J */
+/** 탭: 지속진행·진행·보류는 복합 조건, 예정·불가·완료는 단일 체크 열 */
 const TAB_CONFIG = [
-  { id: "running" as const, label: "지속진행", letter: "I" },
-  { id: "scheduled" as const, label: "예정", letter: "H" },
-  { id: "blocked" as const, label: "불가", letter: "G" },
-  { id: "done" as const, label: "완료", letter: "J" },
-];
+  { id: "running" as const, label: "지속진행" },
+  { id: "active" as const, label: "진행" },
+  { id: "onHold" as const, label: "보류" },
+  { id: "scheduled" as const, label: "예정" },
+  { id: "blocked" as const, label: "불가" },
+  { id: "done" as const, label: "완료" },
+] as const;
 type ProgressTabId = (typeof TAB_CONFIG)[number]["id"];
 
 const CHECKBOX_FIELD_CANDIDATES = new Set([
@@ -55,8 +57,10 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "일반계약",
   "불가",
   "예정",
+  "진행",
   "진행중",
   "완료",
+  "보류",
   "계약",
   "미팅",
 ]);
@@ -236,15 +240,26 @@ export function CurrentProgressClient() {
 
   const fieldKeys = useMemo(() => {
     if (!sample) {
-      return { category: "", platform: "", tabFilter: "" };
+      return {
+        category: "",
+        platform: "",
+        progress: "",
+        done: "",
+        onHold: "",
+        scheduled: "",
+        blocked: "",
+      };
     }
-    const letter = TAB_CONFIG.find((t) => t.id === activeTab)?.letter ?? "I";
     return {
       category: fieldKey(sample, "분류", "B"),
       platform: fieldKey(sample, "플랫폼명", "Q"),
-      tabFilter: headerKeyAtLetter(sample, letter),
+      progress: fieldKey(sample, "진행", "") || fieldKey(sample, "진행중", "H"),
+      done: fieldKey(sample, "완료", "I"),
+      onHold: fieldKey(sample, "보류", ""),
+      scheduled: fieldKey(sample, "예정", "G"),
+      blocked: fieldKey(sample, "불가", "F"),
     };
-  }, [sample, activeTab]);
+  }, [sample]);
 
   const booleanFields = useMemo(() => {
     if (state.kind !== "ready") return new Set<string>();
@@ -361,14 +376,38 @@ export function CurrentProgressClient() {
   );
 
   const tabFiltered = useMemo(() => {
-    if (state.kind !== "ready" || !sample || columnOrder.length === 0 || !fieldKeys.tabFilter) {
+    if (state.kind !== "ready" || !sample || columnOrder.length === 0) {
       return [];
     }
+    const { progress, done, onHold, scheduled, blocked } = fieldKeys;
+
     return state.items.filter((row) => {
       if (!columnOrder.some((key) => cell(row, key))) return false;
-      return isTrueCell(row[fieldKeys.tabFilter]);
+
+      const held = onHold ? isTrueCell(row[onHold]) : false;
+      const inProgress = progress ? isTrueCell(row[progress]) : false;
+      const completed = done ? isTrueCell(row[done]) : false;
+
+      switch (activeTab) {
+        case "running":
+          if (held) return false;
+          return inProgress && completed;
+        case "active":
+          if (held) return false;
+          return inProgress && !completed;
+        case "onHold":
+          return held;
+        case "scheduled":
+          return scheduled ? isTrueCell(row[scheduled]) : false;
+        case "blocked":
+          return blocked ? isTrueCell(row[blocked]) : false;
+        case "done":
+          return completed;
+        default:
+          return false;
+      }
     });
-  }, [state, sample, columnOrder, fieldKeys.tabFilter]);
+  }, [state, sample, columnOrder, activeTab, fieldKeys]);
 
   const filterOptions = useMemo(() => {
     const sortedKeys = (vals: string[]) => {

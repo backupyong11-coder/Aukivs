@@ -43,7 +43,7 @@ _CORE_SHEET_HEADERS: frozenset[str] = frozenset(
 )
 
 # 시트에 있지만 extra에 아직 값이 없어 마이그레이션에서 빠진 열
-_KNOWN_PLATFORM_EXTRA_HEADERS: frozenset[str] = frozenset({"보류"})
+_KNOWN_PLATFORM_EXTRA_HEADERS: frozenset[str] = frozenset({"보류", "진행"})
 
 _SELECT = (
     "id,legacy_id,sheet_row,company_name,category,major_category,announcement_date,subsidy_program,"
