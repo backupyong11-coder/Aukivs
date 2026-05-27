@@ -686,7 +686,7 @@ export function LaunchingClient() {
           pageSize={list.pageSize}
           onPageSizeChange={list.setPageSize}
           showAll={list.showAll}
-          onShowAll={() => list.setShowAll(true)}
+          onShowAll={list.loadAll}
           totalFiltered={list.totalFiltered}
           hiddenCount={list.hiddenCount}
           displayedCount={list.displayed.length}
@@ -704,7 +704,8 @@ export function LaunchingClient() {
             columnLabel: colLabels.getLabel,
           }}
         />
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <div className="overflow-x-auto">
           <table
             className="w-full text-xs"
             style={{
@@ -836,18 +837,18 @@ export function LaunchingClient() {
                   </tr>
                 ))
               )}
-              <TableListFooter
-                colSpan={tableColSpan}
-                canLoadMore={list.canLoadMore}
-                onLoadMore={list.loadMore}
-                onNewPage={() => {
-                  setActionError(null);
-                  setNewForm({});
-                  setCreateOpen(true);
-                }}
-              />
             </tbody>
           </table>
+          </div>
+          <TableListFooter
+            canLoadMore={list.canLoadMore}
+            onLoadMore={list.loadMore}
+            onNewPage={() => {
+              setActionError(null);
+              setNewForm({});
+              setCreateOpen(true);
+            }}
+          />
         </div>
         </>
       )}
