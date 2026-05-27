@@ -64,7 +64,7 @@ npm run dev
 | **필터 패널 접힘** | 기본 접힘은 코드 기본값; 그룹별 접힘은 세션마다 |
 | **미커밋 파일** | push 안 하면 없음 |
 
-### 0-5. 현재 master 최근 작업 (2026-05-26)
+### 0-5. 현재 master 최근 작업 (2026-05-27)
 
 프론트 **정리 화면 UX 통일** (배포: `master` push → Vercel 자동):
 
@@ -92,14 +92,19 @@ npm run dev
 - **런칭·업로드정리** → `upload_rows`
 - **업무정리** → `tasks`
 
-**최근 커밋 (참고)**
+**최근 커밋 (참고, 최신 → 과거)**
 
 ```
-043f37c style(filters): smaller tag chips, panel collapsed by default
-eddec1e feat(filters): global collapse toggle for tag filter panel
-a3069fb feat(progress,announcement): inline edit, undo, drag columns
-37c120d feat(launching): unify table UX
-712753f feat(contracts): unify table UX
+ab781df feat(tables): single-click cell edit; priority column as notion-style tags
+3cf3eac feat(tables): undo column hide restores visible attributes on all list views
+36c3286 fix(tables): restore header menu clicks after truncate layout change
+736d2f7 fix(tables): truncate long cell text, click for full preview, keep column resize
+bf93a65 feat(tables): mini calendar picker for date columns on platform, upload, launching views
+dcacd9d fix(tables): let columns shrink to label plus menu, not default 112px
+2a3f1db fix(tables): show full column labels; header actions in one menu
+1995bd5 feat(tables): persist column widths to Supabase (shared across browsers)
+f21668b feat(tables): drag-resize column widths on all list pages
+e468e6e feat(tables): add data column '대분류' on all list pages
 ```
 
 ### 0-6. 다음에 하면 좋은 것 (미정)
@@ -325,6 +330,56 @@ Hub 404/405 시 **레거시 API로 자동 폴백** (프론트).
 
 **온라인에서 삭제 안 되면** → Fly에 **옛 이미지**가 떠 있는 경우가 대부분. `flyctl deploy` 필요.
 
+### 6-4. 정리(표) 화면 — 속성(열) UX (2026-05-27)
+
+#### 6-4-1. 열(속성) 헤더
+
+- 헤더 오른쪽 액션은 **⋯ 메뉴 1개**로 통합 (정렬/숨기기/이름편집/제거).
+- **이름 편집**은 *표시 이름만* 바뀜 (DB 컬럼명/시트 헤더는 안 바뀜).
+- 열 순서: 헤더 왼쪽 **⋮⋮ 드래그** (페이지별 localStorage 키, §6-1 참조).
+- 열 너비: 오른쪽 **드래그**로 조절. 너무 좁게 저장된 너비도 화면에서는 최소 너비 보정.
+
+#### 6-4-2. 열 너비 온라인 공유 저장(Supabase)
+
+- 프론트는 `GET/PUT /table-list-preferences/{page_id}`로 열 너비를 읽고 씀.
+- Supabase에 `table_list_preferences` (migration `supabase/migrations/005_table_list_preferences.sql`)가 있어야 함.
+- 백엔드(Fly) secrets에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`가 있어야 저장됨.
+
+#### 6-4-3. 날짜 미니 달력(시트/엑셀 스타일)
+
+클릭 시 미니 달력으로 날짜 선택(YYYY-MM-DD 저장):
+- 플랫폼 계열: `발표일`
+- 업로드/런칭 계열: `업로드일`, `런칭일`, `마지막업로드일`, `다음업로드일`
+
+관련 파일:
+- `frontend/src/components/SheetMiniCalendar.tsx`
+- `frontend/src/components/SheetDateInlineCell.tsx`
+- `frontend/src/lib/tableDateFields.ts`
+
+#### 6-4-4. 긴 텍스트(줄임표) + 열 너비 조절
+
+- 셀 내용이 길어도 열 너비 드래그가 막히지 않도록 `max-w-0`+`truncate`로 고정.
+
+#### 6-4-5. 되돌리기(Undo) — 열 숨기기 포함
+
+- 완료 체크/불리언 변경처럼, **열 숨기기**도 토스트가 뜨고 `되돌리기`/`Ctrl+Z`로 다시 표시됨.
+- 공통 유틸: `frontend/src/lib/tableListUndo.ts`
+
+#### 6-4-6. 우선순위 태그(노션식)
+
+- `우선순위`는 입력 대신 태그 선택 UI.
+- 기본 태그: `오키브스`, `업체`, `없음`, `논의`
+- 태그 추가는 가능(브라우저 localStorage 저장, PC/브라우저별로 다름)
+
+관련 파일:
+- `frontend/src/components/TagSelectInlineCell.tsx`
+- `frontend/src/lib/priorityTags.ts`
+
+#### 6-4-7. 셀 클릭 동작
+
+- 셀은 **한 번 클릭**으로 바로 편집(입력) 시작.
+- (표시 이름 편집/열 숨기기 등은 헤더 ⋯ 메뉴에서)
+
 ---
 
 ## 7. 자주 나는 문제
@@ -390,4 +445,4 @@ npm run build
 
 ---
 
-*마지막 정리: 2026-05-26 — 정리 화면 UX 통일·FilterTagsFlow·다른 PC 이어하기(§0)*
+*마지막 정리: 2026-05-27 — 열 너비/헤더 ⋯ 메뉴/날짜 달력/긴 텍스트 줄임표/우선순위 태그/열 숨기기 undo*
