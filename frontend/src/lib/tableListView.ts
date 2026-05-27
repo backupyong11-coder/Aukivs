@@ -29,7 +29,42 @@ export const TABLE_LIST_DATE_FIELDS: Record<TableListPageId, string[]> = {
   platforms: ["발표일", "마지막업데이트날짜"],
 };
 
-export type DateRangePreset = "all" | "today" | "week" | "month" | "custom";
+export type DateRangePreset =
+  | "all"
+  | "today"
+  | "week"
+  | "month"
+  | "months1"
+  | "months3"
+  | "months6"
+  | "months12"
+  | "custom";
+
+const DATE_PRESET_VALUES: DateRangePreset[] = [
+  "all",
+  "today",
+  "week",
+  "month",
+  "months1",
+  "months3",
+  "months6",
+  "months12",
+  "custom",
+];
+
+function subtractCalendarMonths(y: number, m: number, d: number, months: number) {
+  const dt = new Date(y, m - 1, d);
+  dt.setMonth(dt.getMonth() - months);
+  return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+}
+
+function rollingMonthsRange(months: number): { from: string; to: string } {
+  const { year, month, day } = seoulYmdPartsNow();
+  const to = ymdFromParts(year, month, day);
+  const start = subtractCalendarMonths(year, month, day, months);
+  const from = ymdFromParts(start.y, start.m, start.d);
+  return { from, to };
+}
 
 export type DateRangeFilter = {
   preset: DateRangePreset;
@@ -85,6 +120,10 @@ export function resolveDateRangeYmd(filter: DateRangeFilter): { from: string; to
   if (filter.preset === "month") {
     return calendarRangeForMonth(year, month);
   }
+  if (filter.preset === "months1") return rollingMonthsRange(1);
+  if (filter.preset === "months3") return rollingMonthsRange(3);
+  if (filter.preset === "months6") return rollingMonthsRange(6);
+  if (filter.preset === "months12") return rollingMonthsRange(12);
   const from = normalizeSheetDateYmd(filter.fromYmd) ?? "";
   const to = normalizeSheetDateYmd(filter.toYmd) ?? "";
   if (from && to && from > to) return { from: to, to: from };
@@ -98,6 +137,10 @@ export function dateRangeLabel(filter: DateRangeFilter): string {
   if (filter.preset === "today") return `오늘 (${from})`;
   if (filter.preset === "week") return `이번 주 (${from} ~ ${to})`;
   if (filter.preset === "month") return `이번 달 (${from} ~ ${to})`;
+  if (filter.preset === "months1") return `최근 1개월 (${from} ~ ${to})`;
+  if (filter.preset === "months3") return `최근 3개월 (${from} ~ ${to})`;
+  if (filter.preset === "months6") return `최근 6개월 (${from} ~ ${to})`;
+  if (filter.preset === "months12") return `최근 12개월 (${from} ~ ${to})`;
   return `${from || "…"} ~ ${to || "…"}`;
 }
 
@@ -133,13 +176,7 @@ export function loadDateRangeFilter(pageId: TableListPageId): DateRangeFilter {
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<DateRangeFilter>;
     const preset = parsed.preset;
-    if (
-      preset === "all" ||
-      preset === "today" ||
-      preset === "week" ||
-      preset === "month" ||
-      preset === "custom"
-    ) {
+    if (preset && DATE_PRESET_VALUES.includes(preset)) {
       return {
         preset,
         fromYmd: typeof parsed.fromYmd === "string" ? parsed.fromYmd : "",

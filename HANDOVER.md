@@ -296,7 +296,7 @@ CLI 사용 시: Vercel 로그인 필요 (`vercel login`). 프로젝트 루트는
 |------|------|
 | 기본 표시 | 10건 (칩: 10·25·50·100·200) |
 | 더보기 | 잘린 건수 펼치기 |
-| 기간 | 전체 / 오늘 / 이번 주 / 이번 달 / 직접 (캘린더 `calendarWindow`와 동일 범위) |
+| 기간 | 전체 / 오늘 / 이번 주 / 이번 달 / 직접(날짜) / 1·3·6·12개월 (한 줄 UI, 캘린더 `calendarWindow`와 동일·롤링) |
 | 저장 키 | `table_list.{페이지id}.pageSize`, `table_list.{페이지id}.dateRange` |
 
 태그 숨김은 `*.hidden.{필드명}` 형태 (예: `contracts.hidden.계약`).

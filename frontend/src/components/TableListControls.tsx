@@ -2,25 +2,32 @@
 
 import {
   TABLE_PAGE_SIZE_OPTIONS,
-  dateRangeLabel,
   type DateRangeFilter,
   type DateRangePreset,
   type TablePageSize,
 } from "@/lib/tableListView";
 
-const presetBtn = (active: boolean) =>
-  `rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-    active
-      ? "border-zinc-500 bg-zinc-500 text-zinc-50 dark:border-zinc-400 dark:bg-zinc-400 dark:text-zinc-900"
-      : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-600"
-  }`;
-
-const sizeBtn = (active: boolean) =>
+const chipBtn = (active: boolean) =>
   `rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
     active
       ? "border-zinc-500 bg-zinc-500 text-zinc-50 dark:border-zinc-400 dark:bg-zinc-400 dark:text-zinc-900"
       : "border-zinc-200 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
   }`;
+
+const PERIOD_PRESETS: { id: DateRangePreset; label: string }[] = [
+  { id: "all", label: "전체" },
+  { id: "today", label: "오늘" },
+  { id: "week", label: "이번 주" },
+  { id: "month", label: "이번 달" },
+  { id: "custom", label: "직접" },
+];
+
+const ROLLING_PRESETS: { id: DateRangePreset; label: string }[] = [
+  { id: "months1", label: "1개월" },
+  { id: "months3", label: "3개월" },
+  { id: "months6", label: "6개월" },
+  { id: "months12", label: "12개월" },
+];
 
 export function TableListControls(props: {
   pageSize: TablePageSize;
@@ -56,74 +63,79 @@ export function TableListControls(props: {
   const showMore = hiddenCount > 0 && !showAll;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50/60 px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-900/40">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+    <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/60 px-2.5 py-1.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           기간
         </span>
-        {(["all", "today", "week", "month", "custom"] as DateRangePreset[]).map((p) => (
+        {PERIOD_PRESETS.map(({ id, label }) => (
           <button
-            key={p}
+            key={id}
             type="button"
-            className={presetBtn(dateFilter.preset === p)}
-            onClick={() => onDatePresetChange(p)}
+            className={chipBtn(dateFilter.preset === id)}
+            onClick={() => onDatePresetChange(id)}
           >
-            {p === "all"
-              ? "전체"
-              : p === "today"
-                ? "오늘"
-                : p === "week"
-                  ? "이번 주"
-                  : p === "month"
-                    ? "이번 달"
-                    : "직접"}
+            {label}
           </button>
         ))}
-        {dateFilter.preset === "custom" ? (
-          <span className="inline-flex flex-wrap items-center gap-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-            <input
-              type="date"
-              value={dateFilter.fromYmd}
-              onChange={(e) => onCustomFromChange(e.target.value)}
-              className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[11px] dark:border-zinc-600 dark:bg-zinc-950"
-              aria-label="시작일"
-            />
-            <span>~</span>
-            <input
-              type="date"
-              value={dateFilter.toYmd}
-              onChange={(e) => onCustomToChange(e.target.value)}
-              className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[11px] dark:border-zinc-600 dark:bg-zinc-950"
-              aria-label="종료일"
-            />
-          </span>
-        ) : (
-          <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{dateRangeLabel(dateFilter)}</span>
-        )}
+
+        <span className="inline-flex shrink-0 items-center gap-0.5">
+          <input
+            type="date"
+            value={dateFilter.fromYmd}
+            onChange={(e) => onCustomFromChange(e.target.value)}
+            disabled={dateFilter.preset !== "custom"}
+            className="w-[6.75rem] rounded border border-zinc-300 bg-white px-1 py-0.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-950"
+            aria-label="시작일"
+          />
+          <span className="text-[10px] text-zinc-400">~</span>
+          <input
+            type="date"
+            value={dateFilter.toYmd}
+            onChange={(e) => onCustomToChange(e.target.value)}
+            disabled={dateFilter.preset !== "custom"}
+            className="w-[6.75rem] rounded border border-zinc-300 bg-white px-1 py-0.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-950"
+            aria-label="종료일"
+          />
+        </span>
+
+        {ROLLING_PRESETS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            className={chipBtn(dateFilter.preset === id)}
+            onClick={() => onDatePresetChange(id)}
+          >
+            {label}
+          </button>
+        ))}
+
         {dateFieldHint ? (
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500" title={dateFieldHint}>
-            · 캘린더 연동
+          <span
+            className="hidden shrink-0 text-[10px] text-zinc-400 sm:inline dark:text-zinc-500"
+            title={dateFieldHint}
+          >
+            · 캘린더
           </span>
         ) : null}
-      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            표시
-          </span>
-          {TABLE_PAGE_SIZE_OPTIONS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={sizeBtn(pageSize === n)}
-              onClick={() => onPageSizeChange(n)}
-            >
-              {n}개
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+        <span className="mx-0.5 hidden h-3.5 w-px shrink-0 bg-zinc-300 sm:inline dark:bg-zinc-600" aria-hidden />
+
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          표시
+        </span>
+        {TABLE_PAGE_SIZE_OPTIONS.map((n) => (
+          <button
+            key={n}
+            type="button"
+            className={chipBtn(pageSize === n)}
+            onClick={() => onPageSizeChange(n)}
+          >
+            {n}개
+          </button>
+        ))}
+
+        <p className="ml-auto min-w-0 shrink-0 text-[10px] text-zinc-600 dark:text-zinc-400">
           {totalFiltered === 0 ? (
             "표시할 항목 없음"
           ) : (
@@ -144,13 +156,13 @@ export function TableListControls(props: {
                   <button
                     type="button"
                     onClick={onShowAll}
-                    className="ml-1 rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className={`ml-0.5 ${chipBtn(false)}`}
                   >
-                    더보기 ({totalFiltered}건 전체)
+                    더보기
                   </button>
                 </>
               ) : showAll && totalFiltered > pageSize ? (
-                <span className="text-zinc-400"> (전체 펼침)</span>
+                <span className="text-zinc-400"> (전체)</span>
               ) : null}
             </>
           )}
