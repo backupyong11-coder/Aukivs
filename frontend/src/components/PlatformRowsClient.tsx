@@ -49,9 +49,13 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
   "완료",
   "계약",
   "미팅",
+  "보류",
   "성인웹툰",
   "성인웹툰(구 일반계약)",
 ]);
+
+const ON_HOLD_FIELD = "보류";
+const ON_HOLD_VISIBILITY_MIGRATION_KEY = "platforms.show_on_hold_v1";
 
 const COLUMN_ORDER_STORAGE_KEY = "platform_rows_col_order_v2";
 
@@ -69,10 +73,36 @@ const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] 
   { key: "비고", label: "비고" },
 ];
 
-function orderedHeaderKeys(row: PlatformRow): string[] {
-  return ensureMajorCategoryInColumnOrder(
-    Object.keys(row).filter((k) => !INTERNAL_KEYS.has(k)),
-  );
+function ensureOnHoldInColumnOrder(keys: string[]): string[] {
+  if (!keys.includes(ON_HOLD_FIELD)) return keys;
+  const rest = keys.filter((k) => k !== ON_HOLD_FIELD);
+  const afterMeeting = rest.indexOf("미팅");
+  if (afterMeeting >= 0) {
+    const next = [...rest];
+    next.splice(afterMeeting + 1, 0, ON_HOLD_FIELD);
+    return next;
+  }
+  const afterDone = rest.indexOf("완료");
+  if (afterDone >= 0) {
+    const next = [...rest];
+    next.splice(afterDone + 1, 0, ON_HOLD_FIELD);
+    return next;
+  }
+  return keys;
+}
+
+function mergeHeaderKeys(items: PlatformRow[]): string[] {
+  if (items.length === 0) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const row of items) {
+    for (const k of Object.keys(row)) {
+      if (INTERNAL_KEYS.has(k) || seen.has(k)) continue;
+      seen.add(k);
+      out.push(k);
+    }
+  }
+  return ensureOnHoldInColumnOrder(ensureMajorCategoryInColumnOrder(out));
 }
 
 function loadHiddenSet(storageKey: string): Set<string> {
@@ -194,7 +224,7 @@ export function PlatformRowsClient() {
       setUndoCount(0);
       setUndoToast(null);
       if (list.length > 0) {
-        const defaultKeys = orderedHeaderKeys(list[0]);
+        const defaultKeys = mergeHeaderKeys(list);
         setColumnOrder(loadColumnOrder(defaultKeys));
       } else {
         setColumnOrder([]);
@@ -216,6 +246,17 @@ export function PlatformRowsClient() {
 
   const colVis = useTableColumnVisibility("platforms", columnOrder);
   const colLabels = useColumnLabels("platforms");
+
+  useEffect(() => {
+    if (state.kind !== "ready") return;
+    if (!columnOrder.includes(ON_HOLD_FIELD)) return;
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(ON_HOLD_VISIBILITY_MIGRATION_KEY)) return;
+    window.localStorage.setItem(ON_HOLD_VISIBILITY_MIGRATION_KEY, "1");
+    if (colVis.hiddenColumns.has(ON_HOLD_FIELD)) {
+      colVis.setColumnVisible(ON_HOLD_FIELD, true);
+    }
+  }, [state, columnOrder, colVis]);
 
   const syncUndoCount = useCallback(() => {
     setUndoCount(undoStackRef.current.length);
@@ -253,7 +294,7 @@ export function PlatformRowsClient() {
 
   const resetColumnOrder = useCallback(() => {
     if (state.kind !== "ready" || state.items.length === 0) return;
-    const next = orderedHeaderKeys(state.items[0]);
+    const next = mergeHeaderKeys(state.items);
     persistColumnOrder(next);
     setColumnOrder(next);
   }, [persistColumnOrder, state]);
