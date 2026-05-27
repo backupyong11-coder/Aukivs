@@ -32,6 +32,7 @@ export const TABLE_LIST_DATE_FIELDS: Record<TableListPageId, string[]> = {
 
 export type DateRangePreset =
   | "all"
+  | "future"
   | "today"
   | "week"
   | "month"
@@ -43,6 +44,7 @@ export type DateRangePreset =
 
 const DATE_PRESET_VALUES: DateRangePreset[] = [
   "all",
+  "future",
   "today",
   "week",
   "month",
@@ -112,6 +114,9 @@ export function resolveDateRangeYmd(filter: DateRangeFilter): { from: string; to
   if (filter.preset === "all") {
     return { from: "", to: "" };
   }
+  if (filter.preset === "future") {
+    return { from: today, to: "9999-12-31" };
+  }
   if (filter.preset === "today") {
     return calendarRangeForDay(today);
   }
@@ -135,6 +140,7 @@ export function dateRangeLabel(filter: DateRangeFilter): string {
   if (filter.preset === "all") return "전체 기간";
   const { from, to } = resolveDateRangeYmd(filter);
   if (!from && !to) return "전체 기간";
+  if (filter.preset === "future") return `오늘 이후 (${from}~)`;
   if (filter.preset === "today") return `오늘 (${from})`;
   if (filter.preset === "week") return `이번 주 (${from} ~ ${to})`;
   if (filter.preset === "month") return `이번 달 (${from} ~ ${to})`;
@@ -170,8 +176,10 @@ export function saveTablePageSize(pageId: TableListPageId, size: TablePageSize) 
   }
 }
 
-export function loadDateRangeFilter(pageId: TableListPageId): DateRangeFilter {
-  const fallback: DateRangeFilter = { preset: "all", fromYmd: "", toYmd: "" };
+export function loadDateRangeFilter(
+  pageId: TableListPageId,
+  fallback: DateRangeFilter = { preset: "all", fromYmd: "", toYmd: "" },
+): DateRangeFilter {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(storageKey(pageId, "dateRange"));

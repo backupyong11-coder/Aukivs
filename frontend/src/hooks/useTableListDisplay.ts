@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
-  DEFAULT_TABLE_PAGE_SIZE,
   TABLE_LIST_DATE_FIELDS,
   type DateRangeFilter,
   type DateRangePreset,
@@ -19,7 +18,7 @@ import {
 export function useTableListDisplay<T extends Record<string, unknown>>(
   pageId: TableListPageId,
   items: T[],
-  options?: { dateFields?: string[] },
+  options?: { dateFields?: string[]; defaultDateFilter?: DateRangeFilter },
 ) {
   const dateFieldNames = useMemo(
     () =>
@@ -32,7 +31,7 @@ export function useTableListDisplay<T extends Record<string, unknown>>(
   const [pageSize, setPageSizeState] = useState<TablePageSize>(() => loadTablePageSize(pageId));
   const [showAll, setShowAll] = useState(false);
   const [dateFilter, setDateFilterState] = useState<DateRangeFilter>(() =>
-    loadDateRangeFilter(pageId),
+    loadDateRangeFilter(pageId, options?.defaultDateFilter),
   );
 
   const setPageSize = useCallback(

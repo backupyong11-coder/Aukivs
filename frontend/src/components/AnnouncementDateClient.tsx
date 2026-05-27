@@ -15,7 +15,7 @@ import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
-import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
+import { TABLE_LIST_DATE_FIELDS, type DateRangeFilter } from "@/lib/tableListView";
 import { PlatformRowEditModal, type PlatformRow } from "@/components/PlatformRowEditModal";
 import {
   PlatformRowInlineCell,
@@ -35,6 +35,11 @@ import {
 const INTERNAL_KEYS = new Set(["id", "sheet_row"]);
 const READONLY_FIELDS = new Set(["마지막업데이트날짜"]);
 const COLUMN_ORDER_STORAGE_KEY = "announcement_date_col_order_v1";
+const DEFAULT_ANNOUNCEMENT_DATE_FILTER: DateRangeFilter = {
+  preset: "future",
+  fromYmd: "",
+  toYmd: "",
+};
 
 /** 플랫폼정리 시트 열 문자 순서(원문): D → C → B → M → N → O */
 const DISPLAY_LETTERS = ["D", "C", "B", "M", "N", "O"] as const;
@@ -500,6 +505,7 @@ export function AnnouncementDateClient() {
 
   const list = useTableListDisplay("announcement-date", visible, {
     dateFields: fieldKeys.announcement ? [fieldKeys.announcement] : TABLE_LIST_DATE_FIELDS["announcement-date"],
+    defaultDateFilter: DEFAULT_ANNOUNCEMENT_DATE_FILTER,
   });
   const colWidths = useTableColumnWidths(
     "announcement-date",
@@ -515,13 +521,6 @@ export function AnnouncementDateClient() {
     }
   };
 
-  const SortIcon = ({ col }: { col: string }) => {
-    if (sortKey !== col) return <span className="ml-0.5 text-zinc-300">↕</span>;
-    return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
-  };
-
-  const thSort =
-    "cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100";
   const thAction =
     "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
 
