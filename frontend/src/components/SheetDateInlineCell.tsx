@@ -114,7 +114,7 @@ export function SheetDateInlineCell({
       : null;
 
   return (
-    <>
+    <div className="min-w-0 w-full max-w-full">
       <span
         ref={anchorRef}
         role="button"
@@ -138,9 +138,7 @@ export function SheetDateInlineCell({
           }
         }}
         title={disabled ? undefined : "클릭하여 날짜 선택"}
-        className={`block min-h-[1.25rem] min-w-[1.5rem] cursor-pointer rounded px-0.5 py-0 transition-colors ${alignCls} ${toneCls} ${tabular ? "tabular-nums" : ""} ${
-          wide ? "max-w-[280px] truncate" : "truncate"
-        } ${
+        className={`block w-full min-w-0 max-w-full cursor-pointer truncate rounded px-0.5 py-0 transition-colors ${alignCls} ${toneCls} ${tabular ? "tabular-nums" : ""} ${
           hovered && !disabled
             ? "bg-zinc-100/90 ring-1 ring-inset ring-zinc-300 dark:bg-zinc-800/90 dark:ring-zinc-600"
             : ""
@@ -149,6 +147,6 @@ export function SheetDateInlineCell({
         {shown || <span className="font-normal text-zinc-300 dark:text-zinc-600">—</span>}
       </span>
       {popover}
-    </>
+    </div>
   );
 }

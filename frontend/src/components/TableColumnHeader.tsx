@@ -76,7 +76,7 @@ export function TableColumnHeader(props: {
         dragActive ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""
       }`}
     >
-      <div className="relative flex min-h-[2.125rem] w-max max-w-full items-center overflow-visible py-1 pl-4 pr-2">
+      <div className="relative flex min-h-[2.125rem] w-full min-w-0 max-w-full items-center overflow-hidden py-1 pl-4 pr-2">
         <span
           draggable
           onDragStart={(e) => {
@@ -204,5 +204,5 @@ export function TableColumnHeader(props: {
   );
 }
 
-/** 데이터 셀 — colgroup 너비에 맞춰 넘침 숨김 */
-export const tableDataCellClass = "overflow-hidden px-2 py-1.5 align-top";
+/** 데이터 셀 — colgroup 너비 고정 시 내용이 열을 밀지 않도록 max-w-0 */
+export const tableDataCellClass = "max-w-0 overflow-hidden px-2 py-1.5 align-top";

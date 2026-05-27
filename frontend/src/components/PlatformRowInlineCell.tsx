@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SheetDateInlineCell } from "@/components/SheetDateInlineCell";
+import { TableTruncatedText } from "@/components/TableTruncatedText";
 import { isSheetTableDateField } from "@/lib/tableDateFields";
 
 type Props = {
@@ -42,7 +43,6 @@ export function PlatformRowInlineCell({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  const [hovered, setHovered] = useState(false);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -58,7 +58,6 @@ export function PlatformRowInlineCell({
   }, [editing]);
 
   const alignCls = align === "center" ? "text-center" : "text-left";
-  const toneCls = muted ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-50";
 
   if (isSheetTableDateField(field)) {
     return (
@@ -136,37 +135,21 @@ export function PlatformRowInlineCell({
             cancel();
           }
         }}
-        className={`w-full min-w-0 rounded border border-zinc-400 bg-white px-1 py-0.5 text-xs shadow-sm outline-none ring-1 ring-zinc-400/40 dark:border-zinc-500 dark:bg-zinc-900 dark:text-zinc-100 ${alignCls} ${wide ? "max-w-[280px]" : ""}`}
+        className={`w-full min-w-0 max-w-full rounded border border-zinc-400 bg-white px-1 py-0.5 text-xs shadow-sm outline-none ring-1 ring-zinc-400/40 dark:border-zinc-500 dark:bg-zinc-900 dark:text-zinc-100 ${alignCls}`}
       />
     );
   }
 
   return (
-    <span
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => {
-        if (!disabled) setEditing(true);
-      }}
-      onKeyDown={(e) => {
-        if (disabled) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setEditing(true);
-        }
-      }}
-      title={disabled ? undefined : "클릭하여 편집"}
-      className={`block min-h-[1.25rem] min-w-[1.5rem] cursor-text rounded px-0.5 py-0 transition-colors ${alignCls} ${toneCls} ${tabular ? "tabular-nums" : ""} ${
-        wide ? "max-w-[280px] truncate" : "truncate"
-      } ${
-        hovered && !disabled
-          ? "bg-zinc-100/90 ring-1 ring-inset ring-zinc-300 dark:bg-zinc-800/90 dark:ring-zinc-600"
-          : ""
-      } ${disabled ? "cursor-default opacity-60" : ""}`}
-    >
-      {value || <span className="font-normal text-zinc-300 dark:text-zinc-600">—</span>}
-    </span>
+    <div className="min-w-0 w-full max-w-full">
+      <TableTruncatedText
+        value={value}
+        disabled={disabled}
+        align={align}
+        muted={muted}
+        tabular={tabular}
+        onRequestEdit={() => setEditing(true)}
+      />
+    </div>
   );
 }
