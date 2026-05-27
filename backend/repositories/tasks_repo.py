@@ -24,21 +24,65 @@ _tasks_select_cache: str | None = None
 _assignee_write_col_cache: str | None = None
 
 
-def _probe_tasks_schema(cli: SupabaseRestClient) -> tuple[str, str]:
-    """PostgREST select로 work_assignee 마이그레이션 여부 확인."""
+def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
+    if exc.status_code != 400:
+        return False
+    msg = str(exc).lower()
+    return "42703" in msg or "does not exist" in msg
+
+
+def _set_tasks_schema(*, use_new: bool) -> tuple[str, str]:
     global _tasks_select_cache, _assignee_write_col_cache
-    if _tasks_select_cache and _assignee_write_col_cache:
-        return _tasks_select_cache, _assignee_write_col_cache
-    try:
-        cli.get_json("/tasks", params={"select": "work_assignee", "limit": "1"})
+    if use_new:
         _tasks_select_cache = _SELECT_TASKS_NEW
         _assignee_write_col_cache = "work_assignee"
-    except SupabaseRequestError as exc:
-        if exc.status_code == 400:
-            _tasks_select_cache = _SELECT_TASKS_LEGACY
-            _assignee_write_col_cache = "status"
-        else:
+    else:
+        _tasks_select_cache = _SELECT_TASKS_LEGACY
+        _assignee_write_col_cache = "status"
+    return _tasks_select_cache, _assignee_write_col_cache
+
+
+def _reset_tasks_schema_cache() -> None:
+    global _tasks_select_cache, _assignee_write_col_cache
+    _tasks_select_cache = None
+    _assignee_write_col_cache = None
+
+
+def _fetch_tasks(cli: SupabaseRestClient, params: dict[str, Any]) -> Any:
+    """GET /tasks — work_assignee 마이그레이션 전·후 스키마 자동 전환."""
+    base = {k: v for k, v in params.items() if k != "select"}
+    if _tasks_select_cache:
+        try:
+            return cli.get_json(
+                "/tasks",
+                params={**base, "select": _tasks_select_cache},
+            )
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            _reset_tasks_schema_cache()
+
+    last_exc: SupabaseRequestError | None = None
+    for use_new in (True, False):
+        select, _ = _set_tasks_schema(use_new=use_new)
+        try:
+            return cli.get_json("/tasks", params={**base, "select": select})
+        except SupabaseRequestError as exc:
+            if _is_missing_column_error(exc):
+                last_exc = exc
+                _reset_tasks_schema_cache()
+                continue
             raise
+    if last_exc:
+        raise last_exc
+    raise SupabaseRequestError("Supabase GET /tasks failed: schema mismatch")
+
+
+def _probe_tasks_schema(cli: SupabaseRestClient) -> tuple[str, str]:
+    if _tasks_select_cache and _assignee_write_col_cache:
+        return _tasks_select_cache, _assignee_write_col_cache
+    _fetch_tasks(cli, {"limit": "1"})
+    assert _tasks_select_cache and _assignee_write_col_cache
     return _tasks_select_cache, _assignee_write_col_cache
 
 
@@ -238,10 +282,9 @@ def _get_task_by_client_id(cli: SupabaseRestClient, client_id: str) -> dict[str,
     def one(extra: dict[str, Any]) -> dict[str, Any] | None:
         params = {
             **extra,
-            "select": _tasks_select(cli),
             "limit": "1",
         }
-        rows = cli.get_json("/tasks", params=params)
+        rows = _fetch_tasks(cli, params)
         if isinstance(rows, list) and rows and isinstance(rows[0], dict):
             return rows[0]
         return None
@@ -285,15 +328,11 @@ def list_tasks(settings: Settings) -> list[dict[str, Any]]:
 def list_tasks_limited(settings: Settings, *, limit: int | None = None) -> list[dict[str, Any]]:
     cli = _client(settings)
     params: dict[str, str] = {
-        "select": _tasks_select(cli),
         "order": "sheet_row.asc.nullslast",
     }
     if limit is not None and limit > 0:
         params["limit"] = str(int(limit))
-    rows = cli.get_json(
-        "/tasks",
-        params=params,
-    )
+    rows = _fetch_tasks(cli, params)
     if not isinstance(rows, list):
         return []
     out: list[dict[str, Any]] = []
@@ -311,6 +350,7 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
     if not title:
         raise SheetsParseError("[파싱] 업무명은 비울 수 없습니다.")
     cli = _client(settings)
+    assignee_col = _probe_tasks_schema(cli)[1]
     sheet_row = _next_sheet_row(cli)
     legacy_id = f"task-row-{sheet_row}"
 
@@ -338,17 +378,19 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
                 insert["due_date"] = s
             else:
                 insert["due_date_raw"] = s
+        elif dbk == "work_assignee":
+            insert[assignee_col] = str(raw).strip()
         else:
             insert[dbk] = str(raw).strip()
 
-    if "work_assignee" not in insert:
+    if assignee_col not in insert:
         for kr in _ASSIGNEE_API_KEYS:
             if kr not in fields:
                 continue
             raw = fields[kr]
             if raw is None or (isinstance(raw, str) and not str(raw).strip()):
                 continue
-            insert[_assignee_write_col(cli)] = str(raw).strip()
+            insert[assignee_col] = str(raw).strip()
             break
 
     cli.post_json("/tasks", [insert], prefer="return=minimal")
@@ -461,10 +503,9 @@ def checklist_item_to_payload(item: ChecklistItem) -> dict[str, Any]:
 
 def fetch_checklist_from_supabase(settings: Settings) -> list[ChecklistItem]:
     cli = _client(settings)
-    rows = cli.get_json(
-        "/tasks",
-        params={
-            "select": _tasks_select(cli),
+    rows = _fetch_tasks(
+        cli,
+        {
             "completed": "eq.false",
             "order": "sheet_row.asc.nullslast",
         },
@@ -485,10 +526,9 @@ def fetch_checklist_for_briefing_supabase(
     settings: Settings,
 ) -> tuple[list[tuple[ChecklistItem, int]], list[str]]:
     cli = _client(settings)
-    rows = cli.get_json(
-        "/tasks",
-        params={
-            "select": _tasks_select(cli),
+    rows = _fetch_tasks(
+        cli,
+        {
             "completed": "eq.false",
             "order": "sheet_row.asc.nullslast",
         },
