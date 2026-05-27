@@ -47,6 +47,9 @@ from schemas import (
     WeeklyAgendaGetResponse,
     WeeklyAgendaPutRequest,
     WeeklyAgendaPutResponse,
+    TableListColumnWidthsGetResponse,
+    TableListColumnWidthsPutRequest,
+    TableListColumnWidthsPutResponse,
 )
 from services.briefing_aggregate import aggregate_briefing_today
 from services.ai_checklist_suggest import suggest_checklist_ai
@@ -78,6 +81,7 @@ from repositories.memos_repo import list_memos as list_memos_supabase
 from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from repositories import weekly_agenda_repo
+from repositories import table_list_prefs_repo
 from repositories import snapshot_repo
 from services.google_uploads_sheets import (
     advance_upload_next_episode,
@@ -1121,6 +1125,52 @@ def put_weekly_agenda(body: WeeklyAgendaPutRequest) -> WeeklyAgendaPutResponse:
     try:
         updated_at = weekly_agenda_repo.upsert_workbook(settings, body.workbook)
         return WeeklyAgendaPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ── 정리 표 UI (열 너비 등, Supabase 공유) ─────────────────────────────
+@app.get(
+    "/table-list-preferences/{page_id}",
+    response_model=TableListColumnWidthsGetResponse,
+)
+def get_table_list_column_widths(page_id: str) -> TableListColumnWidthsGetResponse:
+    settings = load_settings()
+    try:
+        widths = table_list_prefs_repo.get_column_widths(settings, page_id)
+        return TableListColumnWidthsGetResponse(
+            page_id=page_id.strip(),
+            column_widths=widths,
+            updated_at=None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put(
+    "/table-list-preferences/{page_id}",
+    response_model=TableListColumnWidthsPutResponse,
+)
+def put_table_list_column_widths(
+    page_id: str,
+    body: TableListColumnWidthsPutRequest,
+) -> TableListColumnWidthsPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = table_list_prefs_repo.upsert_column_widths(
+            settings, page_id, body.column_widths
+        )
+        return TableListColumnWidthsPutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SupabaseRequestError as e:

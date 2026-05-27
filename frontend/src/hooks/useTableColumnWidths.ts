@@ -9,11 +9,59 @@ import {
   sumTableWidthPx,
   TABLE_ACTION_COLUMN_WIDTH_PX,
 } from "@/lib/tableColumnWidths";
+import {
+  fetchColumnWidthsFromServer,
+  saveColumnWidthsToServer,
+} from "@/lib/tableListPreferencesApi";
 import type { TableListPageId } from "@/lib/tableListView";
 
+function mergeWidths(
+  server: Record<string, number>,
+  local: Record<string, number>,
+  dataKeys: string[],
+): Record<string, number> {
+  const out: Record<string, number> = { ...local };
+  for (const [k, v] of Object.entries(server)) {
+    out[k] = v;
+  }
+  for (const key of dataKeys) {
+    if (out[key] === undefined) {
+      out[key] = defaultWidthForField(key);
+    }
+  }
+  return out;
+}
+
 export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]) {
-  const [widths, setWidths] = useState<Record<string, number>>(() => loadColumnWidths(pageId));
+  const [widths, setWidths] = useState<Record<string, number>>(() =>
+    loadColumnWidths(pageId),
+  );
+  const [syncedFromServer, setSyncedFromServer] = useState(false);
   const resizeRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+  const saveInFlightRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchColumnWidthsFromServer(pageId);
+      if (cancelled) return;
+      if (res.ok) {
+        const local = loadColumnWidths(pageId);
+        if (Object.keys(res.columnWidths).length > 0) {
+          const merged = mergeWidths(res.columnWidths, local, dataKeys);
+          setWidths(merged);
+          saveColumnWidths(pageId, merged);
+        } else if (Object.keys(local).length > 0) {
+          const merged = mergeWidths({}, local, dataKeys);
+          void saveColumnWidthsToServer(pageId, merged);
+        }
+      }
+      setSyncedFromServer(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pageId]);
 
   useEffect(() => {
     setWidths((prev) => {
@@ -37,6 +85,11 @@ export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]
   const persist = useCallback(
     (next: Record<string, number>) => {
       saveColumnWidths(pageId, next);
+      if (saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      void saveColumnWidthsToServer(pageId, next).finally(() => {
+        saveInFlightRef.current = false;
+      });
     },
     [pageId],
   );
@@ -90,5 +143,12 @@ export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]
     [],
   );
 
-  return { getWidth, startResize, tableMinWidth, tableStyle, actionWidth: TABLE_ACTION_COLUMN_WIDTH_PX };
+  return {
+    getWidth,
+    startResize,
+    tableMinWidth,
+    tableStyle,
+    actionWidth: TABLE_ACTION_COLUMN_WIDTH_PX,
+    syncedFromServer,
+  };
 }

@@ -538,3 +538,24 @@ class WeeklyAgendaPutRequest(BaseModel):
 class WeeklyAgendaPutResponse(BaseModel):
     ok: bool = True
     updated_at: str | None = None
+
+
+class TableListColumnWidthsGetResponse(BaseModel):
+    """GET /table-list-preferences/{page_id}"""
+
+    page_id: str
+    column_widths: dict[str, int] = Field(default_factory=dict)
+    updated_at: str | None = None
+
+
+class TableListColumnWidthsPutRequest(BaseModel):
+    """PUT /table-list-preferences/{page_id}"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    column_widths: dict[str, int | float]
+
+
+class TableListColumnWidthsPutResponse(BaseModel):
+    ok: bool = True
+    updated_at: str | None = None
