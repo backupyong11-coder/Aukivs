@@ -25,13 +25,13 @@ const links: NavLink[] = [
     title: "대분류 병합 표(로컬 저장)",
     dividerAfter: true,
   },
-  { href: "/announcement-date", label: "발표일", title: "발표 일정" },
-  { href: "/progress", label: "현재진행", title: "현재 진행 현황" },
-  { href: "/launching", label: "런칭정리", title: "런칭 일정·정리" },
-  { href: "/contracts", label: "계약정리", title: "계약 관련 정리" },
-  { href: "/tasks", label: "업무정리", title: "업무정리 시트 작업" },
-  { href: "/upload-rows", label: "업로드정리", title: "업로드정리 시트 작업" },
-  { href: "/platforms", label: "플랫폼정리", title: "플랫폼정리 시트 작업" },
+  { href: "/announcement-date", label: "발표일 DB", title: "발표 일정" },
+  { href: "/progress", label: "현재진행 DB", title: "현재 진행 현황" },
+  { href: "/launching", label: "런칭정리 DB", title: "런칭 일정·정리" },
+  { href: "/contracts", label: "계약정리 DB", title: "계약 관련 정리" },
+  { href: "/tasks", label: "업무정리 DB", title: "업무정리 시트 작업" },
+  { href: "/upload-rows", label: "업로드정리 DB", title: "업로드정리 시트 작업" },
+  { href: "/platforms", label: "플랫폼정리 DB", title: "플랫폼정리 시트 작업" },
 ];
 
 type AppNavProps = {
