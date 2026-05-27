@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SheetDateInlineCell } from "@/components/SheetDateInlineCell";
 import { TableTruncatedText } from "@/components/TableTruncatedText";
+import { TagSelectInlineCell, isPriorityTagField } from "@/components/TagSelectInlineCell";
 import { isSheetTableDateField } from "@/lib/tableDateFields";
 
 type Props = {
@@ -58,6 +59,19 @@ export function PlatformRowInlineCell({
   }, [editing]);
 
   const alignCls = align === "center" ? "text-center" : "text-left";
+
+  if (isPriorityTagField(field)) {
+    return (
+      <TagSelectInlineCell
+        value={value}
+        field={field}
+        rowId={rowId}
+        disabled={disabled}
+        align={align}
+        onSave={onSave}
+      />
+    );
+  }
 
   if (isSheetTableDateField(field)) {
     return (

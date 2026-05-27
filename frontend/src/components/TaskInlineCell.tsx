@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TableTruncatedText } from "@/components/TableTruncatedText";
+import { TagSelectInlineCell, isPriorityTagField } from "@/components/TagSelectInlineCell";
 
 export type EditableTaskField =
   | "우선순위"
@@ -95,6 +96,19 @@ export function TaskInlineCell({
   function cancel() {
     setDraft(value);
     setEditing(false);
+  }
+
+  if (isPriorityTagField(field)) {
+    return (
+      <TagSelectInlineCell
+        value={value}
+        field={field}
+        rowId={taskId}
+        disabled={disabled}
+        align={align}
+        onSave={(id, f, v) => onSave(id, f as EditableTaskField, v)}
+      />
+    );
   }
 
   if (editing) {
