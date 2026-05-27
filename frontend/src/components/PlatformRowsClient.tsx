@@ -55,7 +55,8 @@ const CHECKBOX_FIELD_CANDIDATES = new Set([
 ]);
 
 const ON_HOLD_FIELD = "보류";
-const ON_HOLD_VISIBILITY_MIGRATION_KEY = "platforms.show_on_hold_v1";
+/** Supabase extra에 값이 없어도 플랫폼정리 표에 항상 노출할 시트 속성 */
+const PINNED_PLATFORM_FIELDS = [ON_HOLD_FIELD] as const;
 
 const COLUMN_ORDER_STORAGE_KEY = "platform_rows_col_order_v2";
 
@@ -100,6 +101,12 @@ function mergeHeaderKeys(items: PlatformRow[]): string[] {
       if (INTERNAL_KEYS.has(k) || seen.has(k)) continue;
       seen.add(k);
       out.push(k);
+    }
+  }
+  for (const pinned of PINNED_PLATFORM_FIELDS) {
+    if (!seen.has(pinned)) {
+      seen.add(pinned);
+      out.push(pinned);
     }
   }
   return ensureOnHoldInColumnOrder(ensureMajorCategoryInColumnOrder(out));
@@ -225,7 +232,7 @@ export function PlatformRowsClient() {
       setUndoToast(null);
       if (list.length > 0) {
         const defaultKeys = mergeHeaderKeys(list);
-        setColumnOrder(loadColumnOrder(defaultKeys));
+        setColumnOrder(ensureOnHoldInColumnOrder(loadColumnOrder(defaultKeys)));
       } else {
         setColumnOrder([]);
       }
@@ -248,15 +255,13 @@ export function PlatformRowsClient() {
   const colLabels = useColumnLabels("platforms");
 
   useEffect(() => {
-    if (state.kind !== "ready") return;
-    if (!columnOrder.includes(ON_HOLD_FIELD)) return;
-    if (typeof window === "undefined") return;
-    if (window.localStorage.getItem(ON_HOLD_VISIBILITY_MIGRATION_KEY)) return;
-    window.localStorage.setItem(ON_HOLD_VISIBILITY_MIGRATION_KEY, "1");
-    if (colVis.hiddenColumns.has(ON_HOLD_FIELD)) {
-      colVis.setColumnVisible(ON_HOLD_FIELD, true);
+    for (const field of PINNED_PLATFORM_FIELDS) {
+      if (!columnOrder.includes(field)) continue;
+      if (colVis.hiddenColumns.has(field)) {
+        colVis.setColumnVisible(field, true);
+      }
     }
-  }, [state, columnOrder, colVis]);
+  }, [columnOrder, colVis.hiddenColumns, colVis.setColumnVisible]);
 
   const syncUndoCount = useCallback(() => {
     setUndoCount(undoStackRef.current.length);
@@ -294,7 +299,7 @@ export function PlatformRowsClient() {
 
   const resetColumnOrder = useCallback(() => {
     if (state.kind !== "ready" || state.items.length === 0) return;
-    const next = mergeHeaderKeys(state.items);
+    const next = ensureOnHoldInColumnOrder(mergeHeaderKeys(state.items));
     persistColumnOrder(next);
     setColumnOrder(next);
   }, [persistColumnOrder, state]);

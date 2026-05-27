@@ -42,6 +42,9 @@ _CORE_SHEET_HEADERS: frozenset[str] = frozenset(
     }
 )
 
+# 시트에 있지만 extra에 아직 값이 없어 마이그레이션에서 빠진 열
+_KNOWN_PLATFORM_EXTRA_HEADERS: frozenset[str] = frozenset({"보류"})
+
 _SELECT = (
     "id,legacy_id,sheet_row,company_name,category,major_category,announcement_date,subsidy_program,"
     "contract_general,blocked,scheduled,in_progress,done,contract_status,meeting,"
@@ -252,13 +255,26 @@ def list_platform_rows(settings: Settings) -> list[dict[str, Any]]:
     )
     if not isinstance(rows, list):
         raise SheetsParseError("Supabase platform_rows 응답 형식 오류")
-    out: list[dict[str, Any]] = []
+    extra_keys: set[str] = set(_KNOWN_PLATFORM_EXTRA_HEADERS)
+    staged: list[dict[str, Any]] = []
     for r in rows:
         if not isinstance(r, dict):
             continue
+        ex = r.get("extra") or {}
+        if isinstance(ex, dict):
+            for k in ex:
+                key = str(k)
+                if key and key not in _CORE_SHEET_HEADERS:
+                    extra_keys.add(key)
         d = _api_dict(r)
         if not str(d.get("회사명") or "").strip():
             continue
+        staged.append(d)
+    out: list[dict[str, Any]] = []
+    for d in staged:
+        for k in extra_keys:
+            if k not in d:
+                d[k] = ""
         out.append(d)
     return out
 
