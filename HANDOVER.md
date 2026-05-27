@@ -287,6 +287,17 @@ CLI 사용 시: Vercel 로그인 필요 (`vercel login`). 프로젝트 루트는
 | 런칭정리 | `launching_col_order_v1` |
 | 현재진행 | `current_progress_col_order_v1` |
 | 발표일 | `announcement_date_col_order_v1` |
+| 업무정리 | `tasks_col_order_v1` |
+| 업로드정리 | `upload_rows_col_order_v1` |
+
+**목록 표시·기간 필터** (7개 정리 화면 공통, `TableListControls`):
+
+| 항목 | 설명 |
+|------|------|
+| 기본 표시 | 10건 (칩: 10·25·50·100·200) |
+| 더보기 | 잘린 건수 펼치기 |
+| 기간 | 전체 / 오늘 / 이번 주 / 이번 달 / 직접 (캘린더 `calendarWindow`와 동일 범위) |
+| 저장 키 | `table_list.{페이지id}.pageSize`, `table_list.{페이지id}.dateRange` |
 
 태그 숨김은 `*.hidden.{필드명}` 형태 (예: `contracts.hidden.계약`).
 

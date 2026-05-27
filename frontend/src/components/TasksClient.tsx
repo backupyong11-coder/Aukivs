@@ -10,7 +10,10 @@ import {
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableListControls } from "@/components/TableListControls";
+import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   TaskInlineCell,
   type EditableTaskField,
@@ -81,6 +84,63 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
   담당자: "",
   메모: "",
 };
+
+const COLUMN_ORDER_STORAGE_KEY = "tasks_col_order_v1";
+
+const TASK_DATA_COLUMNS: {
+  key: EditableTaskField;
+  label: string;
+  sortable?: boolean;
+  wide?: boolean;
+  muted?: boolean;
+  tabular?: boolean;
+  align?: "center";
+}[] = [
+  { key: "우선순위", label: "우선순위", sortable: true, align: "center" },
+  { key: "마감일", label: "마감일", sortable: true, muted: true, tabular: true },
+  { key: "분야", label: "분야", sortable: true },
+  { key: "분류", label: "분류", sortable: true },
+  { key: "업무명", label: "업무명", sortable: true, wide: true },
+  { key: "정량화 분", label: "정량화 분" },
+  { key: "정량화", label: "정량화" },
+  { key: "정량화 구분", label: "정량화 구분" },
+  { key: "시간", label: "시간", sortable: true, tabular: true },
+  { key: "시간변환", label: "시간변환" },
+  { key: "관련플랫폼", label: "관련플랫폼", sortable: true },
+  { key: "세부수치", label: "세부수치" },
+  { key: "세부단위", label: "세부단위" },
+  { key: "관련작품", label: "관련작품" },
+  { key: "난이도", label: "난이도" },
+  { key: "피로도", label: "피로도" },
+  { key: "상태", label: "상태" },
+  { key: "담당자", label: "담당자" },
+  { key: "메모", label: "메모", wide: true, muted: true },
+];
+
+const DEFAULT_COLUMN_ORDER = TASK_DATA_COLUMNS.map((c) => c.key);
+
+function loadColumnOrder(defaultKeys: EditableTaskField[]): EditableTaskField[] {
+  if (typeof window === "undefined") return defaultKeys;
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return defaultKeys;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return defaultKeys;
+    const allowed = new Set(defaultKeys);
+    const out: EditableTaskField[] = [];
+    for (const k of parsed) {
+      if (typeof k === "string" && allowed.has(k as EditableTaskField) && !out.includes(k as EditableTaskField)) {
+        out.push(k as EditableTaskField);
+      }
+    }
+    for (const k of defaultKeys) {
+      if (!out.includes(k)) out.push(k);
+    }
+    return out;
+  } catch {
+    return defaultKeys;
+  }
+}
 
 const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: boolean }[] = [
   { key: "업무명", label: "업무명", required: true },
@@ -220,6 +280,8 @@ export function TasksClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("마감일");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [columnOrder, setColumnOrder] = useState<EditableTaskField[]>(DEFAULT_COLUMN_ORDER);
+  const [dragCol, setDragCol] = useState<EditableTaskField | null>(null);
   const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -268,6 +330,7 @@ export function TasksClient() {
         };
       });
       setState({ kind: "ready", items });
+      setColumnOrder(loadColumnOrder(DEFAULT_COLUMN_ORDER));
       undoStackRef.current = [];
       setUndoCount(0);
       setUndoToast(null);
@@ -277,6 +340,42 @@ export function TasksClient() {
   }, []);
 
   useEffect(() => { void load(); }, [refreshKey, load]);
+
+  const displayColumns = useMemo(() => {
+    const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
+    return columnOrder.map((k) => map.get(k)).filter((c): c is (typeof TASK_DATA_COLUMNS)[number] => !!c);
+  }, [columnOrder]);
+
+  const persistColumnOrder = useCallback((next: EditableTaskField[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const resetColumnOrder = useCallback(() => {
+    persistColumnOrder(DEFAULT_COLUMN_ORDER);
+    setColumnOrder(DEFAULT_COLUMN_ORDER);
+  }, [persistColumnOrder]);
+
+  const handleColDrop = useCallback(
+    (targetField: EditableTaskField) => {
+      if (!dragCol || dragCol === targetField) {
+        setDragCol(null);
+        return;
+      }
+      setColumnOrder((prev) => {
+        const from = prev.indexOf(dragCol);
+        const to = prev.indexOf(targetField);
+        if (from < 0 || to < 0) return prev;
+        const next = [...prev];
+        next.splice(from, 1);
+        next.splice(to, 0, dragCol);
+        persistColumnOrder(next);
+        return next;
+      });
+      setDragCol(null);
+    },
+    [dragCol, persistColumnOrder],
+  );
 
   useEffect(() => {
     return () => {
@@ -493,6 +592,8 @@ export function TasksClient() {
     });
   }, [state, tab, filterText, hiddenPlatforms, hiddenCategories, hiddenPriorities, hiddenFields, sortKey, sortDir]);
 
+  const list = useTableListDisplay("tasks", visible);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
@@ -645,8 +746,10 @@ export function TasksClient() {
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
-  const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
-  const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
+  const thAction = "whitespace-nowrap px-2 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
+  const thSort =
+    "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
+  const tableColSpan = 3 + displayColumns.length;
 
   return (
     <div className="space-y-4">
@@ -662,6 +765,13 @@ export function TasksClient() {
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
+        </button>
+        <button
+          type="button"
+          onClick={resetColumnOrder}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+        >
+          열 순서 초기화
         </button>
         {undoCount > 0 ? (
           <button
@@ -751,42 +861,79 @@ export function TasksClient() {
       )}
 
       {state.kind === "ready" && (
+        <>
+        <TableListControls
+          pageSize={list.pageSize}
+          onPageSizeChange={list.setPageSize}
+          showAll={list.showAll}
+          onShowAll={() => list.setShowAll(true)}
+          totalFiltered={list.totalFiltered}
+          hiddenCount={list.hiddenCount}
+          displayedCount={list.displayed.length}
+          dateFilter={list.dateFilter}
+          onDatePresetChange={list.setDatePreset}
+          onCustomFromChange={list.setCustomFrom}
+          onCustomToChange={list.setCustomTo}
+          dateExcludedCount={list.dateExcludedCount}
+          dateFieldHint={TABLE_LIST_DATE_FIELDS.tasks.join(" · ")}
+        />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2600px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-                <th className={thCls}>수정</th>
-                <th className={thCls}>완료</th>
-                <th className={thSort} onClick={() => handleSort("우선순위")}>우선순위<SortIcon col="우선순위"/></th>
-                <th className={thSort} onClick={() => handleSort("마감일")}>마감일<SortIcon col="마감일"/></th>
-                <th className={thSort} onClick={() => handleSort("분야")}>분야<SortIcon col="분야"/></th>
-                <th className={thSort} onClick={() => handleSort("분류")}>분류<SortIcon col="분류"/></th>
-                <th className={thSort} onClick={() => handleSort("업무명")}>업무명<SortIcon col="업무명"/></th>
-                <th className={thCls}>정량화 분</th>
-                <th className={thCls}>정량화</th>
-                <th className={thCls}>정량화 구분</th>
-                <th className={thSort} onClick={() => handleSort("시간")}>시간<SortIcon col="시간"/></th>
-                <th className={thCls}>시간변환</th>
-                <th className={thSort} onClick={() => handleSort("관련플랫폼")}>관련플랫폼<SortIcon col="관련플랫폼"/></th>
-                <th className={thCls}>세부수치</th>
-                <th className={thCls}>세부단위</th>
-                <th className={thCls}>관련작품</th>
-                <th className={thCls}>난이도</th>
-                <th className={thCls}>피로도</th>
-                <th className={thCls}>상태</th>
-                <th className={thCls}>담당자</th>
-                <th className={thCls}>메모</th>
-                <th className={thCls}>삭제</th>
+                <th className={thAction}>수정</th>
+                <th className={thAction}>완료</th>
+                {displayColumns.map((col) => (
+                  <th
+                    key={col.key}
+                    draggable
+                    onDragStart={() => setDragCol(col.key)}
+                    onDragEnd={() => setDragCol(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleColDrop(col.key)}
+                    className={`group min-w-[5.5rem] align-top ${dragCol === col.key ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
+                  >
+                    {col.sortable ? (
+                      <button
+                        type="button"
+                        className={`${thSort} flex w-full items-center gap-0.5 text-left`}
+                        onClick={() => handleSort(col.key as SortKey)}
+                      >
+                        <span
+                          className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
+                          aria-hidden
+                          title="드래그하여 열 이동"
+                        >
+                          ⋮⋮
+                        </span>
+                        <span className="truncate">{col.label}</span>
+                        <SortIcon col={col.key as SortKey} />
+                      </button>
+                    ) : (
+                      <span className={`${thSort} flex w-full items-center gap-0.5 px-0 py-0`}>
+                        <span
+                          className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
+                          aria-hidden
+                          title="드래그하여 열 이동"
+                        >
+                          ⋮⋮
+                        </span>
+                        <span className="truncate">{col.label}</span>
+                      </span>
+                    )}
+                  </th>
+                ))}
+                <th className={thAction}>삭제</th>
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 ? (
-                <tr><td colSpan={22} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0 || hiddenFields.size > 0
+              {list.totalFiltered === 0 ? (
+                <tr><td colSpan={tableColSpan} className="px-3 py-8 text-center text-zinc-500">
+                  {filterText || hiddenPlatforms.size > 0 || hiddenCategories.size > 0 || hiddenPriorities.size > 0 || hiddenFields.size > 0 || list.dateFilter.preset !== "all"
                     ? "조건에 맞는 항목이 없습니다"
                     : `${tab} 업무가 없습니다`}
                 </td></tr>
-              ) : visible.map(item => (
+              ) : list.displayed.map(item => (
                 <tr key={item.id}
                   className={`border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 ${isDone(item) ? "opacity-50" : ""}`}>
                   <td className="px-2 py-1.5">
@@ -805,183 +952,28 @@ export function TasksClient() {
                       className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
                     />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.우선순위}
-                      field="우선순위"
-                      taskId={item.id}
-                      align="center"
-                      disabled={isCellPatching(item.id, "우선순위")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
-                    <TaskInlineCell
-                      value={item.마감일}
-                      field="마감일"
-                      taskId={item.id}
-                      muted
-                      tabular
-                      disabled={isCellPatching(item.id, "마감일")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.분야}
-                      field="분야"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "분야")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.분류}
-                      field="분류"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "분류")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.업무명}
-                      field="업무명"
-                      taskId={item.id}
-                      wide
-                      disabled={isCellPatching(item.id, "업무명")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item["정량화 분"]}
-                      field="정량화 분"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "정량화 분")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.정량화}
-                      field="정량화"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "정량화")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item["정량화 구분"]}
-                      field="정량화 구분"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "정량화 구분")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
-                    <TaskInlineCell
-                      value={item.시간}
-                      field="시간"
-                      taskId={item.id}
-                      tabular
-                      disabled={isCellPatching(item.id, "시간")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.시간변환}
-                      field="시간변환"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "시간변환")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.관련플랫폼}
-                      field="관련플랫폼"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "관련플랫폼")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.세부수치}
-                      field="세부수치"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "세부수치")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.세부단위}
-                      field="세부단위"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "세부단위")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="max-w-[8rem] px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.관련작품}
-                      field="관련작품"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "관련작품")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.난이도}
-                      field="난이도"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "난이도")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.피로도}
-                      field="피로도"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "피로도")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.상태}
-                      field="상태"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "상태")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="max-w-[8rem] px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.담당자}
-                      field="담당자"
-                      taskId={item.id}
-                      disabled={isCellPatching(item.id, "담당자")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
-                  <td className="max-w-[12rem] px-3 py-1.5">
-                    <TaskInlineCell
-                      value={item.메모}
-                      field="메모"
-                      taskId={item.id}
-                      muted
-                      disabled={isCellPatching(item.id, "메모")}
-                      onSave={handleInlineSave}
-                    />
-                  </td>
+                  {displayColumns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`px-3 py-1.5 ${
+                        col.tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"
+                      } ${col.key === "관련작품" || col.key === "담당자" ? "max-w-[8rem]" : ""} ${
+                        col.key === "메모" ? "max-w-[12rem]" : ""
+                      }`}
+                    >
+                      <TaskInlineCell
+                        value={item[col.key] ?? ""}
+                        field={col.key}
+                        taskId={item.id}
+                        align={col.align}
+                        wide={col.wide}
+                        muted={col.muted}
+                        tabular={col.tabular}
+                        disabled={isCellPatching(item.id, col.key)}
+                        onSave={handleInlineSave}
+                      />
+                    </td>
+                  ))}
                   <td className="px-2 py-1.5">
                     <button type="button" onClick={() => void handleDelete(item)}
                       className="whitespace-nowrap rounded border border-red-200 bg-red-50 px-2 py-0.5 text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
@@ -993,6 +985,7 @@ export function TasksClient() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {editItem && (

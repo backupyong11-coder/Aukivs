@@ -8,6 +8,9 @@ import {
   useState,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableListControls } from "@/components/TableListControls";
+import { useTableListDisplay } from "@/hooks/useTableListDisplay";
+import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   PlatformRowInlineCell,
   boolToCell,
@@ -431,6 +434,8 @@ export function PlatformRowsClient() {
     });
   }, [state, filterText, hiddenByField, sortKey, sortDir, columnOrder]);
 
+  const list = useTableListDisplay("platforms", sorted);
+
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -584,6 +589,22 @@ export function PlatformRowsClient() {
       )}
 
       {state.kind === "ready" && columnOrder.length > 0 && (
+        <>
+        <TableListControls
+          pageSize={list.pageSize}
+          onPageSizeChange={list.setPageSize}
+          showAll={list.showAll}
+          onShowAll={() => list.setShowAll(true)}
+          totalFiltered={list.totalFiltered}
+          hiddenCount={list.hiddenCount}
+          displayedCount={list.displayed.length}
+          dateFilter={list.dateFilter}
+          onDatePresetChange={list.setDatePreset}
+          onCustomFromChange={list.setCustomFrom}
+          onCustomToChange={list.setCustomTo}
+          dateExcludedCount={list.dateExcludedCount}
+          dateFieldHint={TABLE_LIST_DATE_FIELDS.platforms.join(" · ")}
+        />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2400px] text-xs">
             <thead>
@@ -619,16 +640,16 @@ export function PlatformRowsClient() {
               </tr>
             </thead>
             <tbody>
-              {sorted.length === 0 ? (
+              {list.totalFiltered === 0 ? (
                 <tr>
                   <td colSpan={tableColSpan} className="px-3 py-8 text-center text-zinc-500">
-                    {filterText || FILTER_TAG_FIELDS.some((f) => hiddenByField[f].size > 0)
+                    {filterText || FILTER_TAG_FIELDS.some((f) => hiddenByField[f].size > 0) || list.dateFilter.preset !== "all"
                       ? "조건에 맞는 항목이 없습니다"
                       : "항목이 없습니다"}
                   </td>
                 </tr>
               ) : (
-                sorted.map((item) => (
+                list.displayed.map((item) => (
                   <tr
                     key={item.id}
                     className="border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40"
@@ -672,6 +693,7 @@ export function PlatformRowsClient() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {state.kind === "ready" && columnOrder.length === 0 && (

@@ -10,6 +10,9 @@ import {
   type SetStateAction,
 } from "react";
 import { FilterTagsFlow } from "@/components/FilterTagsFlow";
+import { TableListControls } from "@/components/TableListControls";
+import { useTableListDisplay } from "@/hooks/useTableListDisplay";
+import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   UploadRowInlineCell,
   type EditableUploadRowField,
@@ -47,6 +50,8 @@ type ViewState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: UploadRow[] };
 
+const COLUMN_ORDER_STORAGE_KEY = "upload_rows_col_order_v1";
+
 const TABLE_COLUMNS: {
   key: EditableUploadRowField;
   label: string;
@@ -71,6 +76,31 @@ const TABLE_COLUMNS: {
   { key: "마지막업로드회수", label: "마지막회수", tabular: true },
   { key: "비고", label: "비고", wide: true, muted: true },
 ];
+
+const DEFAULT_COLUMN_ORDER = TABLE_COLUMNS.map((c) => c.key);
+
+function loadColumnOrder(defaultKeys: EditableUploadRowField[]): EditableUploadRowField[] {
+  if (typeof window === "undefined") return defaultKeys;
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return defaultKeys;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return defaultKeys;
+    const allowed = new Set(defaultKeys);
+    const out: EditableUploadRowField[] = [];
+    for (const k of parsed) {
+      if (typeof k === "string" && allowed.has(k as EditableUploadRowField) && !out.includes(k as EditableUploadRowField)) {
+        out.push(k as EditableUploadRowField);
+      }
+    }
+    for (const k of defaultKeys) {
+      if (!out.includes(k)) out.push(k);
+    }
+    return out;
+  } catch {
+    return defaultKeys;
+  }
+}
 
 export const EDIT_FIELDS: { key: keyof UploadRow; label: string; required?: boolean }[] = [
   { key: "작품명", label: "작품명", required: true },
@@ -214,6 +244,8 @@ export function UploadRowsClient() {
   const [tab, setTab] = useState<TabType>("미완료");
   const [sortKey, setSortKey] = useState<SortKey>("업로드일");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [columnOrder, setColumnOrder] = useState<EditableUploadRowField[]>(DEFAULT_COLUMN_ORDER);
+  const [dragCol, setDragCol] = useState<EditableUploadRowField | null>(null);
   const [hiddenPlatforms, setHiddenPlatforms] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -246,6 +278,7 @@ export function UploadRowsClient() {
         };
       });
       setState({ kind: "ready", items });
+      setColumnOrder(loadColumnOrder(DEFAULT_COLUMN_ORDER));
       undoStackRef.current = [];
       setUndoCount(0);
       setUndoToast(null);
@@ -255,6 +288,42 @@ export function UploadRowsClient() {
   }, []);
 
   useEffect(() => { void load(); }, [refreshKey, load]);
+
+  const displayColumns = useMemo(() => {
+    const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
+    return columnOrder.map((k) => map.get(k)).filter((c): c is (typeof TABLE_COLUMNS)[number] => !!c);
+  }, [columnOrder]);
+
+  const persistColumnOrder = useCallback((next: EditableUploadRowField[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const resetColumnOrder = useCallback(() => {
+    persistColumnOrder(DEFAULT_COLUMN_ORDER);
+    setColumnOrder(DEFAULT_COLUMN_ORDER);
+  }, [persistColumnOrder]);
+
+  const handleColDrop = useCallback(
+    (targetField: EditableUploadRowField) => {
+      if (!dragCol || dragCol === targetField) {
+        setDragCol(null);
+        return;
+      }
+      setColumnOrder((prev) => {
+        const from = prev.indexOf(dragCol);
+        const to = prev.indexOf(targetField);
+        if (from < 0 || to < 0) return prev;
+        const next = [...prev];
+        next.splice(from, 1);
+        next.splice(to, 0, dragCol);
+        persistColumnOrder(next);
+        return next;
+      });
+      setDragCol(null);
+    },
+    [dragCol, persistColumnOrder],
+  );
 
   useEffect(() => {
     return () => {
@@ -426,6 +495,8 @@ export function UploadRowsClient() {
     });
   }, [state, tab, filterText, hiddenPlatforms, hiddenWorks, sortKey, sortDir]);
 
+  const list = useTableListDisplay("upload-rows", visible);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
@@ -558,10 +629,11 @@ export function UploadRowsClient() {
     return <span className="ml-0.5">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
-  const thCls = "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
-  const thSort = thCls + " cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
+  const thAction = "whitespace-nowrap px-2 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400";
+  const thSort =
+    "whitespace-nowrap px-3 py-2 text-left font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100";
 
-  const tableColSpan = 3 + TABLE_COLUMNS.length;
+  const tableColSpan = 3 + displayColumns.length;
 
   return (
     <div className="space-y-4">
@@ -576,6 +648,13 @@ export function UploadRowsClient() {
         <button onClick={() => setRefreshKey(k => k + 1)}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:text-zinc-300">
           새로고침
+        </button>
+        <button
+          type="button"
+          onClick={resetColumnOrder}
+          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+        >
+          열 순서 초기화
         </button>
         {undoCount > 0 ? (
           <button
@@ -649,26 +728,64 @@ export function UploadRowsClient() {
       )}
 
       {state.kind === "ready" && (
+        <>
+        <TableListControls
+          pageSize={list.pageSize}
+          onPageSizeChange={list.setPageSize}
+          showAll={list.showAll}
+          onShowAll={() => list.setShowAll(true)}
+          totalFiltered={list.totalFiltered}
+          hiddenCount={list.hiddenCount}
+          displayedCount={list.displayed.length}
+          dateFilter={list.dateFilter}
+          onDatePresetChange={list.setDatePreset}
+          onCustomFromChange={list.setCustomFrom}
+          onCustomToChange={list.setCustomTo}
+          dateExcludedCount={list.dateExcludedCount}
+          dateFieldHint={TABLE_LIST_DATE_FIELDS["upload-rows"].join(" · ")}
+        />
         <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[2200px] text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-                <th className={thCls}>수정</th>
-                <th className={thCls}>완료</th>
-                {TABLE_COLUMNS.map(({ key, label }) => (
-                  <th key={key} className={thSort} onClick={() => handleSort(key)}>
-                    {label}<SortIcon col={key}/>
+                <th className={thAction}>수정</th>
+                <th className={thAction}>완료</th>
+                {displayColumns.map(({ key, label }) => (
+                  <th
+                    key={key}
+                    draggable
+                    onDragStart={() => setDragCol(key)}
+                    onDragEnd={() => setDragCol(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleColDrop(key)}
+                    className={`group min-w-[5.5rem] align-top ${dragCol === key ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className={`${thSort} flex w-full items-center gap-0.5 text-left`}
+                      onClick={() => handleSort(key)}
+                    >
+                      <span
+                        className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
+                        aria-hidden
+                        title="드래그하여 열 이동"
+                      >
+                        ⋮⋮
+                      </span>
+                      <span className="truncate">{label}</span>
+                      <SortIcon col={key} />
+                    </button>
                   </th>
                 ))}
-                <th className={thCls}>삭제</th>
+                <th className={thAction}>삭제</th>
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 ? (
+              {list.totalFiltered === 0 ? (
                 <tr><td colSpan={tableColSpan} className="px-3 py-8 text-center text-zinc-500">
-                  {filterText || hiddenPlatforms.size > 0 || hiddenWorks.size > 0 ? "조건에 맞는 항목이 없습니다" : `${tab} 업로드가 없습니다`}
+                  {filterText || hiddenPlatforms.size > 0 || hiddenWorks.size > 0 || list.dateFilter.preset !== "all" ? "조건에 맞는 항목이 없습니다" : `${tab} 업로드가 없습니다`}
                 </td></tr>
-              ) : visible.map(item => (
+              ) : list.displayed.map(item => (
                 <tr key={item.id}
                   className={`border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900/50 ${isDone(item) ? "opacity-50" : ""}`}>
                   <td className="px-2 py-1.5">
@@ -687,7 +804,7 @@ export function UploadRowsClient() {
                       className="h-4 w-4 accent-emerald-600 disabled:opacity-50 dark:accent-emerald-400"
                     />
                   </td>
-                  {TABLE_COLUMNS.map(({ key, wide, muted, tabular }) => (
+                  {displayColumns.map(({ key, wide, muted, tabular }) => (
                     <td
                       key={key}
                       className={`px-3 py-1.5 ${tabular ? "whitespace-nowrap tabular-nums" : "whitespace-nowrap"} ${wide ? "max-w-[280px]" : ""}`}
@@ -715,6 +832,7 @@ export function UploadRowsClient() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {editItem && (
