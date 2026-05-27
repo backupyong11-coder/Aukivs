@@ -357,7 +357,9 @@ export function TasksClient() {
 
   const colVis = useTableColumnVisibility("tasks", columnOrder);
   const colLabels = useColumnLabels("tasks");
-  const colWidths = useTableColumnWidths("tasks", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("tasks", colVis.visibleKeys, (k) =>
+    colLabels.getLabel(k, TASK_DATA_COLUMNS.find((c) => c.key === k)?.label),
+  );
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TASK_DATA_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys

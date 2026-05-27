@@ -304,7 +304,9 @@ export function UploadRowsClient() {
 
   const colVis = useTableColumnVisibility("upload-rows", columnOrder);
   const colLabels = useColumnLabels("upload-rows");
-  const colWidths = useTableColumnWidths("upload-rows", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("upload-rows", colVis.visibleKeys, (k) =>
+    colLabels.getLabel(k, TABLE_COLUMNS.find((c) => c.key === k)?.label),
+  );
   const visibleDisplayColumns = useMemo(() => {
     const map = new Map(TABLE_COLUMNS.map((c) => [c.key, c]));
     return colVis.visibleKeys

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clampColumnWidth,
   defaultWidthForField,
+  effectiveColumnWidth,
+  minWidthForLabel,
   loadColumnWidths,
   saveColumnWidths,
   sumTableWidthPx,
@@ -32,7 +34,11 @@ function mergeWidths(
   return out;
 }
 
-export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]) {
+export function useTableColumnWidths(
+  pageId: TableListPageId,
+  dataKeys: string[],
+  labelForKey: (key: string) => string = (k) => k,
+) {
   const [widths, setWidths] = useState<Record<string, number>>(() =>
     loadColumnWidths(pageId),
   );
@@ -78,8 +84,12 @@ export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]
   }, [dataKeys]);
 
   const getWidth = useCallback(
-    (key: string) => widths[key] ?? defaultWidthForField(key),
-    [widths],
+    (key: string) => {
+      const stored = widths[key] ?? defaultWidthForField(key);
+      const label = labelForKey(key);
+      return effectiveColumnWidth(stored, label, key);
+    },
+    [widths, labelForKey],
   );
 
   const persist = useCallback(
@@ -96,13 +106,15 @@ export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]
 
   const startResize = useCallback(
     (key: string, clientX: number) => {
+      const label = labelForKey(key);
+      const floor = minWidthForLabel(label);
       const startW = getWidth(key);
       resizeRef.current = { key, startX: clientX, startW };
 
       const onMove = (e: MouseEvent) => {
         if (!resizeRef.current) return;
         const delta = e.clientX - resizeRef.current.startX;
-        const w = clampColumnWidth(resizeRef.current.startW + delta);
+        const w = Math.max(floor, clampColumnWidth(resizeRef.current.startW + delta));
         setWidths((prev) => ({ ...prev, [resizeRef.current!.key]: w }));
       };
 
@@ -123,7 +135,7 @@ export function useTableColumnWidths(pageId: TableListPageId, dataKeys: string[]
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [getWidth, persist],
+    [getWidth, labelForKey, persist],
   );
 
   const tableMinWidth = useCallback(

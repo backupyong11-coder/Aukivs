@@ -511,7 +511,7 @@ export function LaunchingClient() {
   const list = useTableListDisplay("launching", visible);
   const colVis = useTableColumnVisibility("launching", columnOrder);
   const colLabels = useColumnLabels("launching");
-  const colWidths = useTableColumnWidths("launching", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("launching", colVis.visibleKeys, colLabels.getLabel);
   const launchingLeadingActions = hasCompleteColumn ? 2 : 1;
 
   const handleSort = (key: string) => {

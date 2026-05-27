@@ -513,7 +513,7 @@ export function ContractsClient() {
   const list = useTableListDisplay("contracts", visible);
   const colVis = useTableColumnVisibility("contracts", columnOrder);
   const colLabels = useColumnLabels("contracts");
-  const colWidths = useTableColumnWidths("contracts", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("contracts", colVis.visibleKeys, colLabels.getLabel);
   const contractLeadingActions = hasCompleteColumn ? 2 : 1;
 
   const handleSort = (key: string) => {

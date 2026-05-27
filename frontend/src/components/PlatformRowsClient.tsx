@@ -446,7 +446,7 @@ export function PlatformRowsClient() {
   const list = useTableListDisplay("platforms", sorted);
   const colVis = useTableColumnVisibility("platforms", columnOrder);
   const colLabels = useColumnLabels("platforms");
-  const colWidths = useTableColumnWidths("platforms", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("platforms", colVis.visibleKeys, colLabels.getLabel);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));

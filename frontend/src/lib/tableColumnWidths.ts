@@ -1,12 +1,22 @@
 import type { TableListPageId } from "@/lib/tableListView";
 
-export const DEFAULT_COLUMN_WIDTH_PX = 104;
-export const MIN_COLUMN_WIDTH_PX = 56;
+export const DEFAULT_COLUMN_WIDTH_PX = 112;
+export const MIN_COLUMN_WIDTH_PX = 72;
 export const MAX_COLUMN_WIDTH_PX = 560;
 export const TABLE_ACTION_COLUMN_WIDTH_PX = 72;
 
 function storageKey(pageId: TableListPageId) {
   return `table_list.${pageId}.columnWidths`;
+}
+
+/** 헤더 라벨이 잘리지 않도록 하는 최소 너비(⋮⋮ + ⋯ 메뉴 + 글자) */
+export function minWidthForLabel(label: string): number {
+  const text = label.trim() || "열";
+  return clampColumnWidth(48 + text.length * 12);
+}
+
+export function effectiveColumnWidth(stored: number, label: string, field: string): number {
+  return Math.max(stored, minWidthForLabel(label), defaultWidthForField(field));
 }
 
 export function defaultWidthForField(field: string): number {
@@ -22,7 +32,7 @@ export function defaultWidthForField(field: string): number {
     return 140;
   }
   if (field.includes("일") || field === "마감일") return 96;
-  return DEFAULT_COLUMN_WIDTH_PX;
+  return Math.max(DEFAULT_COLUMN_WIDTH_PX, minWidthForLabel(field));
 }
 
 export function clampColumnWidth(px: number): number {

@@ -490,7 +490,7 @@ export function CurrentProgressClient() {
   const list = useTableListDisplay("progress", visible);
   const colVis = useTableColumnVisibility("progress", columnOrder);
   const colLabels = useColumnLabels("progress");
-  const colWidths = useTableColumnWidths("progress", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths("progress", colVis.visibleKeys, colLabels.getLabel);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));

@@ -1,46 +1,15 @@
 "use client";
 
-const iconBtn =
-  "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/80 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200";
+import { useEffect, useRef, useState } from "react";
 
-function IconSort({ active, dir }: { active: boolean; dir?: "asc" | "desc" }) {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-      {!active ? (
-        <path d="M4 6h8v1H4V6zm0 3h5v1H4V9zm0 3h3v1H4v-1zM11 4l3 3h-2v5h-2V7H8l3-3z" opacity="0.45" />
-      ) : dir === "asc" ? (
-        <path d="M8 3l4 5H4l4-5zm0 10V8h2v5H8z" />
-      ) : (
-        <path d="M8 13l-4-5h8l-4 5zm0-10v5H6V3h2z" />
-      )}
-    </svg>
-  );
-}
+const menuBtn =
+  "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-200/80 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200";
 
-function IconEye() {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
-      <circle cx="8" cy="8" r="2" />
-    </svg>
-  );
-}
+const menuItem =
+  "block w-full rounded px-2 py-1.5 text-left text-[11px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800";
 
-function IconEdit() {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" />
-    </svg>
-  );
-}
-
-function IconDelete() {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M3 4h10M6 4V3h4v1M5 7v5M8 7v5M11 7v5M4 4l.5 9h7L12 4" />
-    </svg>
-  );
-}
+const menuItemDanger =
+  "block w-full rounded px-2 py-1.5 text-left text-[11px] text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40";
 
 export function TableColumnHeader(props: {
   field: string;
@@ -63,7 +32,6 @@ export function TableColumnHeader(props: {
   const {
     label,
     widthPx,
-    onResizeStart,
     dragActive,
     sortable = true,
     sortActive,
@@ -76,18 +44,39 @@ export function TableColumnHeader(props: {
     onHide,
     onEdit,
     onDelete,
+    onResizeStart,
   } = props;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <th
       onDragOver={onDragOver}
       onDrop={onDrop}
-      style={{ width: widthPx, minWidth: widthPx, maxWidth: widthPx }}
-      className={`group relative overflow-hidden align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
+      style={{
+        width: widthPx,
+        minWidth: widthPx,
+        maxWidth: widthPx,
+      }}
+      className={`group relative align-top font-semibold text-zinc-600 dark:text-zinc-400 ${
         dragActive ? "bg-zinc-200/80 dark:bg-zinc-700/80" : ""
       }`}
     >
-      <div className="flex items-center gap-0.5 px-1.5 py-1.5 pr-2">
+      <div className="relative flex min-h-[2.125rem] items-center py-1 pl-4 pr-6">
         <span
           draggable
           onDragStart={(e) => {
@@ -95,68 +84,103 @@ export function TableColumnHeader(props: {
             onDragStart();
           }}
           onDragEnd={onDragEnd}
-          className="shrink-0 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
+          className="absolute left-0.5 top-1/2 -translate-y-1/2 cursor-grab text-[10px] leading-none text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing dark:text-zinc-500"
           aria-hidden
           title="드래그하여 열 이동"
         >
           ⋮⋮
         </span>
-        <span className="min-w-0 flex-1 truncate text-left text-[11px]" title={label}>
+
+        <span
+          className="min-w-0 flex-1 whitespace-nowrap text-left text-[11px] leading-snug text-zinc-700 dark:text-zinc-200"
+          title={label}
+        >
           {label}
-        </span>
-        <div className="flex shrink-0 items-center gap-px opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          {sortable && onSort ? (
-            <button
-              type="button"
-              className={`${iconBtn} ${sortActive ? "text-zinc-700 dark:text-zinc-200" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSort();
-              }}
-              title="정렬"
-              aria-label={`${label} 정렬`}
-            >
-              <IconSort active={!!sortActive} dir={sortDir} />
-            </button>
+          {sortActive ? (
+            <span className="ml-0.5 font-normal text-zinc-500" aria-hidden>
+              {sortDir === "asc" ? " ↑" : " ↓"}
+            </span>
           ) : null}
+        </span>
+
+        <div
+          ref={menuRef}
+          className="absolute right-5 top-1/2 z-20 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[:focus-visible]:opacity-100"
+          style={menuOpen ? { opacity: 1 } : undefined}
+        >
           <button
             type="button"
-            className={iconBtn}
+            className={`${menuBtn} ${menuOpen ? "bg-zinc-200/80 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
-              onHide();
+              setMenuOpen((o) => !o);
             }}
-            title="열 숨기기"
-            aria-label={`${label} 숨기기`}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            title="열 메뉴"
+            aria-label={`${label} 메뉴`}
           >
-            <IconEye />
+            <span className="text-sm leading-none" aria-hidden>
+              ⋯
+            </span>
           </button>
-          <button
-            type="button"
-            className={iconBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            title="열 이름 편집"
-            aria-label={`${label} 이름 편집`}
-          >
-            <IconEdit />
-          </button>
-          <button
-            type="button"
-            className={`${iconBtn} hover:text-red-600 dark:hover:text-red-400`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            title="열 제거(숨김)"
-            aria-label={`${label} 제거`}
-          >
-            <IconDelete />
-          </button>
+
+          {menuOpen ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-50 mt-0.5 min-w-[7.5rem] rounded-md border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              {sortable && onSort ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItem}
+                  onClick={() => {
+                    onSort();
+                    closeMenu();
+                  }}
+                >
+                  정렬{sortActive ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItem}
+                onClick={() => {
+                  onHide();
+                  closeMenu();
+                }}
+              >
+                숨기기
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItem}
+                onClick={() => {
+                  onEdit();
+                  closeMenu();
+                }}
+              >
+                이름 편집
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemDanger}
+                onClick={() => {
+                  onDelete();
+                  closeMenu();
+                }}
+              >
+                제거
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+
       <div
         role="separator"
         aria-orientation="vertical"

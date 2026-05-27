@@ -482,7 +482,11 @@ export function AnnouncementDateClient() {
   });
   const colVis = useTableColumnVisibility("announcement-date", columnOrder);
   const colLabels = useColumnLabels("announcement-date");
-  const colWidths = useTableColumnWidths("announcement-date", colVis.visibleKeys);
+  const colWidths = useTableColumnWidths(
+    "announcement-date",
+    colVis.visibleKeys,
+    colLabels.getLabel,
+  );
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
