@@ -124,6 +124,13 @@ export function TableListControls(props: {
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           표시
         </span>
+        <button
+          type="button"
+          className={chipBtn(pageSize === "all")}
+          onClick={() => onPageSizeChange("all")}
+        >
+          전체
+        </button>
         {TABLE_PAGE_SIZE_OPTIONS.map((n) => (
           <button
             key={n}
@@ -161,7 +168,7 @@ export function TableListControls(props: {
                     더보기
                   </button>
                 </>
-              ) : showAll && totalFiltered > pageSize ? (
+              ) : showAll && pageSize !== "all" && typeof pageSize === "number" && totalFiltered > pageSize ? (
                 <span className="text-zinc-400"> (전체)</span>
               ) : null}
             </>

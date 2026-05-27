@@ -5,8 +5,9 @@ import {
 } from "@/lib/calendarWindow";
 import { normalizeSheetDateYmd, seoulYmdPartsNow, ymdFromParts } from "@/lib/sheetDates";
 
-export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200] as const;
-export type TablePageSize = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
+export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200, 300, 500] as const;
+export type TablePageSizeNumber = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
+export type TablePageSize = TablePageSizeNumber | "all";
 export const DEFAULT_TABLE_PAGE_SIZE: TablePageSize = 10;
 
 export type TableListPageId =
@@ -152,8 +153,9 @@ export function loadTablePageSize(pageId: TableListPageId): TablePageSize {
   if (typeof window === "undefined") return DEFAULT_TABLE_PAGE_SIZE;
   try {
     const raw = localStorage.getItem(storageKey(pageId, "pageSize"));
+    if (raw === "all") return "all";
     const n = Number(raw);
-    if (TABLE_PAGE_SIZE_OPTIONS.includes(n as TablePageSize)) return n as TablePageSize;
+    if (TABLE_PAGE_SIZE_OPTIONS.includes(n as TablePageSizeNumber)) return n as TablePageSizeNumber;
   } catch {
     /* ignore */
   }
@@ -197,13 +199,13 @@ export function saveDateRangeFilter(pageId: TableListPageId, filter: DateRangeFi
   }
 }
 
-export function sliceTableRows<T>(items: T[], pageSize: number, showAll: boolean): {
+export function sliceTableRows<T>(items: T[], pageSize: TablePageSize, showAll: boolean): {
   displayed: T[];
   hiddenCount: number;
   total: number;
 } {
   const total = items.length;
-  const limit = showAll ? total : pageSize;
+  const limit = pageSize === "all" || showAll ? total : pageSize;
   const displayed = items.slice(0, limit);
   const hiddenCount = Math.max(0, total - displayed.length);
   return { displayed, hiddenCount, total };
