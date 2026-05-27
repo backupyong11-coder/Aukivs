@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SheetDateInlineCell } from "@/components/SheetDateInlineCell";
+import { isSheetTableDateField } from "@/lib/tableDateFields";
 
 type Props = {
   value: string;
@@ -57,6 +59,22 @@ export function PlatformRowInlineCell({
 
   const alignCls = align === "center" ? "text-center" : "text-left";
   const toneCls = muted ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-50";
+
+  if (isSheetTableDateField(field)) {
+    return (
+      <SheetDateInlineCell
+        value={value}
+        field={field}
+        rowId={rowId}
+        disabled={disabled}
+        align={align}
+        wide={wide}
+        muted={muted}
+        tabular={tabular}
+        onSave={onSave}
+      />
+    );
+  }
 
   if (boolean) {
     return (

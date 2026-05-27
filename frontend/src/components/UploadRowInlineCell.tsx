@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SheetDateInlineCell } from "@/components/SheetDateInlineCell";
+import { isSheetTableDateField } from "@/lib/tableDateFields";
 
 export type EditableUploadRowField =
   | "업로드일"
@@ -66,6 +68,23 @@ export function UploadRowInlineCell({
   const alignCls = align === "center" ? "text-center" : "text-left";
   const toneCls = muted ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-50";
   const fontCls = field === "작품명" ? "font-medium" : "";
+
+  if (isSheetTableDateField(field)) {
+    return (
+      <SheetDateInlineCell
+        value={value}
+        field={field}
+        rowId={rowId}
+        disabled={disabled}
+        align={align}
+        className={className}
+        wide={wide}
+        muted={muted}
+        tabular={tabular}
+        onSave={(id, f, v) => onSave(id, f as EditableUploadRowField, v)}
+      />
+    );
+  }
 
   async function commit() {
     const trimmed = draft.trim();
