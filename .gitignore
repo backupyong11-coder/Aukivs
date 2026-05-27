@@ -4,6 +4,8 @@ credentials.json
 .env.local
 backend/.env
 frontend/.env.local
+secrets/*
+!secrets/PC이전_복사체크리스트.txt
 
 # --- Frontend (Next.js) ---
 frontend/.next/

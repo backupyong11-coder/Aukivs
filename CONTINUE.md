@@ -1,47 +1,45 @@
-# B PC에서 5분 안에 이어하기
+# PC 이전 — 5분 요약
 
-> 상세는 [HANDOVER.md](./HANDOVER.md) **§0** 참고.
+> **전체:** [PC_이전_가이드.md](./PC_이전_가이드.md) · **Cursor:** [CURSOR_시작프롬프트.md](./CURSOR_시작프롬프트.md)
 
-## 1. 코드 받기
+## 1. 코드
 
 ```powershell
 git clone https://github.com/backupyong11-coder/Aukivs.git
 cd Aukivs
-git pull origin master
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-new-pc.ps1
 ```
 
-## 2. 환경 파일 (Git에 없음 — A에서 복사)
+## 2. 옛 PC에서 복사 (Git 없음)
 
-| 파일 | 위치 |
-|------|------|
-| `backend/.env` | `DATA_BACKEND`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
-| `frontend/.env.local` | `DEMO_PIN`, `OPSPROXY_TARGET=http://127.0.0.1:8001` |
+- `backend/.env` · `frontend/.env.local` · (선택) Google JSON · `secrets/PC이전_복사체크리스트.txt` 참고
 
 ## 3. 실행
 
 ```powershell
-# 터미널 1
+# T1
 cd backend
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8001
 
-# 터미널 2
+# T2
 cd frontend
-npm install
 npm run dev
 ```
 
 → http://localhost:3000
 
-## 4. Cursor
+## 4. 운영 배포
 
-- 같은 계정 로그인
-- **새 채팅**에서: `HANDOVER.md §0 읽고 이어서 …`
+| 대상 | 방법 |
+|------|------|
+| 프론트 | `git push` → Vercel 자동 |
+| **백엔드** | `cd backend; flyctl deploy --app backend-patient-wave-707` |
 
-## 5. 안 넘어오는 것
+## 5. Cursor
 
-채팅 기록 · localStorage(열 순서/태그) · 미 push 커밋
+새 채팅 → `CURSOR_시작프롬프트.md` 붙여넣기
 
-## 최근 작업 요약
+## 최근 (2026-05)
 
-7개 정리 페이지: 인라인 수정, 되돌리기, 열 드래그, `FilterTagsFlow` 태그 필터.  
-최신 커밋: `git log -3 --oneline`
+- 업무담당(`work_assignee`) · 인물별 대시보드 · 지속진행 보류 탭
+- Fly 미배포 시 업무정리 400 → `flyctl deploy` 필수

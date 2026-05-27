@@ -64,47 +64,32 @@ npm run dev
 | **필터 패널 접힘** | 기본 접힘은 코드 기본값; 그룹별 접힘은 세션마다 |
 | **미커밋 파일** | push 안 하면 없음 |
 
-### 0-5. 현재 master 최근 작업 (2026-05-27)
+### 0-5. 현재 master 최근 작업 (2026-05-28)
 
-프론트 **정리 화면 UX 통일** (배포: `master` push → Vercel 자동):
+**PC 이전:** [PC_이전_가이드.md](./PC_이전_가이드.md) · [scripts/setup-new-pc.ps1](./scripts/setup-new-pc.ps1)
 
 | 메뉴 | 경로 | 데이터 API | 주요 파일 |
 |------|------|------------|-----------|
-| 업무정리 | `/tasks` | `GET/POST /tasks` | `TasksClient.tsx` |
-| 업로드정리 | `/upload-rows` | `/upload-rows` | `UploadRowsClient.tsx` |
+| 업무정리 | `/tasks` | `GET/POST /tasks` | `TasksClient.tsx`, `taskAssignee.ts` |
+| **인물별** | `/personnel` | `/tasks` + 인물 보드 | `PersonnelHubClient.tsx` |
+| 지속진행 | `/progress` | `/platform-rows` | `CurrentProgressClient.tsx`, `platformProgress.ts` |
 | 플랫폼정리 | `/platforms` | `/platform-rows` | `PlatformRowsClient.tsx` |
-| 계약정리 | `/contracts` | `/platform-rows` | `ContractsClient.tsx` |
-| 런칭정리 | `/launching` | `/upload-rows` | `LaunchingClient.tsx` |
-| 현재진행 | `/progress` | `/platform-rows` | `CurrentProgressClient.tsx` |
-| 발표일 | `/announcement-date` | `/platform-rows` | `AnnouncementDateClient.tsx` |
+| 계약·런칭·업로드·발표일 | 각 경로 | platform/upload rows | HANDOVER 표 참고 |
 
-**공통 UX**
+**데이터·스키마**
 
-- 셀 호버/클릭 **인라인 수정** (`PlatformRowInlineCell` / `UploadRowInlineCell`)
-- 체크박스·불리언 변경 시 **되돌리기** (토스트 + Ctrl+Z + 상단 버튼)
-- 헤더 **⋮⋮** 드래그로 **열 순서** 변경 (`localStorage`, 페이지별 키 — 아래 6-3)
-- **태그 필터** 공통: `frontend/src/components/FilterTagsFlow.tsx`  
-  - 그레이 칩, 그룹별 접기, **전체 패널 접기(기본: 접힘)**, 왼쪽 상단 작은 ▼
+- 업무 **업무담당** = Supabase `tasks.work_assignee` (migration `006_task_work_assignee.sql`)
+- 플랫폼 **보류** = `platform_rows.extra.보류` → 지속진행 **보류** 탭
+- **Fly 백엔드**는 `git push`만으로 갱신 안 될 수 있음 → `flyctl deploy --app backend-patient-wave-707`
 
-**데이터 메모**
-
-- **현재진행·발표일·계약정리·플랫폼정리** → 같은 `platform_rows` (시트 탭: 플랫폼정리)
-- **런칭·업로드정리** → `upload_rows`
-- **업무정리** → `tasks`
-
-**최근 커밋 (참고, 최신 → 과거)**
+**최근 커밋 (최신 → 과거)**
 
 ```
-ab781df feat(tables): single-click cell edit; priority column as notion-style tags
-3cf3eac feat(tables): undo column hide restores visible attributes on all list views
-36c3286 fix(tables): restore header menu clicks after truncate layout change
-736d2f7 fix(tables): truncate long cell text, click for full preview, keep column resize
-bf93a65 feat(tables): mini calendar picker for date columns on platform, upload, launching views
-dcacd9d fix(tables): let columns shrink to label plus menu, not default 112px
-2a3f1db fix(tables): show full column labels; header actions in one menu
-1995bd5 feat(tables): persist column widths to Supabase (shared across browsers)
-f21668b feat(tables): drag-resize column widths on all list pages
-e468e6e feat(tables): add data column '대분류' on all list pages
+82c9840 fix(tasks): harden schema fallback and add Fly deploy workflow
+fde7b08 fix(tasks): auto-retry Supabase schema after work_assignee migration
+657b2f3 fix(progress): filter on-hold from platform rows and fix progress tab
+b1e415b feat(tasks): add work assignee field and personnel task dashboard
+0b0deb2 feat(progress): add active and on-hold tabs with progress/done filters
 ```
 
 ### 0-6. 다음에 하면 좋은 것 (미정)
