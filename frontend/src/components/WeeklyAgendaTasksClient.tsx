@@ -43,6 +43,7 @@ function groupByCategory(items: TaskSheetRow[]): Map<string, TaskSheetRow[]> {
 export function WeeklyAgendaTasksClient() {
   const [wb, setWb] = useState<WeeklyAgendaRangeWorkbook>(() => loadWeeklyAgendaRangesWorkbook());
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     saveWeeklyAgendaRangesWorkbook(wb);
@@ -63,7 +64,7 @@ export function WeeklyAgendaTasksClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const tabs = useMemo(() => [...wb.tabs].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "ko")), [wb.tabs]);
   const active = useMemo(() => wb.tabs.find((t) => t.id === wb.activeId) ?? tabs[0] ?? null, [tabs, wb.activeId, wb.tabs]);
@@ -92,6 +93,13 @@ export function WeeklyAgendaTasksClient() {
         <Link href="/tasks" className="text-sm font-medium text-zinc-700 underline dark:text-zinc-300">
           업무정리 DB →
         </Link>
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-300"
+        >
+          새로고침
+        </button>
       </div>
 
       {active ? (

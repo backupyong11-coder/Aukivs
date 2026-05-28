@@ -15,6 +15,12 @@ _SELECT_TASKS_BASE = (
     "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
     "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
+    "difficulty,fatigue,extra"
+)
+_SELECT_TASKS_BASE_NO_EXTRA = (
+    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
+    "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
+    "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
     "difficulty,fatigue"
 )
 _SELECT_TASKS_BASE_WITH_EXEC = f"{_SELECT_TASKS_BASE},execute_date,execute_date_raw"
@@ -31,59 +37,115 @@ _tasks_select_cache: str | None = None
 _assignee_write_col_cache: str | None = None
 _tasks_has_manager_col: bool | None = None
 _tasks_has_execute_col: bool | None = None
+_tasks_has_extra_col: bool | None = None
 
 
 def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
     if exc.status_code != 400:
         return False
     msg = str(exc).lower()
-    return "42703" in msg or "does not exist" in msg
+    return (
+        "42703" in msg
+        or "does not exist" in msg
+        or "pgrst204" in msg
+        or "could not find the" in msg
+        or "schema cache" in msg
+    )
 
 
-def _set_tasks_schema(*, variant: str) -> tuple[str, str]:
-    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col
+_EXECUTE_HEADER = "실행일"
+
+
+def _row_extra(row: dict[str, Any]) -> dict[str, Any]:
+    ex = row.get("extra")
+    return dict(ex) if isinstance(ex, dict) else {}
+
+
+def _apply_execute_fields(
+    patch: dict[str, Any],
+    extra: dict[str, Any],
+    raw: object,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """execute_date 컬럼 + extra['실행일'] 양방향 저장."""
+    s = "" if raw is None else str(raw).strip()
+    if not s:
+        patch["execute_date"] = None
+        patch["execute_date_raw"] = None
+        extra.pop(_EXECUTE_HEADER, None)
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        patch["execute_date"] = s
+        patch["execute_date_raw"] = None
+        extra[_EXECUTE_HEADER] = s
+    else:
+        patch["execute_date"] = None
+        patch["execute_date_raw"] = s
+        extra[_EXECUTE_HEADER] = s
+    patch["extra"] = extra
+    return patch, extra
+
+
+def _set_tasks_schema(*, variant: str, include_extra: bool = True) -> tuple[str, str]:
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col, _tasks_has_extra_col
     use_exec = _tasks_has_execute_col is not False
+    base = _SELECT_TASKS_BASE if include_extra else _SELECT_TASKS_BASE_NO_EXTRA
+    _tasks_has_extra_col = include_extra
     if variant == "with_manager":
-        _tasks_select_cache = _SELECT_TASKS_WITH_MANAGER if use_exec else _SELECT_TASKS_WITH_MANAGER_NO_EXEC
+        _tasks_select_cache = (
+            f"{base},execute_date,execute_date_raw,work_assignee,task_manager,memo"
+            if use_exec
+            else f"{base},work_assignee,task_manager,memo"
+        )
         _assignee_write_col_cache = "work_assignee"
         _tasks_has_manager_col = True
     elif variant == "new":
-        _tasks_select_cache = _SELECT_TASKS_NEW if use_exec else _SELECT_TASKS_NEW_NO_EXEC
+        _tasks_select_cache = (
+            f"{base},execute_date,execute_date_raw,work_assignee,memo"
+            if use_exec
+            else f"{base},work_assignee,memo"
+        )
         _assignee_write_col_cache = "work_assignee"
         _tasks_has_manager_col = False
     else:
-        _tasks_select_cache = _SELECT_TASKS_LEGACY if use_exec else _SELECT_TASKS_LEGACY_NO_EXEC
+        _tasks_select_cache = (
+            f"{base},execute_date,execute_date_raw,status,assignee,memo"
+            if use_exec
+            else f"{base},status,assignee,memo"
+        )
         _assignee_write_col_cache = "status"
         _tasks_has_manager_col = False
     return _tasks_select_cache, _assignee_write_col_cache
 
 
 def _reset_tasks_schema_cache() -> None:
-    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col, _tasks_has_extra_col
     _tasks_select_cache = None
     _assignee_write_col_cache = None
     _tasks_has_manager_col = None
     _tasks_has_execute_col = None
+    _tasks_has_extra_col = None
 
 
 def _fetch_tasks(cli: SupabaseRestClient, params: dict[str, Any]) -> Any:
-    """GET /tasks — work_assignee·task_manager 마이그레이션 전·후 스키마 자동 전환."""
+    """GET /tasks — work_assignee·execute_date·extra 마이그레이션 전·후 스키마 자동 전환."""
+    global _tasks_has_execute_col
     base = {k: v for k, v in params.items() if k != "select"}
     last_exc: SupabaseRequestError | None = None
-    # 1) execute_date 컬럼이 있으면 포함해서 시도 → 2) 없으면 제외하고 재시도
     for exec_supported in (True, False):
-        global _tasks_has_execute_col
         _tasks_has_execute_col = exec_supported
-        for variant in ("with_manager", "new", "legacy"):
-            select, _ = _set_tasks_schema(variant=variant)
-            try:
-                return cli.get_json("/tasks", params={**base, "select": select})
-            except SupabaseRequestError as exc:
-                if _is_missing_column_error(exc):
-                    last_exc = exc
-                    _reset_tasks_schema_cache()
-                    continue
-                raise
+        for extra_supported in (True, False):
+            for variant in ("with_manager", "new", "legacy"):
+                select, _ = _set_tasks_schema(
+                    variant=variant,
+                    include_extra=extra_supported,
+                )
+                try:
+                    return cli.get_json("/tasks", params={**base, "select": select})
+                except SupabaseRequestError as exc:
+                    if _is_missing_column_error(exc):
+                        last_exc = exc
+                        _reset_tasks_schema_cache()
+                        continue
+                    raise
     if last_exc:
         raise last_exc
     raise SupabaseRequestError("Supabase GET /tasks failed: schema mismatch")
@@ -237,6 +299,8 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         ex_s = opt_str("execute_date")
     if not ex_s and row.get("execute_date_raw"):
         ex_s = str(row["execute_date_raw"]).strip()
+    if not ex_s:
+        ex_s = str(_row_extra(row).get(_EXECUTE_HEADER) or "").strip()
 
     completed = bool(row.get("completed"))
     comp_cell = "TRUE" if completed else ""
@@ -384,13 +448,101 @@ def list_tasks_limited(settings: Settings, *, limit: int | None = None) -> list[
     return out
 
 
+def _patch_task_row(cli: SupabaseRestClient, row_id: object, patch: dict[str, Any]) -> None:
+    remaining = dict(patch)
+    last_exc: SupabaseRequestError | None = None
+    for _ in range(max(1, len(remaining) + 4)):
+        if not remaining:
+            return
+        try:
+            cli.patch_json("/tasks", params={"id": f"eq.{row_id}"}, body=remaining)
+            return
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            last_exc = exc
+            msg = str(exc).lower()
+            removed = False
+            for col in ("execute_date", "execute_date_raw"):
+                if col in remaining:
+                    val = remaining.pop(col)
+                    extra = remaining.get("extra")
+                    if not isinstance(extra, dict):
+                        extra = {}
+                    if val is not None and str(val).strip():
+                        extra[_EXECUTE_HEADER] = str(val).strip()
+                    remaining["extra"] = extra
+                    removed = True
+                    break
+            if not removed and "extra" in remaining and "extra" in msg:
+                remaining.pop("extra")
+                removed = True
+            if not removed:
+                for col in list(remaining.keys()):
+                    if col.replace("_", " ") in msg or col in msg:
+                        if col == "extra":
+                            remaining.pop(col)
+                        else:
+                            val = remaining.pop(col)
+                            extra = remaining.get("extra")
+                            if not isinstance(extra, dict):
+                                extra = {}
+                            hdr = next(
+                                (kr for kr, dbk in _KOREAN_TO_DB.items() if dbk == col),
+                                col,
+                            )
+                            if val is not None and str(val).strip():
+                                extra[hdr] = str(val).strip()
+                            remaining["extra"] = extra
+                        removed = True
+                        break
+            if not removed:
+                raise
+    if last_exc:
+        raise last_exc
+
+
+def _post_task_row(cli: SupabaseRestClient, insert: dict[str, Any]) -> None:
+    remaining = dict(insert)
+    last_exc: SupabaseRequestError | None = None
+    for _ in range(max(1, len(remaining) + 4)):
+        if not remaining:
+            raise SheetsParseError("Supabase tasks.create 응답 없음")
+        try:
+            cli.post_json("/tasks", [remaining], prefer="return=minimal")
+            return
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            last_exc = exc
+            msg = str(exc).lower()
+            removed = False
+            for col in ("execute_date", "execute_date_raw"):
+                if col in remaining:
+                    val = remaining.pop(col)
+                    extra = remaining.get("extra")
+                    if not isinstance(extra, dict):
+                        extra = {}
+                    if val is not None and str(val).strip():
+                        extra[_EXECUTE_HEADER] = str(val).strip()
+                    remaining["extra"] = extra
+                    removed = True
+                    break
+            if not removed and "extra" in remaining and "extra" in msg:
+                remaining.pop("extra")
+                removed = True
+            if not removed:
+                raise
+    if last_exc:
+        raise last_exc
+
+
 def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
     title = str(fields.get("업무명", "")).strip()
     if not title:
         raise SheetsParseError("[파싱] 업무명은 비울 수 없습니다.")
     cli = _client(settings)
     assignee_col = _probe_tasks_schema(cli)[1]
-    has_exec = _tasks_has_execute(cli)
     sheet_row = _next_sheet_row(cli)
     legacy_id = f"task-row-{sheet_row}"
 
@@ -400,6 +552,7 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         "title": title,
         "completed": False,
     }
+    extra: dict[str, Any] = {}
     wb = _bool_from_sheet_val(fields.get("완료"))
     if wb is not None:
         insert["completed"] = wb
@@ -419,13 +572,11 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
             else:
                 insert["due_date_raw"] = s
         elif dbk == "execute_date":
-            if not has_exec:
-                continue
-            s = str(raw).strip()
-            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
-                insert["execute_date"] = s
-            else:
-                insert["execute_date_raw"] = s
+            tmp: dict[str, Any] = {}
+            tmp, extra = _apply_execute_fields(tmp, extra, raw)
+            for k, v in tmp.items():
+                if k != "extra":
+                    insert[k] = v
         elif dbk == "work_assignee":
             insert[assignee_col] = str(raw).strip()
         else:
@@ -440,11 +591,12 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
                 continue
             insert[assignee_col] = str(raw).strip()
             break
-    # 2026-05-28: '담당자'는 피로도→담당자 변경으로 fatigue에 저장
     if "fatigue" not in insert and fields.get("담당자"):
         insert["fatigue"] = str(fields["담당자"]).strip()
+    if extra:
+        insert["extra"] = extra
 
-    cli.post_json("/tasks", [insert], prefer="return=minimal")
+    _post_task_row(cli, insert)
 
     out: dict[str, Any] = {
         "id": legacy_id,
@@ -468,11 +620,12 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         out["마감일"] = str(insert["due_date"])
     elif "due_date_raw" in insert:
         out["마감일"] = str(insert["due_date_raw"])
-    if has_exec:
-        if "execute_date" in insert:
-            out["실행일"] = str(insert["execute_date"])
-        elif "execute_date_raw" in insert:
-            out["실행일"] = str(insert["execute_date_raw"])
+    if "execute_date" in insert:
+        out["실행일"] = str(insert["execute_date"])
+    elif "execute_date_raw" in insert:
+        out["실행일"] = str(insert["execute_date_raw"])
+    elif extra.get(_EXECUTE_HEADER):
+        out["실행일"] = str(extra[_EXECUTE_HEADER])
     return out
 
 
@@ -480,9 +633,10 @@ def _patch_body_from_fields(
     fields: dict[str, Any],
     *,
     assignee_col: str = "work_assignee",
-    has_execute: bool = False,
+    existing_extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     patch: dict[str, Any] = {}
+    extra = dict(existing_extra or {})
     for kr, dbk in _KOREAN_TO_DB.items():
         if kr in ("업무담당", "외부담당자", "인물담당", "상태", "담당자", "피로도"):
             continue
@@ -507,19 +661,7 @@ def _patch_body_from_fields(
                 patch["due_date_raw"] = s
             continue
         if dbk == "execute_date":
-            # execute_date 컬럼이 없는 스키마(이전 DB)에서는 무시
-            if not has_execute:
-                continue
-            s = "" if raw is None else str(raw).strip()
-            if not s:
-                patch["execute_date"] = None
-                patch["execute_date_raw"] = None
-            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
-                patch["execute_date"] = s
-                patch["execute_date_raw"] = None
-            else:
-                patch["execute_date"] = None
-                patch["execute_date_raw"] = s
+            patch, extra = _apply_execute_fields(patch, extra, raw)
             continue
         if raw is None or (isinstance(raw, str) and not str(raw).strip()):
             patch[dbk] = None
@@ -550,15 +692,14 @@ def update_task(settings: Settings, task_id: str, fields: dict[str, Any]) -> Non
     tid = row.get("id")
     if not tid:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
-    has_exec = _tasks_has_execute(cli)
     patch = _patch_body_from_fields(
         fields,
         assignee_col=_assignee_write_col(cli),
-        has_execute=has_exec,
+        existing_extra=_row_extra(row),
     )
     if not patch:
         return
-    cli.patch_json("/tasks", params={"id": f"eq.{tid}"}, body=patch)
+    _patch_task_row(cli, tid, patch)
 
 
 def delete_task(settings: Settings, task_id: str) -> None:
