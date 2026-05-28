@@ -199,6 +199,17 @@ export function FullCalendarClient() {
         ? `주간 · ${weekRangeLabel ?? ""}`
         : `${cursor.y}년 ${cursor.m}월 ${cursor.d}일 (${weekdayShortKo(cursor.y, cursor.m, cursor.d)})`;
 
+  const quickAddYmd = view === "day" ? ymdFromParts(cursor.y, cursor.m, cursor.d) : selectedYmd;
+
+  const selectedAgenda = useMemo(() => {
+    if (win.kind !== "ready") return null;
+    const ymd = quickAddYmd;
+    const uploads = win.data.uploadRows.filter((it) => normalizeSheetDateYmd(it["업로드일"] ?? "") === ymd);
+    const tasks = win.data.allTasks.filter((it) => normalizeSheetDateYmd(it["마감일"] ?? "") === ymd);
+    const launches = win.data.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
+    return { ymd, uploads, tasks, launches };
+  }, [quickAddYmd, win]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
@@ -258,6 +269,17 @@ export function FullCalendarClient() {
         <span className="font-medium text-red-700 dark:text-red-300">오늘</span>은 빨간색,{" "}
         <span className="font-medium text-zinc-600 dark:text-zinc-300">회색 칸은 토·일·공휴일·대체공휴일</span>입니다.
       </p>
+
+      {/* 월간/주간/일간 아래 - 캘린더 위: 업무 빠른 추가 */}
+      {ready ? (
+        <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+          <CalendarQuickTaskAdd
+            ymd={quickAddYmd}
+            categoryHints={categoryHints}
+            onCreated={handleTaskCreated}
+          />
+        </section>
+      ) : null}
 
       {win.kind === "error" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200" role="alert">
@@ -473,12 +495,6 @@ export function FullCalendarClient() {
                     memos.length === 0 ? (
                       <p className="text-zinc-400">일정 없음</p>
                     ) : null}
-                    <CalendarQuickTaskAdd
-                      ymd={ymd}
-                      categoryHints={categoryHints}
-                      onCreated={handleTaskCreated}
-                      compact
-                    />
                   </div>
                 </div>
               );
@@ -486,6 +502,61 @@ export function FullCalendarClient() {
           </div>
         </div>
       )}
+
+      {/* 캘린더 아래: 카드 요약(업무/업로드/런칭) */}
+      {ready && selectedAgenda ? (
+        <section className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">업무</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{selectedAgenda.tasks.length}건</p>
+            </div>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
+              {selectedAgenda.tasks.slice(0, 6).map((t, i) => (
+                <li key={i} className="truncate">
+                  {formatCalendarTaskTitle(t) || "(제목 없음)"}
+                </li>
+              ))}
+            </ul>
+            {selectedAgenda.tasks.length > 6 ? (
+              <p className="mt-2 text-[11px] text-zinc-400">+{selectedAgenda.tasks.length - 6}건</p>
+            ) : null}
+          </div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">업로드</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{selectedAgenda.uploads.length}건</p>
+            </div>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
+              {selectedAgenda.uploads.slice(0, 6).map((it, i) => (
+                <li key={i} className="truncate">
+                  {it["작품명"]} · {safeInt(it["업로드화수"])}화
+                </li>
+              ))}
+            </ul>
+            {selectedAgenda.uploads.length > 6 ? (
+              <p className="mt-2 text-[11px] text-zinc-400">+{selectedAgenda.uploads.length - 6}건</p>
+            ) : null}
+          </div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-red-600 dark:text-red-400">런칭</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{selectedAgenda.launches.length}건</p>
+            </div>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
+              {selectedAgenda.launches.slice(0, 6).map((it, i) => (
+                <li key={i} className="truncate">
+                  {(it["플랫폼명"] ?? "").trim() ? `${it["플랫폼명"]} · ` : ""}
+                  {it["작품명"]}
+                </li>
+              ))}
+            </ul>
+            {selectedAgenda.launches.length > 6 ? (
+              <p className="mt-2 text-[11px] text-zinc-400">+{selectedAgenda.launches.length - 6}건</p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {ready && view === "day" && (
         <div className="grid gap-4 lg:grid-cols-12">
