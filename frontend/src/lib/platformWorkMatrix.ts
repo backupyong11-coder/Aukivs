@@ -2,7 +2,7 @@ import type { WorksMasterItem } from "@/lib/worksMaster";
 import type { PlatformMasterItem } from "@/lib/platformMaster";
 
 /** 셀 상태: 참고 UI — 활성(체크) / 진행(톱니) / 초기(봉투) */
-export type MatrixCellKind = "active" | "progress" | "early" | "none";
+export type MatrixCellKind = "active" | "progress" | "early" | "none" | "blocked";
 
 export type PlatformColumn = {
   label: string;
@@ -21,6 +21,67 @@ export type PlatformWorkMatrixModel = {
 
 /** 플랫폼 연동 매트릭스(/platform-matrix) 열(플랫폼명) 사용자 순서 */
 export const PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY = "platform_work_matrix_col_labels_v1";
+
+/** 플랫폼 연동 매트릭스(/platform-matrix) 셀별 UI 오버라이드(로컬 전용) */
+export const PLATFORM_MATRIX_CELL_OVERRIDE_STORAGE_KEY = "platform_work_matrix_cell_overrides_v1";
+
+export type MatrixCellOverride = "blocked";
+
+function cellOverrideKey(workTitle: string, platformLabel: string): string {
+  // human-readable + stable enough for local use
+  return `${workTitle.trim()}||${platformLabel.trim()}`;
+}
+
+export function loadMatrixCellOverrides(): Record<string, MatrixCellOverride> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(PLATFORM_MATRIX_CELL_OVERRIDE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const obj = parsed as Record<string, unknown>;
+    const out: Record<string, MatrixCellOverride> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof k !== "string" || !k.trim()) continue;
+      if (v === "blocked") out[k] = "blocked";
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function saveMatrixCellOverrides(overrides: Record<string, MatrixCellOverride>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PLATFORM_MATRIX_CELL_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getMatrixCellOverride(
+  overrides: Record<string, MatrixCellOverride>,
+  workTitle: string,
+  platformLabel: string,
+): MatrixCellOverride | null {
+  const k = cellOverrideKey(workTitle, platformLabel);
+  return overrides[k] ?? null;
+}
+
+export function setMatrixCellOverride(
+  overrides: Record<string, MatrixCellOverride>,
+  workTitle: string,
+  platformLabel: string,
+  next: MatrixCellOverride | null,
+): Record<string, MatrixCellOverride> {
+  const k = cellOverrideKey(workTitle, platformLabel);
+  const out = { ...overrides };
+  if (next) out[k] = next;
+  else delete out[k];
+  saveMatrixCellOverrides(out);
+  return out;
+}
 
 export function loadMatrixColumnOrder(): string[] {
   if (typeof window === "undefined") return [];

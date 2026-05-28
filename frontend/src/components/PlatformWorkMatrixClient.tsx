@@ -22,9 +22,12 @@ import type { WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
   clearMatrixColumnOrder,
+  getMatrixCellOverride,
+  loadMatrixCellOverrides,
   loadMatrixColumnOrder,
   reorderPlatformWorkMatrix,
   saveMatrixColumnOrder,
+  setMatrixCellOverride,
   type MatrixCellKind,
 } from "@/lib/platformWorkMatrix";
 
@@ -103,6 +106,19 @@ function MatrixIcon({ kind }: { kind: MatrixCellKind }) {
       </span>
     );
   }
+  if (kind === "blocked") {
+    return (
+      <span
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-white shadow-sm"
+        title="불가"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M8 8l8 8" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
   return <span className="inline-block h-7 w-7" aria-hidden />;
 }
 
@@ -129,6 +145,11 @@ export function PlatformWorkMatrixClient() {
     emptyForm(PLATFORM_MATRIX_CREATE_FIELDS),
   );
   const [platformSaving, setPlatformSaving] = useState(false);
+  const [cellOverrides, setCellOverrides] = useState<Record<string, "blocked">>(() => ({}));
+
+  useEffect(() => {
+    setCellOverrides(loadMatrixCellOverrides());
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -226,6 +247,14 @@ export function PlatformWorkMatrixClient() {
       };
     });
   }, [displayModel]);
+
+  const effectiveCellKind = useCallback(
+    (workTitle: string, platformLabel: string, base: MatrixCellKind): MatrixCellKind => {
+      const ov = getMatrixCellOverride(cellOverrides, workTitle, platformLabel);
+      return ov === "blocked" ? "blocked" : base;
+    },
+    [cellOverrides],
+  );
 
   const openWorkEdit = (title: string) => {
     const w = worksItems.find((x) => (x["작품명"] ?? "").trim() === title.trim());
@@ -600,7 +629,23 @@ export function PlatformWorkMatrixClient() {
                       className="border-l border-zinc-100 px-2 py-2 text-center align-middle dark:border-zinc-800"
                     >
                       <div className="flex justify-center">
-                        <MatrixIcon kind={cell} />
+                        <button
+                          type="button"
+                          className="rounded-md p-0.5 hover:bg-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:hover:bg-zinc-800 dark:focus:ring-zinc-600"
+                          onClick={() => {
+                            const label = displayModel.columns[i]?.label ?? "";
+                            if (!label) return;
+                            const cur = getMatrixCellOverride(cellOverrides, row.title, label);
+                            const next = cur === "blocked" ? null : "blocked";
+                            setCellOverrides((prev) => setMatrixCellOverride(prev, row.title, label, next));
+                          }}
+                          title="클릭: 불가(🚫) 토글 (로컬 저장)"
+                          aria-label="불가 상태 토글"
+                        >
+                          <MatrixIcon
+                            kind={effectiveCellKind(row.title, displayModel.columns[i]!.label, cell)}
+                          />
+                        </button>
                       </div>
                     </td>
                   ))}
