@@ -235,13 +235,17 @@ export function PlatformWorkMatrixClient() {
     });
   }, []);
 
-  const movePlatformColumn = useCallback((idx: number, dir: -1 | 1) => {
+  const movePlatformColumn = useCallback((idx: number, edge: "start" | "end") => {
     if (!displayModel) return;
     const labels = displayModel.columns.map((c) => c.label);
-    const j = idx + dir;
-    if (j < 0 || j >= labels.length) return;
+    if (idx < 0 || idx >= labels.length) return;
+    if (edge === "start" && idx === 0) return;
+    if (edge === "end" && idx === labels.length - 1) return;
     const next = [...labels];
-    [next[idx], next[j]] = [next[j], next[idx]];
+    const [moved] = next.splice(idx, 1);
+    if (!moved) return;
+    if (edge === "start") next.unshift(moved);
+    else next.push(moved);
     setColumnOrder(next);
     persistPlatformPrefs(next, hiddenCols);
   }, [displayModel, hiddenCols, persistPlatformPrefs]);
@@ -715,20 +719,22 @@ export function PlatformWorkMatrixClient() {
                           <button
                             type="button"
                             className={thMoveBtn}
-                            aria-label={`${c.label} 열을 왼쪽으로`}
+                            aria-label={`${c.label} 열을 맨 왼쪽으로`}
+                            title="맨 왼쪽으로"
                             disabled={colIdx === 0}
-                            onClick={() => movePlatformColumn(colIdx, -1)}
+                            onClick={() => movePlatformColumn(colIdx, "start")}
                           >
-                            ◀
+                            ◀◀
                           </button>
                           <button
                             type="button"
                             className={thMoveBtn}
-                            aria-label={`${c.label} 열을 오른쪽으로`}
+                            aria-label={`${c.label} 열을 맨 오른쪽으로`}
+                            title="맨 오른쪽으로"
                             disabled={colIdx === displayModel.columns.length - 1}
-                            onClick={() => movePlatformColumn(colIdx, 1)}
+                            onClick={() => movePlatformColumn(colIdx, "end")}
                           >
-                            ▶
+                            ▶▶
                           </button>
                         </div>
                       </div>
