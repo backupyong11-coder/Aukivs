@@ -600,7 +600,7 @@ def _patch_works_row(cli: SupabaseRestClient, row_id: object, patch: dict[str, A
         if not remaining:
             return
         try:
-            cli.patch_json("/works", params={"id": postgrest_eq(str(row_id))}, body=remaining)
+            cli.patch_json("/works", params={"id": f"eq.{row_id}"}, body=remaining)
             return
         except SupabaseRequestError as exc:
             if not _is_missing_column_error(exc):
