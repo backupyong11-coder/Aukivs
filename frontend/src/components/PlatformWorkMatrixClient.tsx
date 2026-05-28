@@ -12,6 +12,7 @@ import {
   type PlatformRowRecord,
 } from "@/lib/platformRowsMutate";
 import { fetchPlatformMatrixBootstrap } from "@/lib/platformMatrixBootstrap";
+import type { PlatformMasterItem } from "@/lib/platformMaster";
 import {
   createWorksMasterRow,
   updateWorksMasterRow,
@@ -50,6 +51,19 @@ type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; emptyHint: string };
+
+function platformDisplayName(p: PlatformMasterItem): string {
+  return (p["플랫폼명"] ?? p["회사명"] ?? "").trim();
+}
+
+function optFirst(item: PlatformMasterItem | null, keys: string[]): string {
+  if (!item) return "";
+  for (const k of keys) {
+    const v = (item[k] ?? "").trim();
+    if (v) return v;
+  }
+  return "";
+}
 
 function MatrixIcon({ kind }: { kind: MatrixCellKind }) {
   if (kind === "active") {
@@ -101,6 +115,7 @@ export function PlatformWorkMatrixClient() {
   const [model, setModel] = useState<ReturnType<typeof buildPlatformWorkMatrix> | null>(null);
   const [platformRows, setPlatformRows] = useState<PlatformRowRecord[]>([]);
   const [worksItems, setWorksItems] = useState<WorksMasterItem[]>([]);
+  const [platformMasterItems, setPlatformMasterItems] = useState<PlatformMasterItem[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [workCreateOpen, setWorkCreateOpen] = useState(false);
   const [workEditTitle, setWorkEditTitle] = useState<string | null>(null);
@@ -125,9 +140,11 @@ export function PlatformWorkMatrixClient() {
           setModel(null);
           setPlatformRows([]);
           setWorksItems([]);
+          setPlatformMasterItems([]);
           return;
         }
         setWorksItems(boot.data.worksMaster);
+        setPlatformMasterItems(boot.data.platformMaster);
         setPlatformRows([]);
         const m = buildPlatformWorkMatrix(boot.data.worksMaster, boot.data.platformMaster);
         let emptyHint = "";
@@ -144,6 +161,7 @@ export function PlatformWorkMatrixClient() {
           kind: "error",
           message: e instanceof Error ? e.message : "불러오기 실패",
         });
+        setPlatformMasterItems([]);
       }
     })();
   }, [refreshKey]);
@@ -171,6 +189,18 @@ export function PlatformWorkMatrixClient() {
   }, []);
 
   const colCount = displayModel?.columns.length ?? 0;
+  const [openCards, setOpenCards] = useState<Set<string>>(() => new Set());
+
+  const platformByLabel = useMemo(() => {
+    const m = new Map<string, PlatformMasterItem>();
+    for (const p of platformMasterItems) {
+      const name = platformDisplayName(p);
+      if (!name) continue;
+      if (!m.has(name)) m.set(name, p);
+    }
+    return m;
+  }, [platformMasterItems]);
+
   const platformCards = useMemo(() => {
     if (!displayModel) return [];
     const totalWorks = displayModel.rows.length;
@@ -358,45 +388,111 @@ export function PlatformWorkMatrixClient() {
           <div className="flex min-w-max gap-3 px-1">
             {platformCards.map((s) => {
               const touched = s.active + s.progress + s.early;
+              const p = platformByLabel.get(s.label) ?? null;
+              const lastStatus = optFirst(p, ["마지막상황", "마지막 상황", "최근상황", "최근 상황", "상황"]);
+              const nextAction = optFirst(p, ["다음액션", "다음 액션", "다음행동", "다음 행동"]);
+              const managerName = optFirst(p, ["담당자명", "담당자"]);
+              const managerEmail = optFirst(p, ["담당자이메일", "담당자 이메일", "이메일"]);
+              const contact = optFirst(p, ["연락수단/연락처", "연락수단연락처", "연락처"]);
+              const bannerSpec = optFirst(p, ["배너 규격", "배너규격", "배너사이즈", "배너 사이즈"]);
+              const thumbSpec = optFirst(p, ["썸네일 규격", "썸네일규격", "썸네일사이즈", "썸네일 사이즈", "thumbnail"]);
+              const manuscriptSpec = optFirst(p, ["원고 규격", "원고규격", "원고사이즈", "원고 사이즈"]);
+              const uploadMethod = optFirst(p, ["업로드방식", "업로드 방식", "업로드"]);
+              const settlement = optFirst(p, ["정산방식", "정산 방식", "정산"]);
+              const ownCoin = optFirst(p, ["업체별 소장 코인", "소장 코인", "소장코인", "소장"]);
+              const rentCoin = optFirst(p, ["업체별 대여 코인", "대여 코인", "대여코인", "대여"]);
+              const opened = openCards.has(s.label);
+              const hasAny = touched > 0;
               return (
-                <div
-                  key={`card-${s.label}`}
-                  className="w-[15.5rem] shrink-0 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{s.label}</p>
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        작품 연결 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{touched}</span>
-                        <span className="mx-1">/</span>
-                        {s.totalWorks}
-                      </p>
+                <div key={`card-${s.label}`} className="w-[18rem] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenCards((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s.label)) next.delete(s.label);
+                        else next.add(s.label);
+                        return next;
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{s.label}</p>
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {touched}/{s.totalWorks}
+                          </span>
+                        </div>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            런칭·연재{" "}
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">{s.active}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                            업로드·세팅{" "}
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">{s.progress}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+                            대기·계약{" "}
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">{s.early}</span>
+                          </span>
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-zinc-400 dark:text-zinc-500" aria-hidden>
+                        {opened ? "▾" : "▸"}
+                      </span>
                     </div>
-                  </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
-                      <div className="mx-auto mb-1 flex justify-center">
-                        <MatrixIcon kind="active" />
+                    {opened ? (
+                      <div className="mt-3 space-y-2 border-t border-zinc-200 pt-3 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+                        {hasAny ? (
+                          <>
+                            <div className="grid gap-2">
+                              {lastStatus ? (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">마지막상황</p>
+                                  <p className="mt-0.5 whitespace-pre-wrap">{lastStatus}</p>
+                                </div>
+                              ) : null}
+                              {nextAction ? (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">다음액션</p>
+                                  <p className="mt-0.5 whitespace-pre-wrap">{nextAction}</p>
+                                </div>
+                              ) : null}
+                              {(managerName || managerEmail || contact) ? (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">담당자</p>
+                                  <p className="mt-0.5">
+                                    {[managerName, managerEmail, contact].filter(Boolean).join(" · ") || "—"}
+                                  </p>
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="grid gap-1.5 pt-1">
+                              <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">규격·정산</p>
+                              <p>배너 규격: {bannerSpec || "—"}</p>
+                              <p>썸네일 규격: {thumbSpec || "—"}</p>
+                              <p>원고 규격: {manuscriptSpec || "—"}</p>
+                              <p>업로드방식: {uploadMethod || "—"}</p>
+                              <p>정산방식: {settlement || "—"}</p>
+                              <p>업체별 소장 코인: {ownCoin || "—"}</p>
+                              <p>업체별 대여 코인: {rentCoin || "—"}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-500">
+                            런칭·연재/업로드·세팅/대기·계약 연결이 없는 플랫폼입니다.
+                          </p>
+                        )}
                       </div>
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.active}</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">런칭·연재</p>
-                    </div>
-                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
-                      <div className="mx-auto mb-1 flex justify-center">
-                        <MatrixIcon kind="progress" />
-                      </div>
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.progress}</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">업로드·세팅</p>
-                    </div>
-                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
-                      <div className="mx-auto mb-1 flex justify-center">
-                        <MatrixIcon kind="early" />
-                      </div>
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.early}</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">대기·계약</p>
-                    </div>
-                  </div>
+                    ) : null}
+                  </button>
                 </div>
               );
             })}
