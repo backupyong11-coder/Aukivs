@@ -18,8 +18,10 @@ from config import Settings
 from .google_sheets import (
     append_rows_to_sheet_range,
     batch_update_sheet_values,
+    get_worksheet_id_by_title,
     read_sheet_tab_values,
     spreadsheet_id_from_url,
+    spreadsheets_batch_update,
 )
 from .google_tasks_sheets import _col_index_to_a1_letters_zero_based
 from .sheets_errors import SheetsConfigurationError, SheetsNotFoundError, SheetsParseError
@@ -257,3 +259,40 @@ def update_works_master_row(
         )
     if writes:
         batch_update_sheet_values(cred_path, spreadsheet_id, writes)
+
+
+def delete_works_master_row(settings: Settings, original_title: str) -> None:
+    """작품명으로 행을 찾아 삭제(deleteDimension ROWS)."""
+    orig = original_title.strip()
+    if not orig:
+        raise SheetsParseError("[파싱] 원본 작품명이 비어 있습니다.")
+    tab = settings.google_works_tab
+    keys, data = _works_tab_rows_with_sheet_row(settings, tab)
+    if not keys:
+        raise SheetsParseError("[파싱] 작품정리 시트 헤더를 읽지 못했습니다.")
+    sheet_row: int | None = None
+    for row_num, row in data:
+        if _works_title_from_row(keys, row) == orig:
+            sheet_row = row_num
+            break
+    if sheet_row is None:
+        raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {orig}")
+    cred_path = Path(settings.google_service_account_file).expanduser()
+    spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
+    worksheet_id = get_worksheet_id_by_title(cred_path, spreadsheet_id, tab)
+    spreadsheets_batch_update(
+        cred_path,
+        spreadsheet_id,
+        [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": worksheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": sheet_row - 1,
+                        "endIndex": sheet_row,
+                    }
+                }
+            }
+        ],
+    )

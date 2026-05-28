@@ -690,3 +690,20 @@ def update_works_master_row(
     if not patch:
         return
     _patch_works_row(_client(settings), row_id, patch)
+
+
+def delete_works_master_row(
+    settings: Settings,
+    *,
+    client_id: str | None = None,
+    original_title: str | None = None,
+) -> None:
+    cid = (client_id or "").strip()
+    orig = (original_title or "").strip()
+    if not cid and not orig:
+        raise SheetsParseError("[파싱] 작품 id 또는 작품명이 필요합니다.")
+    current = _get_row_by_client_id(settings, cid) if cid else _get_by_title(settings, orig)
+    row_id = current.get("id")
+    if not row_id:
+        raise SheetsNotFoundError(f"[찾을수없음] 작품 id 없음: {cid or orig}")
+    _client(settings).delete_json("/works", params={"id": f"eq.{row_id}"})

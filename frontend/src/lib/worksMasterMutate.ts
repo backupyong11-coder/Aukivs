@@ -62,3 +62,19 @@ export async function updateWorksMasterRow(
     };
   }
 }
+
+export async function deleteWorksMasterRow(
+  rowKey: { id?: string; originalTitle: string },
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const body: Record<string, unknown> = { original_title: rowKey.originalTitle };
+    if (rowKey.id) body.id = rowKey.id;
+    await apiPost("/works-master/delete", body);
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "작품 삭제에 실패했습니다.",
+    };
+  }
+}

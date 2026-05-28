@@ -75,6 +75,7 @@ from services.google_checklist_sheets import (
 )
 from services.google_master_sheets import (
     create_works_master_row as create_works_master_row_sheets,
+    delete_works_master_row as delete_works_master_row_sheets,
     fetch_master_tab_keyed_rows,
     update_works_master_row as update_works_master_row_sheets,
 )
@@ -254,6 +255,43 @@ def post_works_master_update(body: dict[str, Any] = Body(...)):
     try:
         update_works_master_row_sheets(settings, original_title or client_id, body)
         return {"updated": True}
+    except SheetsConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except SheetsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.post("/works-master/delete")
+def post_works_master_delete(body: dict[str, Any] = Body(...)):
+    settings = load_settings()
+    client_id = str(body.get("id", "") or "").strip()
+    original_title = str(body.get("original_title", "") or "").strip()
+    if not client_id and not original_title:
+        raise HTTPException(
+            status_code=400, detail="[파싱] id 또는 original_title이 필요합니다."
+        )
+    if settings.data_backend == "supabase":
+        try:
+            works_repo.delete_works_master_row(
+                settings, client_id=client_id, original_title=original_title
+            )
+            return {"deleted": True}
+        except SupabaseConfigurationError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except SupabaseRequestError as e:
+            status = e.status_code if e.status_code and e.status_code >= 400 else 502
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except SheetsNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except SheetsParseError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        delete_works_master_row_sheets(settings, original_title or client_id)
+        return {"deleted": True}
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SheetsNotFoundError as e:

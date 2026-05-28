@@ -600,7 +600,18 @@ export function PlatformRowsClient() {
   const isCellBusy = (rowId: string, field: string) =>
     patchingCell === `${rowId}:${field}` || togglingCell === `${rowId}:${field}`;
 
-  const tableColSpan = 1 + colVis.visibleKeys.length;
+  const handleDelete = async (row: PlatformRow) => {
+    const name = rowTitle(row);
+    if (!window.confirm(`이 행을 삭제할까요? (${name})`)) return;
+    try {
+      await apiFetch("/platform-rows/delete", { id: row.id });
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "삭제 실패");
+    }
+  };
+
+  const tableColSpan = colVis.visibleKeys.length + 2;
 
   return (
     <div className="space-y-3">
@@ -721,11 +732,11 @@ export function PlatformRowsClient() {
           <div className="overflow-x-auto">
           <table
             className="w-full text-xs"
-            style={{ ...colWidths.tableStyle, minWidth: colWidths.tableMinWidth(1, 0) }}
+            style={{ ...colWidths.tableStyle, minWidth: colWidths.tableMinWidth(1, 1) }}
           >
             <TableColgroup
               leadingActionCols={1}
-              trailingActionCols={0}
+              trailingActionCols={1}
               dataKeys={colVis.visibleKeys}
               getWidth={colWidths.getWidth}
               actionWidthPx={colWidths.actionWidth}
@@ -762,6 +773,7 @@ export function PlatformRowsClient() {
                     }}
                   />
                 ))}
+                <th className={thAction}>삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -822,6 +834,15 @@ export function PlatformRowsClient() {
                         </td>
                       );
                     })}
+                    <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(item)}
+                        className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
+                      >
+                        삭제
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}

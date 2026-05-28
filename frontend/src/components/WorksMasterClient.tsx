@@ -26,6 +26,7 @@ import {
 } from "@/components/WorksMasterInlineCell";
 import {
   createWorksMasterRow,
+  deleteWorksMasterRow,
   updateWorksMasterRow,
 } from "@/lib/worksMasterMutate";
 import { fetchWorksMaster, type WorksMasterItem } from "@/lib/worksMaster";
@@ -524,9 +525,27 @@ export function WorksMasterClient() {
   const isCellBusy = (title: string, field: string) =>
     patchingCell === `${title}:${field}` || togglingCell === `${title}:${field}`;
 
+  const handleDelete = async (item: WorkRow) => {
+    const name = rowTitle(item);
+    if (!window.confirm(`이 행을 삭제할까요? (${name})`)) return;
+    setActionError(null);
+    try {
+      const r = await deleteWorksMasterRow({
+        id: rowStableId(item),
+        originalTitle: name,
+      });
+      if (!r.ok) throw new Error(r.message);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "삭제 실패");
+    }
+  };
+
   const thAction =
     "sticky left-0 z-10 whitespace-nowrap border-r border-zinc-200 bg-zinc-50 px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
-  const tableColSpan = 1 + colVis.visibleKeys.length;
+  const thActionRight =
+    "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400";
+  const tableColSpan = colVis.visibleKeys.length + 2;
 
   return (
     <div className="space-y-3">
@@ -654,11 +673,11 @@ export function WorksMasterClient() {
             <div className="overflow-x-auto">
               <table
                 className="w-full text-xs"
-                style={{ ...colWidths.tableStyle, minWidth: colWidths.tableMinWidth(1, 0) }}
+                style={{ ...colWidths.tableStyle, minWidth: colWidths.tableMinWidth(1, 1) }}
               >
                 <TableColgroup
                   leadingActionCols={1}
-                  trailingActionCols={0}
+                  trailingActionCols={1}
                   dataKeys={colVis.visibleKeys}
                   getWidth={colWidths.getWidth}
                   actionWidthPx={colWidths.actionWidth}
@@ -694,6 +713,7 @@ export function WorksMasterClient() {
                         }}
                       />
                     ))}
+                    <th className={thActionRight}>삭제</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -761,6 +781,15 @@ export function WorksMasterClient() {
                               </td>
                             );
                           })}
+                          <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(item)}
+                              className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-800 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
+                            >
+                              삭제
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
