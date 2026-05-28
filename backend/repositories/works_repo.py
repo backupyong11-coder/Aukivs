@@ -69,7 +69,13 @@ def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
     if exc.status_code != 400:
         return False
     msg = str(exc).lower()
-    return "42703" in msg or "does not exist" in msg
+    return (
+        "42703" in msg
+        or "does not exist" in msg
+        or "pgrst204" in msg
+        or "could not find the" in msg
+        or "schema cache" in msg
+    )
 
 
 def _merge_work_genre_extra(patch: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
