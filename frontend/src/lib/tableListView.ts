@@ -17,7 +17,8 @@ export type TableListPageId =
   | "contracts"
   | "tasks"
   | "upload-rows"
-  | "platforms";
+  | "platforms"
+  | "works-master";
 
 /** 캘린더 창과 동일한 날짜 열 (OR 매칭) */
 export const TABLE_LIST_DATE_FIELDS: Record<TableListPageId, string[]> = {
@@ -28,6 +29,7 @@ export const TABLE_LIST_DATE_FIELDS: Record<TableListPageId, string[]> = {
   tasks: ["마감일"],
   "upload-rows": ["업로드일", "런칭일", "다음업로드일"],
   platforms: ["발표일", "마지막업데이트날짜"],
+  "works-master": ["첫 공급 일정"],
 };
 
 export type DateRangePreset =

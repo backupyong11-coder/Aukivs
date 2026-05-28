@@ -134,6 +134,10 @@ def _row_to_master_dict(row: dict[str, Any]) -> dict[str, Any]:
         else:
             out[hdr] = _api_cell(raw)
 
+    genre = _work_genre_from_row(row)
+    if genre:
+        out["작품분류"] = genre
+
     extra = row.get("extra") or {}
     if not isinstance(extra, dict):
         extra = {}

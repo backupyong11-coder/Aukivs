@@ -11,9 +11,12 @@ export const UPLOAD_ROW_TABLE_DATE_FIELDS = new Set<string>([
 
 export const LAUNCHING_TABLE_DATE_FIELDS = UPLOAD_ROW_TABLE_DATE_FIELDS;
 
+export const WORKS_TABLE_DATE_FIELDS = new Set<string>(["첫 공급 일정"]);
+
 export function isSheetTableDateField(field: string): boolean {
   return (
     PLATFORM_TABLE_DATE_FIELDS.has(field) ||
-    UPLOAD_ROW_TABLE_DATE_FIELDS.has(field)
+    UPLOAD_ROW_TABLE_DATE_FIELDS.has(field) ||
+    WORKS_TABLE_DATE_FIELDS.has(field)
   );
 }
