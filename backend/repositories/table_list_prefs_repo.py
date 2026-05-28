@@ -19,6 +19,7 @@ VALID_PAGE_IDS: frozenset[str] = frozenset(
         "upload-rows",
         "platforms",
         "platform-matrix",
+        "works-master",
     }
 )
 
@@ -123,6 +124,54 @@ def upsert_column_widths(
         page = {}
     page["columnWidths"] = sanitized
     prefs[pid] = page
+
+    cli = _client(settings)
+    body = {"id": DOCUMENT_ID, "preferences": prefs}
+    result = cli.post_json(
+        "/table_list_preferences",
+        body,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+        ua = result[0].get("updated_at")
+        return str(ua) if ua is not None else None
+    return None
+
+
+DEFAULT_WORK_GENRES: tuple[str, ...] = (
+    "성인웹툰",
+    "BL웹툰",
+    "성인애니",
+    "BL애니",
+)
+
+
+def get_works_master_preferences(settings: Settings) -> dict[str, list[str]]:
+    prefs = _load_preferences_doc(settings)
+    page = prefs.get("works-master")
+    if not isinstance(page, dict):
+        return {"work_genres": list(DEFAULT_WORK_GENRES)}
+    stored = _sanitize_label_list(page.get("workGenres"))
+    if not stored:
+        return {"work_genres": list(DEFAULT_WORK_GENRES)}
+    return {"work_genres": stored}
+
+
+def upsert_works_master_preferences(
+    settings: Settings,
+    *,
+    work_genres: list[Any],
+) -> str | None:
+    require_supabase(settings)
+    sanitized = _sanitize_label_list(work_genres)
+    if not sanitized:
+        sanitized = list(DEFAULT_WORK_GENRES)
+    prefs = _load_preferences_doc(settings)
+    page = prefs.get("works-master")
+    if not isinstance(page, dict):
+        page = {}
+    page["workGenres"] = sanitized
+    prefs["works-master"] = page
 
     cli = _client(settings)
     body = {"id": DOCUMENT_ID, "preferences": prefs}

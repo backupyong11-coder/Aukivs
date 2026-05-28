@@ -2,6 +2,7 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 
 export const WORK_MATRIX_FIELDS: { key: string; label: string }[] = [
   { key: "작품명", label: "작품명" },
+  { key: "작품분류", label: "분류" },
   { key: "글작가", label: "글작가" },
   { key: "그림작가", label: "그림작가" },
   { key: "연재중인 사이트", label: "연재중인 사이트" },

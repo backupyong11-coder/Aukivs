@@ -579,3 +579,19 @@ class PlatformMatrixPreferencesPutRequest(BaseModel):
 class PlatformMatrixPreferencesPutResponse(BaseModel):
     ok: bool = True
     updated_at: str | None = None
+
+
+class WorksMasterPreferencesGetResponse(BaseModel):
+    work_genres: list[str] = Field(default_factory=list)
+    updated_at: str | None = None
+
+
+class WorksMasterPreferencesPutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    work_genres: list[str] = Field(default_factory=list)
+
+
+class WorksMasterPreferencesPutResponse(BaseModel):
+    ok: bool = True
+    updated_at: str | None = None

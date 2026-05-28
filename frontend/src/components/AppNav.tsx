@@ -25,6 +25,7 @@ const links: NavLink[] = [
     title: "대분류 병합 표(로컬 저장)",
     dividerAfter: true,
   },
+  { href: "/works", label: "작품 DB", title: "작품정리 마스터(분류·작품명·사이트)" },
   { href: "/announcement-date", label: "발표일 DB", title: "발표 일정" },
   { href: "/progress", label: "지속진행 DB", title: "지속 진행 현황" },
   { href: "/launching", label: "런칭정리 DB", title: "런칭 일정·정리" },

@@ -6,13 +6,14 @@ from typing import Any
 
 from config import Settings
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
-from services.supabase_client import SupabaseRestClient
+from services.supabase_client import SupabaseRestClient, SupabaseRequestError
 from services.sheets_errors import SheetsParseError
 
 # google_master_sheets 주석 A~X 열 순서 + migrate_scripts 의 DB 컬럼명 (표준 헤더 문자열)
 _WORKS_HEADER_ORDER: tuple[tuple[str, str], ...] = (
     ("제작완료", "production_done"),
     ("작품명", "title"),
+    ("작품분류", "work_genre"),
     ("글작가", "writer"),
     ("그림작가", "artist"),
     ("분류(일반/성인)", "category"),
@@ -40,16 +41,53 @@ _WORKS_HEADER_ORDER: tuple[tuple[str, str], ...] = (
 _CANONICAL_HEADERS: frozenset[str] = frozenset(h for h, _ in _WORKS_HEADER_ORDER)
 
 _SELECT = (
-    "production_done,title,writer,artist,category,format,current_status,"
+    "production_done,title,work_genre,writer,artist,category,format,current_status,"
     "sites_to_upload,launched_sites,pending_sites,contracted_sites,episode_info,"
     "synopsis,characters,copyright,uci,tags,assets_note,staff,age_rating,"
     "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
 )
 
 _SELECT_MATRIX = (
-    "title,writer,artist,launched_sites,active_sites,sites_to_upload,"
-    "pending_sites,contracted_sites,first_supply_schedule"
+    "title,work_genre,writer,artist,launched_sites,active_sites,sites_to_upload,"
+    "pending_sites,contracted_sites,first_supply_schedule,extra"
 )
+
+_SELECT_MATRIX_LEGACY = (
+    "title,writer,artist,launched_sites,active_sites,sites_to_upload,"
+    "pending_sites,contracted_sites,first_supply_schedule,extra"
+)
+
+_SELECT_FULL_LEGACY = (
+    "production_done,title,writer,artist,category,format,current_status,"
+    "sites_to_upload,launched_sites,pending_sites,contracted_sites,episode_info,"
+    "synopsis,characters,copyright,uci,tags,assets_note,staff,age_rating,"
+    "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
+)
+
+
+def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
+    if exc.status_code != 400:
+        return False
+    msg = str(exc).lower()
+    return "42703" in msg or "does not exist" in msg
+
+
+def _merge_work_genre_extra(patch: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    genre = patch.get("work_genre")
+    if genre and str(genre).strip():
+        extra = {**extra, "작품분류": str(genre).strip()}
+    return extra
+
+
+def _fetch_works_json(cli: SupabaseRestClient, *, select: str, params: dict[str, Any]) -> Any:
+    try:
+        return cli.get_json("/works", params={**params, "select": select})
+    except SupabaseRequestError as exc:
+        if not _is_missing_column_error(exc):
+            raise
+        legacy = _SELECT_FULL_LEGACY if "production_done" in select else _SELECT_MATRIX_LEGACY
+        return cli.get_json("/works", params={**params, "select": legacy})
+
 
 _SELECT_SLIM = (
     "title,writer,artist,current_status,active_sites,launched_sites,first_supply_schedule"
@@ -165,14 +203,31 @@ def _row_to_master_dict_slim(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _work_genre_from_row(row: dict[str, Any]) -> Any:
+    raw = _api_cell(row.get("work_genre"))
+    if raw:
+        return raw
+    extra = row.get("extra") or {}
+    if isinstance(extra, dict):
+        for key in ("작품분류", "분류"):
+            v = extra.get(key)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                return s
+    return None
+
+
 def _row_to_master_dict_matrix(row: dict[str, Any]) -> dict[str, Any]:
     title = str(row.get("title") or "").strip()
     if not title:
         raise ValueError("empty title")
-    out: dict[str, Any] = {"작품명": title}
+    out: dict[str, Any] = {"작품명": title, "작품분류": _work_genre_from_row(row)}
     for hdr, col in _WORKS_HEADER_ORDER:
         if col in (
             "title",
+            "work_genre",
             "writer",
             "artist",
             "launched_sites",
@@ -182,19 +237,18 @@ def _row_to_master_dict_matrix(row: dict[str, Any]) -> dict[str, Any]:
             "contracted_sites",
             "first_supply_schedule",
         ):
-            if col == "title":
+            if col in ("title", "work_genre"):
                 continue
             out[hdr] = _api_cell(row.get(col))
     return out
 
 
 def list_works_master_items(settings: Settings) -> list[dict[str, Any]]:
-    rows = _client(settings).get_json(
-        "/works",
-        params={
-            "select": _SELECT,
-            "order": "sheet_row.asc.nullslast,title.asc",
-        },
+    cli = _client(settings)
+    rows = _fetch_works_json(
+        cli,
+        select=_SELECT,
+        params={"order": "sheet_row.asc.nullslast,title.asc"},
     )
     if not isinstance(rows, list):
         raise SheetsParseError("Supabase works 응답 형식 오류")
@@ -216,13 +270,11 @@ def list_works_master_slim(settings: Settings, *, limit: int = 60) -> list[dict[
 
 
 def list_works_master_for_matrix(settings: Settings) -> list[dict[str, Any]]:
-    rows = _client(settings).get_json(
-        "/works",
-        params={
-            "select": _SELECT_MATRIX,
-            "order": "title.asc",
-            "limit": "800",
-        },
+    cli = _client(settings)
+    rows = _fetch_works_json(
+        cli,
+        select=_SELECT_MATRIX,
+        params={"order": "title.asc", "limit": "800"},
     )
     if not isinstance(rows, list):
         return []
@@ -276,13 +328,42 @@ def _fields_to_db_patch(fields: dict[str, Any]) -> tuple[dict[str, Any], dict[st
 
 
 def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
-    rows = _client(settings).get_json(
-        "/works",
-        params={"select": _SELECT, "title": f"eq.{title}", "limit": "1"},
+    cli = _client(settings)
+    rows = _fetch_works_json(
+        cli,
+        select=_SELECT,
+        params={"title": f"eq.{title}", "limit": "1"},
     )
     if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
         raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {title}")
     return rows[0]
+
+
+def _post_works_row(cli: SupabaseRestClient, patch: dict[str, Any]) -> list[Any]:
+    try:
+        rows = cli.post_json("/works", patch, prefer="return=representation")
+    except SupabaseRequestError as exc:
+        if _is_missing_column_error(exc) and "work_genre" in patch:
+            retry = dict(patch)
+            retry.pop("work_genre", None)
+            rows = cli.post_json("/works", retry, prefer="return=representation")
+        else:
+            raise
+    if not isinstance(rows, list):
+        raise SheetsParseError("Supabase works.create 응답 없음")
+    return rows
+
+
+def _patch_works_row(cli: SupabaseRestClient, row_id: object, patch: dict[str, Any]) -> None:
+    try:
+        cli.patch_json("/works", params={"id": f"eq.{row_id}"}, body=patch)
+    except SupabaseRequestError as exc:
+        if _is_missing_column_error(exc) and "work_genre" in patch:
+            retry = dict(patch)
+            retry.pop("work_genre", None)
+            cli.patch_json("/works", params={"id": f"eq.{row_id}"}, body=retry)
+        else:
+            raise
 
 
 def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
@@ -291,13 +372,12 @@ def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[
         raise SheetsParseError("[파싱] 작품명이 비어 있습니다.")
     patch, extra = _fields_to_db_patch(fields)
     patch["title"] = title
-    patch["extra"] = extra
+    patch["extra"] = _merge_work_genre_extra(patch, extra)
     n = _next_sheet_row(settings)
     patch["sheet_row"] = n
-    rows = _client(settings).post_json(
-        "/works", patch, prefer="return=representation"
-    )
-    if not isinstance(rows, list) or not rows:
+    cli = _client(settings)
+    rows = _post_works_row(cli, patch)
+    if not rows:
         raise SheetsParseError("Supabase works.create 응답 없음")
     return _row_to_master_dict(rows[0])
 
@@ -316,7 +396,7 @@ def update_works_master_row(
     base_ex = current.get("extra") or {}
     if not isinstance(base_ex, dict):
         base_ex = {}
-    merged_ex = {**base_ex, **extra_in}
+    merged_ex = _merge_work_genre_extra(patch, {**base_ex, **extra_in})
     for k in list(merged_ex.keys()):
         if k in fields and (fields[k] is None or str(fields[k]).strip() == ""):
             merged_ex.pop(k, None)
@@ -327,4 +407,4 @@ def update_works_master_row(
         patch["title"] = new_title
     if not patch:
         return
-    _client(settings).patch_json("/works", params={"id": f"eq.{row_id}"}, body=patch)
+    _patch_works_row(_client(settings), row_id, patch)

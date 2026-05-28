@@ -120,6 +120,7 @@ _PLATFORM_CORE_SHEET_HEADERS: frozenset[str] = frozenset(
 _WORKS_HEADER_TO_COLUMN: dict[str, str] = {
     "제작완료": "production_done",
     "작품명": "title",
+    "작품분류": "work_genre",
     "글작가": "writer",
     "그림작가": "artist",
     "분류(일반/성인)": "category",

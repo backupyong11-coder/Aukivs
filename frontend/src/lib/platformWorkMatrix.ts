@@ -1,5 +1,6 @@
 import type { WorksMasterItem } from "@/lib/worksMaster";
 import type { PlatformMasterItem } from "@/lib/platformMaster";
+import { getWorkGenre } from "@/lib/worksGenre";
 
 /** 셀 상태: 참고 UI — 활성(체크) / 진행(톱니) / 초기(봉투) */
 export type MatrixCellKind = "active" | "progress" | "early" | "none" | "blocked";
@@ -11,6 +12,7 @@ export type PlatformColumn = {
 
 export type WorkMatrixRow = {
   title: string;
+  genre: string;
   cells: MatrixCellKind[];
 };
 
@@ -191,6 +193,7 @@ export function reorderPlatformWorkMatrix(
   const oldIndex = new Map(model.columns.map((c, i) => [c.label, i]));
   const rows = model.rows.map((r) => ({
     title: r.title,
+    genre: r.genre,
     cells: ordered.map((l) => r.cells[oldIndex.get(l)!]),
   }));
 
@@ -331,7 +334,7 @@ export function buildPlatformWorkMatrix(
   const rows: WorkMatrixRow[] = workRows.map((w) => {
     const title = (w["작품명"] ?? "").trim();
     const cells = platformLabels.map((pl) => cellKindForWorkPlatform(w, pl));
-    return { title, cells };
+    return { title, genre: getWorkGenre(w), cells };
   });
 
   if (columns.length > 0) {
@@ -355,6 +358,7 @@ export function buildPlatformWorkMatrix(
   const fbColumns: PlatformColumn[] = fallbackCols.map((label) => ({ label, footerNote: "" }));
   const fbRows: WorkMatrixRow[] = workRows.map((w) => ({
     title: (w["작품명"] ?? "").trim(),
+    genre: getWorkGenre(w),
     cells: fallbackCols.map((pl) => cellKindForWorkPlatform(w, pl)),
   }));
 

@@ -22,6 +22,10 @@ import {
   fetchPlatformMatrixPreferences,
   savePlatformMatrixPreferences,
 } from "@/lib/platformMatrixPreferencesApi";
+import {
+  fetchWorksMasterPreferences,
+} from "@/lib/worksMasterPreferencesApi";
+import { mergeWorkGenreOptions, WORK_GENRE_FIELD } from "@/lib/worksGenre";
 import type { WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
@@ -161,6 +165,8 @@ export function PlatformWorkMatrixClient() {
   );
   const [platformSaving, setPlatformSaving] = useState(false);
   const [cellOverrides, setCellOverrides] = useState<Record<string, "blocked">>(() => ({}));
+  const [workGenres, setWorkGenres] = useState<string[]>([]);
+  const [genreSavingTitle, setGenreSavingTitle] = useState<string | null>(null);
 
   useEffect(() => {
     setCellOverrides(loadMatrixCellOverrides());
@@ -174,6 +180,10 @@ export function PlatformWorkMatrixClient() {
       saveMatrixColumnOrder(res.preferences.columnOrder);
       saveMatrixRowOrder(res.preferences.rowOrder);
       saveMatrixHiddenColumns(res.preferences.hiddenColumns);
+    })();
+    void (async () => {
+      const res = await fetchWorksMasterPreferences();
+      setWorkGenres(res.workGenres);
     })();
   }, []);
 
@@ -229,6 +239,7 @@ export function PlatformWorkMatrixClient() {
       columns: keepIndexes.map((i) => orderedRows.columns[i]!),
       rows: orderedRows.rows.map((r) => ({
         title: r.title,
+        genre: r.genre,
         cells: keepIndexes.map((i) => r.cells[i] ?? "none"),
       })),
     };
@@ -396,6 +407,26 @@ export function PlatformWorkMatrixClient() {
     })();
   };
 
+  const genreOptions = useMemo(
+    () => mergeWorkGenreOptions(workGenres, worksItems),
+    [workGenres, worksItems],
+  );
+
+  const handleWorkGenreChange = async (title: string, genre: string) => {
+    setGenreSavingTitle(title);
+    setActionError(null);
+    const r = await updateWorksMasterRow(title, {
+      작품명: title,
+      [WORK_GENRE_FIELD]: genre,
+    });
+    setGenreSavingTitle(null);
+    if (!r.ok) {
+      setActionError(r.message);
+      return;
+    }
+    setRefreshKey((k) => k + 1);
+  };
+
   const handleWorkSave = async () => {
     setWorkSaving(true);
     setActionError(null);
@@ -443,7 +474,7 @@ export function PlatformWorkMatrixClient() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          작품정리의「런칭·연재·업로드·대기·계약」열과 플랫폼명을 매칭합니다. 표기 방식이 다르면 셀이 비어 보일 수 있습니다.
+          작품 DB(작품정리)와 연동됩니다. 분류·작품명·사이트 열을 편집하면 매트릭스에 반영됩니다.
         </p>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
@@ -692,7 +723,10 @@ export function PlatformWorkMatrixClient() {
           <table className="w-full min-w-[960px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
-                <th className="sticky left-0 z-20 min-w-[11rem] border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                <th className="sticky left-0 z-20 min-w-[5.5rem] border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                  <span className="block px-1">분류</span>
+                </th>
+                <th className="sticky left-[5.5rem] z-20 min-w-[11rem] border-r border-zinc-200 bg-zinc-100 px-2 py-2 text-left text-xs font-bold uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
                   <span className="block px-1">작품명</span>
                 </th>
                 {displayModel.columns.map((c, colIdx) => {
@@ -792,6 +826,25 @@ export function PlatformWorkMatrixClient() {
                 >
                   <th
                     scope="row"
+                    className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-1.5 py-2 text-left dark:border-zinc-700 dark:bg-zinc-950"
+                  >
+                    <select
+                      value={row.genre}
+                      disabled={genreSavingTitle === row.title}
+                      onChange={(e) => void handleWorkGenreChange(row.title, e.target.value)}
+                      className="w-full min-w-[5rem] rounded border border-zinc-200 bg-zinc-50 px-1 py-0.5 text-[11px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      aria-label={`${row.title} 분류`}
+                    >
+                      <option value="">—</option>
+                      {genreOptions.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th
+                    scope="row"
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData("application/x-platform-work-row", row.title);
@@ -822,7 +875,7 @@ export function PlatformWorkMatrixClient() {
                       setRowOrder(next);
                       persistPlatformPrefs(columnOrder, hiddenCols, next);
                     }}
-                    className={`sticky left-0 z-10 cursor-grab border-r border-zinc-200 bg-white px-2 py-2 text-left active:cursor-grabbing dark:border-zinc-700 dark:bg-zinc-950 ${
+                    className={`sticky left-[5.5rem] z-10 cursor-grab border-r border-zinc-200 bg-white px-2 py-2 text-left active:cursor-grabbing dark:border-zinc-700 dark:bg-zinc-950 ${
                       rowDragOver === row.title ? "ring-2 ring-emerald-500 ring-inset" : ""
                     }`}
                   >
@@ -894,7 +947,11 @@ export function PlatformWorkMatrixClient() {
               <tr className="border-t-2 border-zinc-300 bg-zinc-50/90 dark:border-zinc-600 dark:bg-zinc-900/80">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 border-r border-zinc-200 bg-zinc-50 px-3 py-3 text-left text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="sticky left-0 z-10 border-r border-zinc-200 bg-zinc-50 px-2 py-3 dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <th
+                  scope="row"
+                  className="sticky left-[5.5rem] z-10 border-r border-zinc-200 bg-zinc-50 px-3 py-3 text-left text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900"
                 >
                   플랫폼 메모
                 </th>
@@ -931,12 +988,36 @@ export function PlatformWorkMatrixClient() {
               {WORK_MATRIX_FIELDS.map(({ key, label }) => (
                 <label key={key} className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   {label}
-                  <input
-                    type="text"
-                    value={workForm[key] ?? ""}
-                    onChange={(e) => setWorkForm({ ...workForm, [key]: e.target.value })}
-                    className={inputCls}
-                  />
+                  {key === WORK_GENRE_FIELD ? (
+                    <>
+                      <select
+                        value={workForm[key] ?? ""}
+                        onChange={(e) => setWorkForm({ ...workForm, [key]: e.target.value })}
+                        className={inputCls}
+                      >
+                        <option value="">선택…</option>
+                        {genreOptions.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={workForm[key] ?? ""}
+                        onChange={(e) => setWorkForm({ ...workForm, [key]: e.target.value })}
+                        placeholder="직접 입력"
+                        className={`${inputCls} mt-1`}
+                      />
+                    </>
+                  ) : (
+                    <input
+                      type="text"
+                      value={workForm[key] ?? ""}
+                      onChange={(e) => setWorkForm({ ...workForm, [key]: e.target.value })}
+                      className={inputCls}
+                    />
+                  )}
                 </label>
               ))}
             </div>

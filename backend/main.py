@@ -50,6 +50,9 @@ from schemas import (
     PlatformMatrixPreferencesGetResponse,
     PlatformMatrixPreferencesPutRequest,
     PlatformMatrixPreferencesPutResponse,
+    WorksMasterPreferencesGetResponse,
+    WorksMasterPreferencesPutRequest,
+    WorksMasterPreferencesPutResponse,
     TableListColumnWidthsGetResponse,
     TableListColumnWidthsPutRequest,
     TableListColumnWidthsPutResponse,
@@ -1220,6 +1223,46 @@ def put_platform_matrix_preferences(
             row_order=body.row_order,
         )
         return PlatformMatrixPreferencesPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+
+
+@app.get(
+    "/works-master-preferences",
+    response_model=WorksMasterPreferencesGetResponse,
+)
+def get_works_master_preferences() -> WorksMasterPreferencesGetResponse:
+    settings = load_settings()
+    try:
+        prefs = table_list_prefs_repo.get_works_master_preferences(settings)
+        return WorksMasterPreferencesGetResponse(
+            work_genres=prefs["work_genres"],
+            updated_at=None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+
+
+@app.put(
+    "/works-master-preferences",
+    response_model=WorksMasterPreferencesPutResponse,
+)
+def put_works_master_preferences(
+    body: WorksMasterPreferencesPutRequest,
+) -> WorksMasterPreferencesPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = table_list_prefs_repo.upsert_works_master_preferences(
+            settings,
+            work_genres=body.work_genres,
+        )
+        return WorksMasterPreferencesPutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SupabaseRequestError as e:
