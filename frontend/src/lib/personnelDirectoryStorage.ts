@@ -6,6 +6,8 @@ export type PersonnelDirectoryPerson = {
   position?: string;
   /** 연락처 */
   contact?: string;
+  /** 이메일 */
+  email?: string;
   /** 담당업무 */
   role?: string;
   /** 생년월일 (자유 입력, 예: 1999-01-23) */
@@ -42,6 +44,7 @@ function normalizeBundle(raw: unknown): PersonnelDirectoryBundle {
       company: typeof o.company === "string" ? o.company : "",
       position: typeof o.position === "string" ? o.position : "",
       contact: typeof o.contact === "string" ? o.contact : "",
+      email: typeof o.email === "string" ? o.email : "",
       role: typeof o.role === "string" ? o.role : "",
       birthdate: typeof o.birthdate === "string" ? o.birthdate : "",
       memo: typeof o.memo === "string" ? o.memo : "",
@@ -92,6 +95,7 @@ export function upsertDirectoryPerson(person: PersonnelDirectoryPerson): void {
     company: (person.company ?? "").trim(),
     position: (person.position ?? "").trim(),
     contact: (person.contact ?? "").trim(),
+    email: (person.email ?? "").trim(),
     role: (person.role ?? "").trim(),
     birthdate: (person.birthdate ?? "").trim(),
     memo: (person.memo ?? "").trim(),

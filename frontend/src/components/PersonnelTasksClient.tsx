@@ -106,6 +106,7 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
   const [showDone, setShowDone] = useState(false);
   const [profileDraft, setProfileDraft] = useState<PersonnelDirectoryPerson | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileEdit, setProfileEdit] = useState(false);
   const [sortEdit, setSortEdit] = useState(false);
   const [manualOrder, setManualOrder] = useState<string[]>([]);
 
@@ -173,6 +174,7 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
     if (!selected) {
       setProfileDraft(null);
       setProfileOpen(false);
+      setProfileEdit(false);
       return;
     }
     const p = getDirectoryPerson(selected);
@@ -181,11 +183,13 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
       company: p?.company ?? "",
       position: p?.position ?? "",
       contact: p?.contact ?? "",
+      email: p?.email ?? "",
       role: p?.role ?? "",
       birthdate: p?.birthdate ?? "",
       memo: p?.memo ?? "",
     });
     setProfileOpen(false);
+    setProfileEdit(false);
   }, [selected]);
 
   const stats = useMemo(
@@ -345,17 +349,21 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                 </div>
                 {(() => {
                   const p = getDirectoryPerson(s.name);
-                  const meta = [p?.company, p?.position, p?.role, p?.contact]
+                  const line1 = [p?.company, p?.position, p?.role]
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
                     .join(" · ");
-                  return meta ? (
-                    <p
-                      className={`mt-0.5 truncate text-[11px] ${selected === s.name ? "opacity-90" : "text-zinc-400 dark:text-zinc-500"}`}
-                      title={meta}
-                    >
-                      {meta}
-                    </p>
+                  const line2 = [p?.contact, p?.email]
+                    .map((x) => (x ?? "").trim())
+                    .filter(Boolean)
+                    .join(" · ");
+                  const tone = selected === s.name ? "opacity-90" : "text-zinc-400 dark:text-zinc-500";
+                  const title = [line1, line2].filter(Boolean).join("\n");
+                  return line1 || line2 ? (
+                    <div className={`mt-0.5 text-[11px] ${tone}`} title={title}>
+                      {line1 ? <p className="truncate">{line1}</p> : null}
+                      {line2 ? <p className="truncate">{line2}</p> : null}
+                    </div>
                   ) : null;
                 })()}
                 <p className={`mt-1 text-xs ${selected === s.name ? "opacity-90" : "text-zinc-500 dark:text-zinc-400"}`}>
@@ -387,101 +395,151 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
 
             {selected && profileDraft ? (
               <div className="border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    {mode === "manager" ? "담당자" : "외부담당자"} 정보
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setProfileOpen((v) => !v)}
-                    className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                  >
-                    {profileOpen ? "접기" : "펼치기"}
-                  </button>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      {mode === "manager" ? "담당자" : "외부담당자"} 정보
+                    </p>
+                    {(() => {
+                      const line1 = [profileDraft.company, profileDraft.position, profileDraft.role]
+                        .map((x) => (x ?? "").trim())
+                        .filter(Boolean)
+                        .join(" · ");
+                      const line2 = [profileDraft.contact, profileDraft.email]
+                        .map((x) => (x ?? "").trim())
+                        .filter(Boolean)
+                        .join(" · ");
+                      return line1 || line2 ? (
+                        <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {line1 ? <p className="truncate">{line1}</p> : null}
+                          {line2 ? <p className="truncate">{line2}</p> : null}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">정보 없음</p>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(true);
+                        setProfileEdit((v) => !v);
+                      }}
+                      className="rounded-md px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    >
+                      {profileEdit ? "수정 취소" : "수정"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProfileOpen((v) => !v)}
+                      className="rounded-md px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    >
+                      {profileOpen ? "접기" : "펼치기"}
+                    </button>
+                    {profileEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          upsertDirectoryPerson(profileDraft);
+                          setProfileEdit(false);
+                        }}
+                        className="rounded-md bg-zinc-900 px-2 py-1 text-[11px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      >
+                        저장
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
-                {profileOpen ? (
+                {profileOpen && profileEdit ? (
                   <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
                       업체
                       <input
                         value={profileDraft.company ?? ""}
                         onChange={(e) =>
                           setProfileDraft((p) => (p ? { ...p, company: e.target.value } : p))
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
                         placeholder="예: 오키브스"
                       />
                     </label>
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
                       직위
                       <input
                         value={profileDraft.position ?? ""}
                         onChange={(e) =>
                           setProfileDraft((p) => (p ? { ...p, position: e.target.value } : p))
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
                         placeholder="예: 사원 / 과장 / 팀장"
                       />
                     </label>
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
-                      연락처
-                      <input
-                        value={profileDraft.contact ?? ""}
-                        onChange={(e) =>
-                          setProfileDraft((p) => (p ? { ...p, contact: e.target.value } : p))
-                        }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                        placeholder="예: 010-0000-0000"
-                      />
-                    </label>
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
                       담당업무
                       <input
                         value={profileDraft.role ?? ""}
                         onChange={(e) =>
                           setProfileDraft((p) => (p ? { ...p, role: e.target.value } : p))
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
                         placeholder="예: 유통 / 제작 / 계약 / 운영"
                       />
                     </label>
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
                       생년월일
                       <input
                         value={profileDraft.birthdate ?? ""}
                         onChange={(e) =>
                           setProfileDraft((p) => (p ? { ...p, birthdate: e.target.value } : p))
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
                         placeholder="예: 1999-01-23"
                       />
                     </label>
-                    <label className="text-xs text-zinc-600 dark:text-zinc-400 md:col-span-2">
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                      연락처
+                      <input
+                        value={profileDraft.contact ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, contact: e.target.value } : p))
+                        }
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
+                        placeholder="예: 010-0000-0000"
+                      />
+                    </label>
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                      Email
+                      <input
+                        value={profileDraft.email ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, email: e.target.value } : p))
+                        }
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
+                        placeholder="예: name@example.com"
+                      />
+                    </label>
+                    <label className="text-[11px] text-zinc-600 dark:text-zinc-400 md:col-span-2">
                       메모
                       <input
                         value={profileDraft.memo ?? ""}
                         onChange={(e) =>
                           setProfileDraft((p) => (p ? { ...p, memo: e.target.value } : p))
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        className="mt-1 w-full bg-transparent px-0 py-1 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-600"
+                        style={{ borderBottom: "1px solid rgba(161,161,170,0.35)" }}
                         placeholder="예: 특이사항"
                       />
                     </label>
                   </div>
                 ) : null}
-
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      upsertDirectoryPerson(profileDraft);
-                    }}
-                    className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  >
-                    저장
-                  </button>
-                </div>
               </div>
             ) : null}
 
