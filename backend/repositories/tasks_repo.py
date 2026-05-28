@@ -12,18 +12,25 @@ from services.supabase_client import SupabaseRestClient, SupabaseRequestError
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 
 _SELECT_TASKS_BASE = (
-    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,execute_date,execute_date_raw,"
+    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
     "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
     "difficulty,fatigue"
 )
-_SELECT_TASKS_WITH_MANAGER = f"{_SELECT_TASKS_BASE},work_assignee,task_manager,memo"
-_SELECT_TASKS_NEW = f"{_SELECT_TASKS_BASE},work_assignee,memo"
-_SELECT_TASKS_LEGACY = f"{_SELECT_TASKS_BASE},status,assignee,memo"
+_SELECT_TASKS_BASE_WITH_EXEC = f"{_SELECT_TASKS_BASE},execute_date,execute_date_raw"
+
+_SELECT_TASKS_WITH_MANAGER = f"{_SELECT_TASKS_BASE_WITH_EXEC},work_assignee,task_manager,memo"
+_SELECT_TASKS_NEW = f"{_SELECT_TASKS_BASE_WITH_EXEC},work_assignee,memo"
+_SELECT_TASKS_LEGACY = f"{_SELECT_TASKS_BASE_WITH_EXEC},status,assignee,memo"
+
+_SELECT_TASKS_WITH_MANAGER_NO_EXEC = f"{_SELECT_TASKS_BASE},work_assignee,task_manager,memo"
+_SELECT_TASKS_NEW_NO_EXEC = f"{_SELECT_TASKS_BASE},work_assignee,memo"
+_SELECT_TASKS_LEGACY_NO_EXEC = f"{_SELECT_TASKS_BASE},status,assignee,memo"
 
 _tasks_select_cache: str | None = None
 _assignee_write_col_cache: str | None = None
 _tasks_has_manager_col: bool | None = None
+_tasks_has_execute_col: bool | None = None
 
 
 def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
@@ -34,43 +41,49 @@ def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
 
 
 def _set_tasks_schema(*, variant: str) -> tuple[str, str]:
-    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col
+    use_exec = _tasks_has_execute_col is not False
     if variant == "with_manager":
-        _tasks_select_cache = _SELECT_TASKS_WITH_MANAGER
+        _tasks_select_cache = _SELECT_TASKS_WITH_MANAGER if use_exec else _SELECT_TASKS_WITH_MANAGER_NO_EXEC
         _assignee_write_col_cache = "work_assignee"
         _tasks_has_manager_col = True
     elif variant == "new":
-        _tasks_select_cache = _SELECT_TASKS_NEW
+        _tasks_select_cache = _SELECT_TASKS_NEW if use_exec else _SELECT_TASKS_NEW_NO_EXEC
         _assignee_write_col_cache = "work_assignee"
         _tasks_has_manager_col = False
     else:
-        _tasks_select_cache = _SELECT_TASKS_LEGACY
+        _tasks_select_cache = _SELECT_TASKS_LEGACY if use_exec else _SELECT_TASKS_LEGACY_NO_EXEC
         _assignee_write_col_cache = "status"
         _tasks_has_manager_col = False
     return _tasks_select_cache, _assignee_write_col_cache
 
 
 def _reset_tasks_schema_cache() -> None:
-    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col, _tasks_has_execute_col
     _tasks_select_cache = None
     _assignee_write_col_cache = None
     _tasks_has_manager_col = None
+    _tasks_has_execute_col = None
 
 
 def _fetch_tasks(cli: SupabaseRestClient, params: dict[str, Any]) -> Any:
     """GET /tasks — work_assignee·task_manager 마이그레이션 전·후 스키마 자동 전환."""
     base = {k: v for k, v in params.items() if k != "select"}
     last_exc: SupabaseRequestError | None = None
-    for variant in ("with_manager", "new", "legacy"):
-        select, _ = _set_tasks_schema(variant=variant)
-        try:
-            return cli.get_json("/tasks", params={**base, "select": select})
-        except SupabaseRequestError as exc:
-            if _is_missing_column_error(exc):
-                last_exc = exc
-                _reset_tasks_schema_cache()
-                continue
-            raise
+    # 1) execute_date 컬럼이 있으면 포함해서 시도 → 2) 없으면 제외하고 재시도
+    for exec_supported in (True, False):
+        global _tasks_has_execute_col
+        _tasks_has_execute_col = exec_supported
+        for variant in ("with_manager", "new", "legacy"):
+            select, _ = _set_tasks_schema(variant=variant)
+            try:
+                return cli.get_json("/tasks", params={**base, "select": select})
+            except SupabaseRequestError as exc:
+                if _is_missing_column_error(exc):
+                    last_exc = exc
+                    _reset_tasks_schema_cache()
+                    continue
+                raise
     if last_exc:
         raise last_exc
     raise SupabaseRequestError("Supabase GET /tasks failed: schema mismatch")
@@ -82,6 +95,11 @@ def _probe_tasks_schema(cli: SupabaseRestClient) -> tuple[str, str]:
     _fetch_tasks(cli, {"limit": "1"})
     assert _tasks_select_cache and _assignee_write_col_cache
     return _tasks_select_cache, _assignee_write_col_cache
+
+
+def _tasks_has_execute(cli: SupabaseRestClient) -> bool:
+    _fetch_tasks(cli, {"limit": "1"})
+    return _tasks_has_execute_col is not False
 
 
 def _tasks_select(cli: SupabaseRestClient) -> str:
@@ -211,8 +229,12 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
     if not due_s and row.get("due_date_raw"):
         due_s = str(row["due_date_raw"]).strip()
 
+    ex_s = ""
     ex = row.get("execute_date")
-    ex_s = ex.isoformat() if isinstance(ex, date) else opt_str("execute_date")
+    if isinstance(ex, date):
+        ex_s = ex.isoformat()
+    else:
+        ex_s = opt_str("execute_date")
     if not ex_s and row.get("execute_date_raw"):
         ex_s = str(row["execute_date_raw"]).strip()
 
@@ -368,6 +390,7 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         raise SheetsParseError("[파싱] 업무명은 비울 수 없습니다.")
     cli = _client(settings)
     assignee_col = _probe_tasks_schema(cli)[1]
+    has_exec = _tasks_has_execute(cli)
     sheet_row = _next_sheet_row(cli)
     legacy_id = f"task-row-{sheet_row}"
 
@@ -396,6 +419,8 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
             else:
                 insert["due_date_raw"] = s
         elif dbk == "execute_date":
+            if not has_exec:
+                continue
             s = str(raw).strip()
             if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
                 insert["execute_date"] = s
@@ -443,10 +468,11 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         out["마감일"] = str(insert["due_date"])
     elif "due_date_raw" in insert:
         out["마감일"] = str(insert["due_date_raw"])
-    if "execute_date" in insert:
-        out["실행일"] = str(insert["execute_date"])
-    elif "execute_date_raw" in insert:
-        out["실행일"] = str(insert["execute_date_raw"])
+    if has_exec:
+        if "execute_date" in insert:
+            out["실행일"] = str(insert["execute_date"])
+        elif "execute_date_raw" in insert:
+            out["실행일"] = str(insert["execute_date_raw"])
     return out
 
 
@@ -454,6 +480,7 @@ def _patch_body_from_fields(
     fields: dict[str, Any],
     *,
     assignee_col: str = "work_assignee",
+    has_execute: bool = False,
 ) -> dict[str, Any]:
     patch: dict[str, Any] = {}
     for kr, dbk in _KOREAN_TO_DB.items():
@@ -480,6 +507,9 @@ def _patch_body_from_fields(
                 patch["due_date_raw"] = s
             continue
         if dbk == "execute_date":
+            # execute_date 컬럼이 없는 스키마(이전 DB)에서는 무시
+            if not has_execute:
+                continue
             s = "" if raw is None else str(raw).strip()
             if not s:
                 patch["execute_date"] = None
@@ -520,7 +550,12 @@ def update_task(settings: Settings, task_id: str, fields: dict[str, Any]) -> Non
     tid = row.get("id")
     if not tid:
         raise SheetsNotFoundError(f"[찾을수없음] id 없음: {task_id}")
-    patch = _patch_body_from_fields(fields, assignee_col=_assignee_write_col(cli))
+    has_exec = _tasks_has_execute(cli)
+    patch = _patch_body_from_fields(
+        fields,
+        assignee_col=_assignee_write_col(cli),
+        has_execute=has_exec,
+    )
     if not patch:
         return
     cli.patch_json("/tasks", params={"id": f"eq.{tid}"}, body=patch)
