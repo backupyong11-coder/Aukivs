@@ -349,20 +349,22 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                 </div>
                 {(() => {
                   const p = getDirectoryPerson(s.name);
-                  const line1 = [p?.company, p?.position, p?.role]
+                  const line1 = [p?.company, p?.position]
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
                     .join(" · ");
-                  const line2 = [p?.contact, p?.email]
+                  const line2 = [(p?.role ?? "").trim()].filter(Boolean).join(" · ");
+                  const line3 = [p?.contact, p?.email]
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
                     .join(" · ");
                   const tone = selected === s.name ? "opacity-90" : "text-zinc-400 dark:text-zinc-500";
-                  const title = [line1, line2].filter(Boolean).join("\n");
-                  return line1 || line2 ? (
+                  const title = [line1, line2, line3].filter(Boolean).join("\n");
+                  return line1 || line2 || line3 ? (
                     <div className={`mt-0.5 text-[11px] ${tone}`} title={title}>
                       {line1 ? <p className="truncate">{line1}</p> : null}
                       {line2 ? <p className="truncate">{line2}</p> : null}
+                      {line3 ? <p className="truncate">{line3}</p> : null}
                     </div>
                   ) : null;
                 })()}
@@ -400,24 +402,6 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                     <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                       {mode === "manager" ? "담당자" : "외부담당자"} 정보
                     </p>
-                    {(() => {
-                      const line1 = [profileDraft.company, profileDraft.position, profileDraft.role]
-                        .map((x) => (x ?? "").trim())
-                        .filter(Boolean)
-                        .join(" · ");
-                      const line2 = [profileDraft.contact, profileDraft.email]
-                        .map((x) => (x ?? "").trim())
-                        .filter(Boolean)
-                        .join(" · ");
-                      return line1 || line2 ? (
-                        <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          {line1 ? <p className="truncate">{line1}</p> : null}
-                          {line2 ? <p className="truncate">{line2}</p> : null}
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">정보 없음</p>
-                      );
-                    })()}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
