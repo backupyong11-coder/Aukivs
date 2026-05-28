@@ -100,9 +100,12 @@ const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] 
   { key: "보유에셋/비고", label: "비고" },
 ];
 
+const META_FIELDS = new Set(["id", "sheet_row"]);
+
 function normalizeWorkRow(raw: WorksMasterItem): WorkRow {
   const out: WorkRow = {};
   for (const [k, v] of Object.entries(raw)) {
+    if (META_FIELDS.has(k)) continue;
     if (k === BOOL_FIELD) {
       out[k] = boolToCell(!!v || isWorksBoolValue(String(v ?? "")));
       continue;
@@ -110,6 +113,7 @@ function normalizeWorkRow(raw: WorksMasterItem): WorkRow {
     out[k] = String(v ?? "").trim();
   }
   if (!out[WORK_GENRE_FIELD]) out[WORK_GENRE_FIELD] = getWorkGenre(raw);
+  if (raw["id"] != null) out["__id"] = String(raw["id"]);
   return out;
 }
 
@@ -123,6 +127,7 @@ function mergeColumnOrder(items: WorkRow[]): string[] {
   }
   for (const row of items) {
     for (const k of Object.keys(row)) {
+      if (k.startsWith("__")) continue;
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(k);
@@ -180,7 +185,12 @@ function rowTitle(item: WorkRow): string {
 }
 
 function rowKey(item: WorkRow): string {
-  return rowTitle(item);
+  const stable = (item["__id"] ?? "").trim();
+  return stable || rowTitle(item);
+}
+
+function rowStableId(item: WorkRow): string {
+  return (item["__id"] ?? "").trim();
 }
 
 export function WorksMasterClient() {
@@ -368,7 +378,10 @@ export function WorksMasterClient() {
       setActionError(null);
       setFieldInState(rowTitleKey, field, newValue);
       try {
-        const r = await updateWorksMasterRow(rowTitleKey, { [field]: newValue });
+        const r = await updateWorksMasterRow(
+          { id: rowStableId(item), originalTitle: rowTitle(item) },
+          { [field]: newValue },
+        );
         if (!r.ok) throw new Error(r.message);
         setRefreshKey((k) => k + 1);
       } catch (e) {
@@ -395,8 +408,7 @@ export function WorksMasterClient() {
   );
 
   const openEditModal = (item: WorkRow) => {
-    const title = rowKey(item);
-    setModalOriginalTitle(title);
+    setModalOriginalTitle(rowTitle(item));
     setModalItem(item);
     const form: Record<string, string> = {};
     columnOrder.forEach((key) => {
@@ -415,7 +427,10 @@ export function WorksMasterClient() {
       columnOrder.forEach((key) => {
         payload[key] = modalForm[key] ?? "";
       });
-      const r = await updateWorksMasterRow(modalOriginalTitle, payload);
+      const r = await updateWorksMasterRow(
+        { id: rowStableId(modalItem), originalTitle: modalOriginalTitle },
+        payload,
+      );
       if (!r.ok) throw new Error(r.message);
       setModalItem(null);
       setRefreshKey((k) => k + 1);

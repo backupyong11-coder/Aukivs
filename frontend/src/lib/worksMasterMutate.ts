@@ -47,11 +47,13 @@ export async function createWorksMasterRow(
 }
 
 export async function updateWorksMasterRow(
-  originalTitle: string,
+  rowKey: { id?: string; originalTitle: string },
   fields: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    await apiPost("/works-master/update", { original_title: originalTitle, ...fields });
+    const body: Record<string, unknown> = { original_title: rowKey.originalTitle, ...fields };
+    if (rowKey.id) body.id = rowKey.id;
+    await apiPost("/works-master/update", body);
     return { ok: true };
   } catch (e) {
     return {

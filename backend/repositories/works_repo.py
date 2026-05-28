@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from config import Settings
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 from services.supabase_client import SupabaseRestClient, SupabaseRequestError, postgrest_eq
-from services.sheets_errors import SheetsParseError
 
 # google_master_sheets 주석 A~X 열 순서 + migrate_scripts 의 DB 컬럼명 (표준 헤더 문자열)
 _WORKS_HEADER_ORDER: tuple[tuple[str, str], ...] = (
@@ -41,24 +41,24 @@ _WORKS_HEADER_ORDER: tuple[tuple[str, str], ...] = (
 _CANONICAL_HEADERS: frozenset[str] = frozenset(h for h, _ in _WORKS_HEADER_ORDER)
 
 _SELECT = (
-    "production_done,title,work_genre,writer,artist,category,format,current_status,"
+    "id,sheet_row,production_done,title,work_genre,writer,artist,category,format,current_status,"
     "sites_to_upload,launched_sites,pending_sites,contracted_sites,episode_info,"
     "synopsis,characters,copyright,uci,tags,assets_note,staff,age_rating,"
     "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
 )
 
 _SELECT_MATRIX = (
-    "title,work_genre,writer,artist,launched_sites,active_sites,sites_to_upload,"
+    "id,sheet_row,title,work_genre,writer,artist,launched_sites,active_sites,sites_to_upload,"
     "pending_sites,contracted_sites,first_supply_schedule,extra"
 )
 
 _SELECT_MATRIX_LEGACY = (
-    "title,writer,artist,launched_sites,active_sites,sites_to_upload,"
+    "id,sheet_row,title,writer,artist,launched_sites,active_sites,sites_to_upload,"
     "pending_sites,contracted_sites,first_supply_schedule,extra"
 )
 
 _SELECT_FULL_LEGACY = (
-    "production_done,title,writer,artist,category,format,current_status,"
+    "id,sheet_row,production_done,title,writer,artist,category,format,current_status,"
     "sites_to_upload,launched_sites,pending_sites,contracted_sites,episode_info,"
     "synopsis,characters,copyright,uci,tags,assets_note,staff,age_rating,"
     "first_supply_schedule,serialization_weekday,active_site_count,active_sites,extra"
@@ -121,12 +121,33 @@ def _api_cell(v: object) -> Any:
     return None if not s else s
 
 
+def _row_client_id(row: dict[str, Any]) -> str:
+    """프론트가 안전하게 참조할 수 있는 안정 ID. sheet_row → UUID 순으로 우선."""
+    sr = row.get("sheet_row")
+    if isinstance(sr, int) and sr >= 2:
+        return f"works-row-{sr}"
+    if isinstance(sr, float) and not isinstance(sr, bool) and sr >= 2:
+        return f"works-row-{int(sr)}"
+    if isinstance(sr, str) and sr.strip().isdigit() and int(sr) >= 2:
+        return f"works-row-{int(sr)}"
+    rid = row.get("id")
+    if rid:
+        return str(rid)
+    return ""
+
+
 def _row_to_master_dict(row: dict[str, Any]) -> dict[str, Any]:
     title = str(row.get("title") or "").strip()
     if not title:
         raise ValueError("empty title")
 
     out: dict[str, Any] = {}
+    cid = _row_client_id(row)
+    if cid:
+        out["id"] = cid
+    sr = row.get("sheet_row")
+    if isinstance(sr, int) and sr >= 2:
+        out["sheet_row"] = sr
     for hdr, col in _WORKS_HEADER_ORDER:
         raw = row.get(col)
         if col == "production_done":
@@ -195,7 +216,11 @@ def _row_to_master_dict_slim(row: dict[str, Any]) -> dict[str, Any]:
     title = str(row.get("title") or "").strip()
     if not title:
         raise ValueError("empty title")
-    out: dict[str, Any] = {"작품명": title}
+    out: dict[str, Any] = {}
+    cid = _row_client_id(row)
+    if cid:
+        out["id"] = cid
+    out["작품명"] = title
     slim_map = (
         ("글작가", "writer"),
         ("그림작가", "artist"),
@@ -229,7 +254,12 @@ def _row_to_master_dict_matrix(row: dict[str, Any]) -> dict[str, Any]:
     title = str(row.get("title") or "").strip()
     if not title:
         raise ValueError("empty title")
-    out: dict[str, Any] = {"작품명": title, "작품분류": _work_genre_from_row(row)}
+    out: dict[str, Any] = {}
+    cid = _row_client_id(row)
+    if cid:
+        out["id"] = cid
+    out["작품명"] = title
+    out["작품분류"] = _work_genre_from_row(row)
     for hdr, col in _WORKS_HEADER_ORDER:
         if col in (
             "title",
@@ -442,6 +472,29 @@ def _fields_to_db_patch(fields: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     return patch, extra
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    flags=re.IGNORECASE,
+)
+_SHEET_ROW_RE = re.compile(r"^works-row-(\d+)$", flags=re.IGNORECASE)
+
+
+def _scan_for_title(settings: Settings, title: str) -> dict[str, Any] | None:
+    """list_works_master 전체를 가져와서 title을 정규화(공백·NFC) 비교 — eq.이 실패하는 케이스 대비."""
+    cli = _client(settings)
+    rows = _fetch_works_json(cli, select=_SELECT, params={"order": "sheet_row.asc.nullslast"})
+    if not isinstance(rows, list):
+        return None
+    norm_target = re.sub(r"\s+", " ", title).strip()
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        t = str(r.get("title") or "")
+        if re.sub(r"\s+", " ", t).strip() == norm_target:
+            return r
+    return None
+
+
 def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
     cli = _client(settings)
     rows = _fetch_works_json(
@@ -449,9 +502,42 @@ def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
         select=_SELECT,
         params={"title": postgrest_eq(title), "limit": "1"},
     )
-    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
-        raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {title}")
-    return rows[0]
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        return rows[0]
+    rows = _fetch_works_json(
+        cli,
+        select=_SELECT,
+        params={"title": f"eq.{title}", "limit": "1"},
+    )
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        return rows[0]
+    scanned = _scan_for_title(settings, title)
+    if scanned is not None:
+        return scanned
+    raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {title}")
+
+
+def _get_row_by_client_id(settings: Settings, client_id: str) -> dict[str, Any]:
+    """UUID / works-row-{n} / title 순으로 조회."""
+    cid = (client_id or "").strip()
+    if not cid:
+        raise SheetsNotFoundError("[찾을수없음] 작품 id가 비어 있습니다.")
+    cli = _client(settings)
+    if _UUID_RE.match(cid):
+        rows = _fetch_works_json(
+            cli, select=_SELECT, params={"id": f"eq.{cid}", "limit": "1"}
+        )
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows[0]
+    m = _SHEET_ROW_RE.match(cid)
+    if m:
+        n = int(m.group(1))
+        rows = _fetch_works_json(
+            cli, select=_SELECT, params={"sheet_row": f"eq.{n}", "limit": "1"}
+        )
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows[0]
+    return _get_by_title(settings, cid)
 
 
 def _post_works_row(cli: SupabaseRestClient, patch: dict[str, Any]) -> list[Any]:
@@ -563,16 +649,23 @@ def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[
 
 
 def update_works_master_row(
-    settings: Settings, original_title: str, fields: dict[str, Any]
+    settings: Settings,
+    original_title: str,
+    fields: dict[str, Any],
+    *,
+    client_id: str | None = None,
 ) -> None:
-    orig = original_title.strip()
-    if not orig:
-        raise SheetsParseError("[파싱] 원본 작품명이 비어 있습니다.")
+    cid = (client_id or "").strip()
+    orig = (original_title or "").strip()
+    if not cid and not orig:
+        raise SheetsParseError("[파싱] 원본 작품 id 또는 원본 작품명이 필요합니다.")
     fields = _normalize_incoming_fields(fields)
-    current = _get_by_title(settings, orig)
+    current = _get_row_by_client_id(settings, cid) if cid else _get_by_title(settings, orig)
     row_id = current.get("id")
     if not row_id:
-        raise SheetsNotFoundError(f"[찾을수없음] 작품 id 없음: {orig}")
+        raise SheetsNotFoundError(
+            f"[찾을수없음] 작품 id 없음: {cid or orig}"
+        )
     patch, extra_in = _fields_to_db_patch(fields)
     base_ex = current.get("extra") or {}
     if not isinstance(base_ex, dict):

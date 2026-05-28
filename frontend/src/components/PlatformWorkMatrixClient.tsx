@@ -415,7 +415,7 @@ export function PlatformWorkMatrixClient() {
   const handleWorkGenreChange = async (title: string, genre: string) => {
     setGenreSavingTitle(title);
     setActionError(null);
-    const r = await updateWorksMasterRow(title, {
+    const r = await updateWorksMasterRow({ originalTitle: title }, {
       작품명: title,
       [WORK_GENRE_FIELD]: genre,
     });
@@ -437,7 +437,7 @@ export function PlatformWorkMatrixClient() {
       return;
     }
     const r = workEditTitle
-      ? await updateWorksMasterRow(workEditTitle, workForm)
+      ? await updateWorksMasterRow({ originalTitle: workEditTitle }, workForm)
       : await createWorksMasterRow(workForm);
     setWorkSaving(false);
     if (!r.ok) {

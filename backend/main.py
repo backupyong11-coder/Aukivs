@@ -225,12 +225,17 @@ def post_works_master_create(body: dict[str, Any] = Body(...)):
 @app.post("/works-master/update")
 def post_works_master_update(body: dict[str, Any] = Body(...)):
     settings = load_settings()
-    original_title = str(body.pop("original_title", "")).strip()
-    if not original_title:
-        raise HTTPException(status_code=400, detail="[파싱] original_title이 없습니다.")
+    client_id = str(body.pop("id", "") or "").strip()
+    original_title = str(body.pop("original_title", "") or "").strip()
+    if not client_id and not original_title:
+        raise HTTPException(
+            status_code=400, detail="[파싱] id 또는 original_title이 필요합니다."
+        )
     if settings.data_backend == "supabase":
         try:
-            works_repo.update_works_master_row(settings, original_title, body)
+            works_repo.update_works_master_row(
+                settings, original_title, body, client_id=client_id
+            )
             return {"updated": True}
         except SupabaseConfigurationError as e:
             raise HTTPException(status_code=503, detail=str(e)) from e
@@ -242,7 +247,7 @@ def post_works_master_update(body: dict[str, Any] = Body(...)):
         except SheetsParseError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
     try:
-        update_works_master_row_sheets(settings, original_title, body)
+        update_works_master_row_sheets(settings, original_title or client_id, body)
         return {"updated": True}
     except SheetsConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
