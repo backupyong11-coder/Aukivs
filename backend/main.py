@@ -47,6 +47,9 @@ from schemas import (
     WeeklyAgendaGetResponse,
     WeeklyAgendaPutRequest,
     WeeklyAgendaPutResponse,
+    PlatformMatrixPreferencesGetResponse,
+    PlatformMatrixPreferencesPutRequest,
+    PlatformMatrixPreferencesPutResponse,
     TableListColumnWidthsGetResponse,
     TableListColumnWidthsPutRequest,
     TableListColumnWidthsPutResponse,
@@ -1178,6 +1181,48 @@ def put_table_list_column_widths(
         raise HTTPException(status_code=status, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get(
+    "/platform-matrix-preferences",
+    response_model=PlatformMatrixPreferencesGetResponse,
+)
+def get_platform_matrix_preferences() -> PlatformMatrixPreferencesGetResponse:
+    settings = load_settings()
+    try:
+        prefs = table_list_prefs_repo.get_platform_matrix_preferences(settings)
+        return PlatformMatrixPreferencesGetResponse(
+            column_order=prefs["column_order"],
+            hidden_columns=prefs["hidden_columns"],
+            updated_at=None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+
+
+@app.put(
+    "/platform-matrix-preferences",
+    response_model=PlatformMatrixPreferencesPutResponse,
+)
+def put_platform_matrix_preferences(
+    body: PlatformMatrixPreferencesPutRequest,
+) -> PlatformMatrixPreferencesPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = table_list_prefs_repo.upsert_platform_matrix_preferences(
+            settings,
+            column_order=body.column_order,
+            hidden_columns=body.hidden_columns,
+        )
+        return PlatformMatrixPreferencesPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
 
 
 # ── 대시보드 통계 ────────────────────────────────────────────────────

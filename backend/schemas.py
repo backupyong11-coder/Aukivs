@@ -559,3 +559,21 @@ class TableListColumnWidthsPutRequest(BaseModel):
 class TableListColumnWidthsPutResponse(BaseModel):
     ok: bool = True
     updated_at: str | None = None
+
+
+class PlatformMatrixPreferencesGetResponse(BaseModel):
+    column_order: list[str] = Field(default_factory=list)
+    hidden_columns: list[str] = Field(default_factory=list)
+    updated_at: str | None = None
+
+
+class PlatformMatrixPreferencesPutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    column_order: list[str] = Field(default_factory=list)
+    hidden_columns: list[str] = Field(default_factory=list)
+
+
+class PlatformMatrixPreferencesPutResponse(BaseModel):
+    ok: bool = True
+    updated_at: str | None = None

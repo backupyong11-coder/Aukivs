@@ -18,6 +18,7 @@ VALID_PAGE_IDS: frozenset[str] = frozenset(
         "tasks",
         "upload-rows",
         "platforms",
+        "platform-matrix",
     }
 )
 
@@ -59,6 +60,22 @@ def _sanitize_widths(raw: dict[str, Any]) -> dict[str, int]:
         except (TypeError, ValueError):
             continue
         out[k] = max(MIN_WIDTH, min(MAX_WIDTH, n))
+    return out
+
+
+def _sanitize_label_list(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        label = item.strip()
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        out.append(label)
     return out
 
 
@@ -106,6 +123,45 @@ def upsert_column_widths(
         page = {}
     page["columnWidths"] = sanitized
     prefs[pid] = page
+
+    cli = _client(settings)
+    body = {"id": DOCUMENT_ID, "preferences": prefs}
+    result = cli.post_json(
+        "/table_list_preferences",
+        body,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+        ua = result[0].get("updated_at")
+        return str(ua) if ua is not None else None
+    return None
+
+
+def get_platform_matrix_preferences(settings: Settings) -> dict[str, list[str]]:
+    prefs = _load_preferences_doc(settings)
+    page = prefs.get("platform-matrix")
+    if not isinstance(page, dict):
+        return {"column_order": [], "hidden_columns": []}
+    return {
+        "column_order": _sanitize_label_list(page.get("columnOrder")),
+        "hidden_columns": _sanitize_label_list(page.get("hiddenColumns")),
+    }
+
+
+def upsert_platform_matrix_preferences(
+    settings: Settings,
+    *,
+    column_order: list[Any],
+    hidden_columns: list[Any],
+) -> str | None:
+    require_supabase(settings)
+    prefs = _load_preferences_doc(settings)
+    page = prefs.get("platform-matrix")
+    if not isinstance(page, dict):
+        page = {}
+    page["columnOrder"] = _sanitize_label_list(column_order)
+    page["hiddenColumns"] = _sanitize_label_list(hidden_columns)
+    prefs["platform-matrix"] = page
 
     cli = _client(settings)
     body = {"id": DOCUMENT_ID, "preferences": prefs}

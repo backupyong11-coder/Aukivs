@@ -18,6 +18,10 @@ import {
   updateWorksMasterRow,
   WORK_MATRIX_FIELDS,
 } from "@/lib/worksMasterMutate";
+import {
+  fetchPlatformMatrixPreferences,
+  savePlatformMatrixPreferences,
+} from "@/lib/platformMatrixPreferencesApi";
 import type { WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
@@ -155,6 +159,14 @@ export function PlatformWorkMatrixClient() {
   useEffect(() => {
     setCellOverrides(loadMatrixCellOverrides());
     setHiddenCols(new Set(loadMatrixHiddenColumns()));
+    void (async () => {
+      const res = await fetchPlatformMatrixPreferences();
+      if (!res.ok) return;
+      setColumnOrder(res.preferences.columnOrder.length > 0 ? res.preferences.columnOrder : null);
+      setHiddenCols(new Set(res.preferences.hiddenColumns));
+      saveMatrixColumnOrder(res.preferences.columnOrder);
+      saveMatrixHiddenColumns(res.preferences.hiddenColumns);
+    })();
   }, []);
 
   useEffect(() => {
@@ -198,13 +210,30 @@ export function PlatformWorkMatrixClient() {
     const preferred = columnOrder ?? loadMatrixColumnOrder();
     const ordered = reorderPlatformWorkMatrix(model, preferred);
     if (hiddenCols.size === 0) return ordered;
-    const keep = ordered.columns
-      .map((c) => c.label)
-      .filter((l) => !hiddenCols.has(l));
-    if (keep.length === ordered.columns.length) return ordered;
-    const filtered = reorderPlatformWorkMatrix(ordered, keep);
-    return filtered;
-  }, [model, columnOrder]);
+    const keepIndexes: number[] = [];
+    ordered.columns.forEach((c, i) => {
+      if (!hiddenCols.has(c.label)) keepIndexes.push(i);
+    });
+    if (keepIndexes.length === ordered.columns.length) return ordered;
+    return {
+      columns: keepIndexes.map((i) => ordered.columns[i]!),
+      rows: ordered.rows.map((r) => ({
+        title: r.title,
+        cells: keepIndexes.map((i) => r.cells[i] ?? "none"),
+      })),
+    };
+  }, [model, columnOrder, hiddenCols]);
+
+  const persistPlatformPrefs = useCallback((order: string[] | null, hidden: Set<string>) => {
+    const columnOrderToSave = order ?? loadMatrixColumnOrder();
+    const hiddenColumns = Array.from(hidden);
+    saveMatrixColumnOrder(columnOrderToSave);
+    saveMatrixHiddenColumns(hiddenColumns);
+    void savePlatformMatrixPreferences({
+      columnOrder: columnOrderToSave,
+      hiddenColumns,
+    });
+  }, []);
 
   const movePlatformColumn = useCallback((idx: number, dir: -1 | 1) => {
     if (!displayModel) return;
@@ -214,36 +243,39 @@ export function PlatformWorkMatrixClient() {
     const next = [...labels];
     [next[idx], next[j]] = [next[j], next[idx]];
     setColumnOrder(next);
-    saveMatrixColumnOrder(next);
-  }, [displayModel]);
+    persistPlatformPrefs(next, hiddenCols);
+  }, [displayModel, hiddenCols, persistPlatformPrefs]);
 
   const resetColumnOrder = useCallback(() => {
     clearMatrixColumnOrder();
     setColumnOrder(null);
-  }, []);
+    persistPlatformPrefs([], hiddenCols);
+  }, [hiddenCols, persistPlatformPrefs]);
 
   const resetHiddenColumns = useCallback(() => {
     clearMatrixHiddenColumns();
-    setHiddenCols(new Set());
-  }, []);
+    const next = new Set<string>();
+    setHiddenCols(next);
+    persistPlatformPrefs(columnOrder, next);
+  }, [columnOrder, persistPlatformPrefs]);
 
   const hideColumn = useCallback((label: string) => {
     setHiddenCols((prev) => {
       const next = new Set(prev);
       next.add(label);
-      saveMatrixHiddenColumns(Array.from(next));
+      persistPlatformPrefs(columnOrder, next);
       return next;
     });
-  }, []);
+  }, [columnOrder, persistPlatformPrefs]);
 
   const unhideColumn = useCallback((label: string) => {
     setHiddenCols((prev) => {
       const next = new Set(prev);
       next.delete(label);
-      saveMatrixHiddenColumns(Array.from(next));
+      persistPlatformPrefs(columnOrder, next);
       return next;
     });
-  }, []);
+  }, [columnOrder, persistPlatformPrefs]);
 
   const colCount = displayModel?.columns.length ?? 0;
   const [openCards, setOpenCards] = useState<Set<string>>(() => new Set());
@@ -650,7 +682,7 @@ export function PlatformWorkMatrixClient() {
                         next.splice(fromIdx, 1);
                         next.splice(toIdx, 0, dragLabel);
                         setColumnOrder(next);
-                        saveMatrixColumnOrder(next);
+                        persistPlatformPrefs(next, hiddenCols);
                       }}
                       className={`min-w-[6rem] border-l border-zinc-200 align-top dark:border-zinc-700 ${
                         colDragOver === c.label ? "ring-2 ring-emerald-500 ring-inset" : ""
