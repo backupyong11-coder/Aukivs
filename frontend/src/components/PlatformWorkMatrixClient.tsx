@@ -697,7 +697,7 @@ export function PlatformWorkMatrixClient() {
                 </th>
                 {displayModel.columns.map((c, colIdx) => {
                   const thMoveBtn =
-                    "rounded border border-zinc-200 bg-white px-1 py-0.5 text-[11px] leading-none text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800";
+                    "rounded border border-zinc-200 bg-white px-0.5 py-0 text-[8px] leading-none text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800";
                   return (
                     <th
                       key={c.label}
@@ -735,30 +735,28 @@ export function PlatformWorkMatrixClient() {
                         colDragOver === c.label ? "ring-2 ring-emerald-500 ring-inset" : ""
                       }`}
                     >
-                      <div className="flex items-stretch gap-0">
-                        <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1.5">
-                          <span className="text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                            {c.label}
-                          </span>
-                          <div className="flex flex-wrap items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openPlatformEdit(c.label)}
-                              className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                            >
-                              편집
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => hideColumn(c.label)}
-                              className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                              title="이 플랫폼 열 숨기기"
-                            >
-                              숨김
-                            </button>
-                          </div>
+                      <div className="flex min-w-0 flex-col items-center gap-0.5 px-1 py-1.5">
+                        <span className="text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                          {c.label}
+                        </span>
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openPlatformEdit(c.label)}
+                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                          >
+                            편집
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => hideColumn(c.label)}
+                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                            title="이 플랫폼 열 숨기기"
+                          >
+                            숨김
+                          </button>
                         </div>
-                        <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
+                        <div className="flex items-center justify-center gap-0.5">
                           <button
                             type="button"
                             className={thMoveBtn}
@@ -828,7 +826,29 @@ export function PlatformWorkMatrixClient() {
                       rowDragOver === row.title ? "ring-2 ring-emerald-500 ring-inset" : ""
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <div className="flex shrink-0 flex-col gap-px">
+                        <button
+                          type="button"
+                          disabled={ri === 0}
+                          onClick={() => moveWorkRowTo(ri, "start")}
+                          className="rounded border border-zinc-200 bg-white px-0.5 py-0 text-[8px] leading-none text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                          title="맨 위로"
+                          aria-label={`${row.title} 행을 맨 위로`}
+                        >
+                          ▲▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={ri === displayModel.rows.length - 1}
+                          onClick={() => moveWorkRowTo(ri, "end")}
+                          className="rounded border border-zinc-200 bg-white px-0.5 py-0 text-[8px] leading-none text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                          title="맨 아래로"
+                          aria-label={`${row.title} 행을 맨 아래로`}
+                        >
+                          ▼▼
+                        </button>
+                      </div>
                       <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-50" title={row.title}>
                         {row.title}
                       </span>
@@ -838,26 +858,6 @@ export function PlatformWorkMatrixClient() {
                         className="shrink-0 rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
                       >
                         편집
-                      </button>
-                      <button
-                        type="button"
-                        disabled={ri === 0}
-                        onClick={() => moveWorkRowTo(ri, "start")}
-                        className="shrink-0 rounded border border-zinc-300 px-1 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 disabled:opacity-30 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                        title="맨 위로"
-                        aria-label={`${row.title} 행을 맨 위로`}
-                      >
-                        ▲▲
-                      </button>
-                      <button
-                        type="button"
-                        disabled={ri === displayModel.rows.length - 1}
-                        onClick={() => moveWorkRowTo(ri, "end")}
-                        className="shrink-0 rounded border border-zinc-300 px-1 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 disabled:opacity-30 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                        title="맨 아래로"
-                        aria-label={`${row.title} 행을 맨 아래로`}
-                      >
-                        ▼▼
                       </button>
                     </div>
                   </th>
