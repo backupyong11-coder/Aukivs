@@ -18,6 +18,7 @@ import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { useTableRowOrder } from "@/hooks/useTableRowOrder";
 import { TableRowDragHandle } from "@/components/TableRowDragHandle";
+import { WorksMasterDashboard } from "@/components/WorksMasterDashboard";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   boolToCell,
@@ -552,6 +553,10 @@ export function WorksMasterClient() {
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         작품관리 DB입니다. 셀을 클릭해 바로 수정할 수 있습니다. 플랫폼 매트릭스·캘린더·관제실과 연동됩니다.
       </p>
+
+      {state.kind === "ready" && state.items.length > 0 && (
+        <WorksMasterDashboard items={state.items} />
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
