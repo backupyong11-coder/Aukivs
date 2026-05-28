@@ -141,10 +141,11 @@ def get_platform_matrix_preferences(settings: Settings) -> dict[str, list[str]]:
     prefs = _load_preferences_doc(settings)
     page = prefs.get("platform-matrix")
     if not isinstance(page, dict):
-        return {"column_order": [], "hidden_columns": []}
+        return {"column_order": [], "hidden_columns": [], "row_order": []}
     return {
         "column_order": _sanitize_label_list(page.get("columnOrder")),
         "hidden_columns": _sanitize_label_list(page.get("hiddenColumns")),
+        "row_order": _sanitize_label_list(page.get("rowOrder")),
     }
 
 
@@ -153,6 +154,7 @@ def upsert_platform_matrix_preferences(
     *,
     column_order: list[Any],
     hidden_columns: list[Any],
+    row_order: list[Any],
 ) -> str | None:
     require_supabase(settings)
     prefs = _load_preferences_doc(settings)
@@ -161,6 +163,7 @@ def upsert_platform_matrix_preferences(
         page = {}
     page["columnOrder"] = _sanitize_label_list(column_order)
     page["hiddenColumns"] = _sanitize_label_list(hidden_columns)
+    page["rowOrder"] = _sanitize_label_list(row_order)
     prefs["platform-matrix"] = page
 
     cli = _client(settings)

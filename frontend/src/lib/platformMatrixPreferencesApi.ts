@@ -3,6 +3,7 @@ import { getApiBaseUrl } from "@/lib/apiBase";
 export type PlatformMatrixPreferences = {
   columnOrder: string[];
   hiddenColumns: string[];
+  rowOrder: string[];
 };
 
 export type FetchPlatformMatrixPreferencesResult =
@@ -39,12 +40,13 @@ export async function fetchPlatformMatrixPreferences(): Promise<FetchPlatformMat
     if (!res.ok) {
       return { ok: false, message: raw.slice(0, 200) || `HTTP ${res.status}` };
     }
-    const j = JSON.parse(raw) as { column_order?: unknown; hidden_columns?: unknown };
+    const j = JSON.parse(raw) as { column_order?: unknown; hidden_columns?: unknown; row_order?: unknown };
     return {
       ok: true,
       preferences: {
         columnOrder: cleanList(j.column_order),
         hiddenColumns: cleanList(j.hidden_columns),
+        rowOrder: cleanList(j.row_order),
       },
     };
   } catch {
@@ -64,6 +66,7 @@ export async function savePlatformMatrixPreferences(
       body: JSON.stringify({
         column_order: cleanList(preferences.columnOrder),
         hidden_columns: cleanList(preferences.hiddenColumns),
+        row_order: cleanList(preferences.rowOrder),
       }),
     });
     if (!res.ok) {

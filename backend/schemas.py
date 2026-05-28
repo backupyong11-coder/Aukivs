@@ -564,6 +564,7 @@ class TableListColumnWidthsPutResponse(BaseModel):
 class PlatformMatrixPreferencesGetResponse(BaseModel):
     column_order: list[str] = Field(default_factory=list)
     hidden_columns: list[str] = Field(default_factory=list)
+    row_order: list[str] = Field(default_factory=list)
     updated_at: str | None = None
 
 
@@ -572,6 +573,7 @@ class PlatformMatrixPreferencesPutRequest(BaseModel):
 
     column_order: list[str] = Field(default_factory=list)
     hidden_columns: list[str] = Field(default_factory=list)
+    row_order: list[str] = Field(default_factory=list)
 
 
 class PlatformMatrixPreferencesPutResponse(BaseModel):

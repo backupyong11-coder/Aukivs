@@ -27,13 +27,17 @@ import {
   buildPlatformWorkMatrix,
   clearMatrixColumnOrder,
   clearMatrixHiddenColumns,
+  clearMatrixRowOrder,
   getMatrixCellOverride,
   loadMatrixCellOverrides,
   loadMatrixHiddenColumns,
   loadMatrixColumnOrder,
+  loadMatrixRowOrder,
   reorderPlatformWorkMatrix,
+  reorderPlatformWorkMatrixRows,
   saveMatrixColumnOrder,
   saveMatrixHiddenColumns,
+  saveMatrixRowOrder,
   setMatrixCellOverride,
   type MatrixCellKind,
 } from "@/lib/platformWorkMatrix";
@@ -134,8 +138,10 @@ export function PlatformWorkMatrixClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   /** null → localStorage(또는 기본 모델 순서); 비-null → 방금 조작한 순서 */
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const [rowOrder, setRowOrder] = useState<string[] | null>(null);
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set());
   const [colDragOver, setColDragOver] = useState<string | null>(null);
+  const [rowDragOver, setRowDragOver] = useState<string | null>(null);
 
   const [model, setModel] = useState<ReturnType<typeof buildPlatformWorkMatrix> | null>(null);
   const [platformRows, setPlatformRows] = useState<PlatformRowRecord[]>([]);
@@ -163,8 +169,10 @@ export function PlatformWorkMatrixClient() {
       const res = await fetchPlatformMatrixPreferences();
       if (!res.ok) return;
       setColumnOrder(res.preferences.columnOrder.length > 0 ? res.preferences.columnOrder : null);
+      setRowOrder(res.preferences.rowOrder.length > 0 ? res.preferences.rowOrder : null);
       setHiddenCols(new Set(res.preferences.hiddenColumns));
       saveMatrixColumnOrder(res.preferences.columnOrder);
+      saveMatrixRowOrder(res.preferences.rowOrder);
       saveMatrixHiddenColumns(res.preferences.hiddenColumns);
     })();
   }, []);
@@ -209,31 +217,36 @@ export function PlatformWorkMatrixClient() {
     if (!model) return null;
     const preferred = columnOrder ?? loadMatrixColumnOrder();
     const ordered = reorderPlatformWorkMatrix(model, preferred);
-    if (hiddenCols.size === 0) return ordered;
+    const preferredRows = rowOrder ?? loadMatrixRowOrder();
+    const orderedRows = reorderPlatformWorkMatrixRows(ordered, preferredRows);
+    if (hiddenCols.size === 0) return orderedRows;
     const keepIndexes: number[] = [];
-    ordered.columns.forEach((c, i) => {
+    orderedRows.columns.forEach((c, i) => {
       if (!hiddenCols.has(c.label)) keepIndexes.push(i);
     });
-    if (keepIndexes.length === ordered.columns.length) return ordered;
+    if (keepIndexes.length === orderedRows.columns.length) return orderedRows;
     return {
-      columns: keepIndexes.map((i) => ordered.columns[i]!),
-      rows: ordered.rows.map((r) => ({
+      columns: keepIndexes.map((i) => orderedRows.columns[i]!),
+      rows: orderedRows.rows.map((r) => ({
         title: r.title,
         cells: keepIndexes.map((i) => r.cells[i] ?? "none"),
       })),
     };
-  }, [model, columnOrder, hiddenCols]);
+  }, [model, columnOrder, rowOrder, hiddenCols]);
 
-  const persistPlatformPrefs = useCallback((order: string[] | null, hidden: Set<string>) => {
+  const persistPlatformPrefs = useCallback((order: string[] | null, hidden: Set<string>, rows: string[] | null = rowOrder) => {
     const columnOrderToSave = order ?? loadMatrixColumnOrder();
+    const rowOrderToSave = rows ?? loadMatrixRowOrder();
     const hiddenColumns = Array.from(hidden);
     saveMatrixColumnOrder(columnOrderToSave);
+    saveMatrixRowOrder(rowOrderToSave);
     saveMatrixHiddenColumns(hiddenColumns);
     void savePlatformMatrixPreferences({
       columnOrder: columnOrderToSave,
       hiddenColumns,
+      rowOrder: rowOrderToSave,
     });
-  }, []);
+  }, [rowOrder]);
 
   const movePlatformColumn = useCallback((idx: number, edge: "start" | "end") => {
     if (!displayModel) return;
@@ -255,6 +268,27 @@ export function PlatformWorkMatrixClient() {
     setColumnOrder(null);
     persistPlatformPrefs([], hiddenCols);
   }, [hiddenCols, persistPlatformPrefs]);
+
+  const moveWorkRowTo = useCallback((idx: number, edge: "start" | "end") => {
+    if (!displayModel) return;
+    const titles = displayModel.rows.map((r) => r.title);
+    if (idx < 0 || idx >= titles.length) return;
+    if (edge === "start" && idx === 0) return;
+    if (edge === "end" && idx === titles.length - 1) return;
+    const next = [...titles];
+    const [moved] = next.splice(idx, 1);
+    if (!moved) return;
+    if (edge === "start") next.unshift(moved);
+    else next.push(moved);
+    setRowOrder(next);
+    persistPlatformPrefs(columnOrder, hiddenCols, next);
+  }, [columnOrder, displayModel, hiddenCols, persistPlatformPrefs]);
+
+  const resetRowOrder = useCallback(() => {
+    clearMatrixRowOrder();
+    setRowOrder(null);
+    persistPlatformPrefs(columnOrder, hiddenCols, []);
+  }, [columnOrder, hiddenCols, persistPlatformPrefs]);
 
   const resetHiddenColumns = useCallback(() => {
     clearMatrixHiddenColumns();
@@ -431,6 +465,15 @@ export function PlatformWorkMatrixClient() {
             title="플랫폼 열 순서를 가나다 기본 순서로 되돌립니다."
           >
             열 순서 초기화
+          </button>
+          <button
+            type="button"
+            onClick={resetRowOrder}
+            disabled={load.kind === "loading" || (displayModel?.rows.length ?? 0) === 0}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-600 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+            title="작품명 행 순서를 작품정리 기본 순서로 되돌립니다."
+          >
+            작품 순서 초기화
           </button>
           <button
             type="button"
@@ -617,7 +660,7 @@ export function PlatformWorkMatrixClient() {
       {load.kind === "ready" && displayModel && colCount > 0 && displayModel.rows.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
           <p className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-            플랫폼 열은 드래그로 옮길 수 있고, 머리글에서 숨길 수 있습니다. (이 브라우저에만 저장)
+            플랫폼 열과 작품명 행은 드래그로 옮길 수 있고, 머리글에서 숨길 수 있습니다. 순서와 숨김은 웹에 저장됩니다.
           </p>
           {hiddenCols.size > 0 ? (
             <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
@@ -751,7 +794,39 @@ export function PlatformWorkMatrixClient() {
                 >
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 border-r border-zinc-200 bg-white px-2 py-2 text-left dark:border-zinc-700 dark:bg-zinc-950"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("application/x-platform-work-row", row.title);
+                      e.dataTransfer.setData("text/plain", row.title);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setRowDragOver(row.title);
+                    }}
+                    onDragLeave={() => setRowDragOver(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const drag =
+                        e.dataTransfer.getData("application/x-platform-work-row") ||
+                        e.dataTransfer.getData("text/plain");
+                      setRowDragOver(null);
+                      const dragTitle = (drag || "").trim();
+                      if (!dragTitle || dragTitle === row.title) return;
+                      const titles = displayModel.rows.map((x) => x.title);
+                      const fromIdx = titles.indexOf(dragTitle);
+                      const toIdx = titles.indexOf(row.title);
+                      if (fromIdx < 0 || toIdx < 0) return;
+                      const next = [...titles];
+                      next.splice(fromIdx, 1);
+                      next.splice(toIdx, 0, dragTitle);
+                      setRowOrder(next);
+                      persistPlatformPrefs(columnOrder, hiddenCols, next);
+                    }}
+                    className={`sticky left-0 z-10 cursor-grab border-r border-zinc-200 bg-white px-2 py-2 text-left active:cursor-grabbing dark:border-zinc-700 dark:bg-zinc-950 ${
+                      rowDragOver === row.title ? "ring-2 ring-emerald-500 ring-inset" : ""
+                    }`}
                   >
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-50" title={row.title}>
@@ -763,6 +838,26 @@ export function PlatformWorkMatrixClient() {
                         className="shrink-0 rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
                       >
                         편집
+                      </button>
+                      <button
+                        type="button"
+                        disabled={ri === 0}
+                        onClick={() => moveWorkRowTo(ri, "start")}
+                        className="shrink-0 rounded border border-zinc-300 px-1 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 disabled:opacity-30 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        title="맨 위로"
+                        aria-label={`${row.title} 행을 맨 위로`}
+                      >
+                        ▲▲
+                      </button>
+                      <button
+                        type="button"
+                        disabled={ri === displayModel.rows.length - 1}
+                        onClick={() => moveWorkRowTo(ri, "end")}
+                        className="shrink-0 rounded border border-zinc-300 px-1 py-0.5 text-[10px] leading-none text-zinc-600 hover:bg-zinc-50 disabled:opacity-30 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        title="맨 아래로"
+                        aria-label={`${row.title} 행을 맨 아래로`}
+                      >
+                        ▼▼
                       </button>
                     </div>
                   </th>

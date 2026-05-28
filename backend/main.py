@@ -1194,6 +1194,7 @@ def get_platform_matrix_preferences() -> PlatformMatrixPreferencesGetResponse:
         return PlatformMatrixPreferencesGetResponse(
             column_order=prefs["column_order"],
             hidden_columns=prefs["hidden_columns"],
+            row_order=prefs["row_order"],
             updated_at=None,
         )
     except SupabaseConfigurationError as e:
@@ -1216,6 +1217,7 @@ def put_platform_matrix_preferences(
             settings,
             column_order=body.column_order,
             hidden_columns=body.hidden_columns,
+            row_order=body.row_order,
         )
         return PlatformMatrixPreferencesPutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
