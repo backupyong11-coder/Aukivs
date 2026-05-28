@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadPersonnelBoard } from "@/lib/personnelBoardStorage";
 import {
+  getDirectoryPerson,
+  upsertDirectoryPerson,
+  type PersonnelDirectoryPerson,
+} from "@/lib/personnelDirectoryStorage";
+import {
   type PersonnelAssigneeMode,
   isTaskDone,
   readPersonnelAssignee,
@@ -26,6 +31,9 @@ type PersonnelTasksLabels = {
   unassignedHint: string;
 };
 
+const EXTERNAL_EXCLUDE = new Set(["문자빈", "황승현", "김영화"]);
+const MANAGER_PINNED = ["문자빈", "황승현", "김영화"] as const;
+
 function normalizePeople(
   boardNames: string[],
   tasks: TaskSheetRow[],
@@ -33,17 +41,21 @@ function normalizePeople(
 ): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of boardNames) {
+  const add = (raw: string) => {
     const name = raw.trim();
-    if (!name || seen.has(name)) continue;
+    if (!name || seen.has(name)) return;
+    if (mode === "employee" && EXTERNAL_EXCLUDE.has(name)) return;
     seen.add(name);
     out.push(name);
+  };
+  if (mode === "manager") {
+    for (const p of MANAGER_PINNED) add(p);
+  }
+  for (const raw of boardNames) {
+    add(raw);
   }
   for (const task of tasks) {
-    const name = readPersonnelAssignee(task, mode);
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
+    add(readPersonnelAssignee(task, mode));
   }
   out.sort((a, b) => a.localeCompare(b, "ko"));
   return out;
@@ -71,6 +83,7 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
   const mode = props.mode;
   const [selected, setSelected] = useState<string>("");
   const [showDone, setShowDone] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<PersonnelDirectoryPerson | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +122,21 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
       setSelected(people[0]);
     }
   }, [people, selected]);
+
+  useEffect(() => {
+    if (!selected) {
+      setProfileDraft(null);
+      return;
+    }
+    const p = getDirectoryPerson(selected);
+    setProfileDraft({
+      name: selected,
+      position: p?.position ?? "",
+      contact: p?.contact ?? "",
+      role: p?.role ?? "",
+      birthdate: p?.birthdate ?? "",
+    });
+  }, [selected]);
 
   const stats = useMemo(
     () => people.map((name) => statsForPerson(tasks, name, mode)),
@@ -219,6 +247,21 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                 }`}
               >
                 <p className="truncate text-sm font-semibold">{s.name}</p>
+                {(() => {
+                  const p = getDirectoryPerson(s.name);
+                  const meta = [p?.position, p?.role, p?.contact]
+                    .map((x) => (x ?? "").trim())
+                    .filter(Boolean)
+                    .join(" · ");
+                  return meta ? (
+                    <p
+                      className={`mt-0.5 truncate text-[11px] ${selected === s.name ? "opacity-90" : "text-zinc-400 dark:text-zinc-500"}`}
+                      title={meta}
+                    >
+                      {meta}
+                    </p>
+                  ) : null;
+                })()}
                 <p className={`mt-1 text-xs ${selected === s.name ? "opacity-90" : "text-zinc-500 dark:text-zinc-400"}`}>
                   미완료 <span className="font-semibold">{s.open}</span>
                   <span className="mx-1">·</span>
@@ -245,6 +288,69 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                 완료 포함
               </label>
             </div>
+
+            {selected && profileDraft ? (
+              <div className="border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    직위
+                    <input
+                      value={profileDraft.position ?? ""}
+                      onChange={(e) =>
+                        setProfileDraft((p) => (p ? { ...p, position: e.target.value } : p))
+                      }
+                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="예: 사원 / 과장 / 팀장"
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    연락처
+                    <input
+                      value={profileDraft.contact ?? ""}
+                      onChange={(e) =>
+                        setProfileDraft((p) => (p ? { ...p, contact: e.target.value } : p))
+                      }
+                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="예: 010-0000-0000"
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    담당업무
+                    <input
+                      value={profileDraft.role ?? ""}
+                      onChange={(e) =>
+                        setProfileDraft((p) => (p ? { ...p, role: e.target.value } : p))
+                      }
+                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="예: 유통 / 제작 / 계약 / 운영"
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                    생년월일
+                    <input
+                      value={profileDraft.birthdate ?? ""}
+                      onChange={(e) =>
+                        setProfileDraft((p) => (p ? { ...p, birthdate: e.target.value } : p))
+                      }
+                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      placeholder="예: 1999-01-23"
+                    />
+                  </label>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      upsertDirectoryPerson(profileDraft);
+                    }}
+                    className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {selectedTasks.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-zinc-500">
                 {showDone ? "표시할 업무가 없습니다." : "미완료 업무가 없습니다."}
