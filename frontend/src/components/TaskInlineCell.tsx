@@ -21,8 +21,8 @@ export type EditableTaskField =
   | "세부단위"
   | "관련작품"
   | "난이도"
-  | "피로도"
-  | "업무담당"
+  | "담당자"
+  | "외부담당자"
   | "메모";
 
 type Props = {

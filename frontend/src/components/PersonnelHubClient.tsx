@@ -4,10 +4,10 @@ import { useState } from "react";
 import { PersonnelBoardClient } from "@/components/PersonnelBoardClient";
 import { PersonnelTasksClient } from "@/components/PersonnelTasksClient";
 
-type TabId = "tasks" | "board";
+type TabId = "manager" | "external" | "board";
 
 export function PersonnelHubClient() {
-  const [tab, setTab] = useState<TabId>("tasks");
+  const [tab, setTab] = useState<TabId>("manager");
 
   const tabBtn = (active: boolean) =>
     active
@@ -17,14 +17,37 @@ export function PersonnelHubClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1 border-b border-zinc-200 pb-px dark:border-zinc-700">
-        <button type="button" className={tabBtn(tab === "tasks")} onClick={() => setTab("tasks")}>
-          업무 대시보드
+        <button type="button" className={tabBtn(tab === "manager")} onClick={() => setTab("manager")}>
+          담당자
+        </button>
+        <button type="button" className={tabBtn(tab === "external")} onClick={() => setTab("external")}>
+          외부담당자
         </button>
         <button type="button" className={tabBtn(tab === "board")} onClick={() => setTab("board")}>
-          인물 보드
+          업무 담당자 보드
         </button>
       </div>
-      {tab === "tasks" ? <PersonnelTasksClient /> : <PersonnelBoardClient />}
+      {tab === "board" ? (
+        <PersonnelBoardClient />
+      ) : tab === "manager" ? (
+        <PersonnelTasksClient
+          mode="manager"
+          labels={{
+            fieldLabel: "담당자",
+            emptyHint: "담당자를 입력해 주세요.",
+            unassignedHint: "담당자가 비어 있는 미완료 업무",
+          }}
+        />
+      ) : (
+        <PersonnelTasksClient
+          mode="employee"
+          labels={{
+            fieldLabel: "외부담당자",
+            emptyHint: "외부담당자를 입력해 주세요.",
+            unassignedHint: "외부담당자가 비어 있는 미완료 업무",
+          }}
+        />
+      )}
     </div>
   );
 }

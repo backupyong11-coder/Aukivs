@@ -357,9 +357,9 @@ def transform_task(row: dict[str, Any]) -> dict[str, Any]:
         "detail_unit": _text_or_none(row.get("세부단위")),
         "related_work": _text_or_none(row.get("관련작품")),
         "difficulty": _text_or_none(row.get("난이도")),
-        "fatigue": _text_or_none(row.get("피로도")),
+        "fatigue": _text_or_none(row.get("담당자") or row.get("피로도")),
         "work_assignee": _text_or_none(
-            row.get("업무담당") or row.get("인물담당") or row.get("상태")
+            row.get("외부담당자") or row.get("업무담당") or row.get("인물담당") or row.get("상태")
         ),
         "task_manager": _text_or_none(row.get("담당자")),
         "memo": _text_or_none(row.get("메모")),

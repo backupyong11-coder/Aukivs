@@ -20,22 +20,10 @@ type PersonStat = {
   total: number;
 };
 
-const MODE_CONFIG: Record<
-  PersonnelAssigneeMode,
-  { tabLabel: string; fieldLabel: string; emptyHint: string; unassignedHint: string }
-> = {
-  employee: {
-    tabLabel: "임직원별",
-    fieldLabel: "인물담당(업무담당)",
-    emptyHint: "인물담당(업무담당)을 입력해 주세요.",
-    unassignedHint: "인물담당(업무담당)이 비어 있는 미완료 업무",
-  },
-  manager: {
-    tabLabel: "담당자",
-    fieldLabel: "담당자",
-    emptyHint: "담당자를 입력해 주세요.",
-    unassignedHint: "담당자가 비어 있는 미완료 업무",
-  },
+type PersonnelTasksLabels = {
+  fieldLabel: string;
+  emptyHint: string;
+  unassignedHint: string;
 };
 
 function normalizePeople(
@@ -76,11 +64,11 @@ function statsForPerson(
   };
 }
 
-export function PersonnelTasksClient() {
+export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; labels: PersonnelTasksLabels }) {
   const [tasks, setTasks] = useState<TaskSheetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<PersonnelAssigneeMode>("employee");
+  const mode = props.mode;
   const [selected, setSelected] = useState<string>("");
   const [showDone, setShowDone] = useState(false);
 
@@ -149,7 +137,7 @@ export function PersonnelTasksClient() {
     [tasks, mode],
   );
 
-  const cfg = MODE_CONFIG[mode];
+  const cfg = props.labels;
 
   if (loading) {
     return (
@@ -175,26 +163,8 @@ export function PersonnelTasksClient() {
     );
   }
 
-  const subTabBtn = (active: boolean) =>
-    active
-      ? "rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-      : "rounded-md px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900";
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-900/50">
-        {(Object.keys(MODE_CONFIG) as PersonnelAssigneeMode[]).map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={subTabBtn(mode === id)}
-            onClick={() => setMode(id)}
-          >
-            {MODE_CONFIG[id].tabLabel}
-          </button>
-        ))}
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           업무정리 DB의 <strong className="font-medium text-zinc-800 dark:text-zinc-200">{cfg.fieldLabel}</strong>{" "}

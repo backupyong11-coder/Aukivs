@@ -55,8 +55,8 @@ type TaskRow = {
   세부단위: string;
   관련작품: string;
   난이도: string;
-  피로도: string;
-  업무담당: string;
+  담당자: string;
+  외부담당자: string;
   메모: string;
 };
 
@@ -95,8 +95,8 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
   세부단위: "",
   관련작품: "",
   난이도: "",
-  피로도: "",
-  업무담당: "",
+  담당자: "",
+  외부담당자: "",
   메모: "",
 };
 
@@ -127,8 +127,8 @@ const TASK_DATA_COLUMNS: {
   { key: "세부단위", label: "세부단위" },
   { key: "관련작품", label: "관련작품" },
   { key: "난이도", label: "난이도" },
-  { key: "피로도", label: "피로도" },
-  { key: "업무담당", label: "업무담당" },
+  { key: "담당자", label: "담당자" },
+  { key: "외부담당자", label: "외부담당자" },
   { key: "메모", label: "메모", wide: true, muted: true },
 ];
 
@@ -175,8 +175,8 @@ const FIELD_LABELS: { key: keyof typeof EMPTY_FORM; label: string; required?: bo
   { key: "세부단위", label: "세부단위 (O열, 분·컷 등)" },
   { key: "관련작품", label: "관련작품" },
   { key: "난이도", label: "난이도" },
-  { key: "피로도", label: "피로도" },
-  { key: "업무담당", label: "업무담당" },
+  { key: "담당자", label: "담당자" },
+  { key: "외부담당자", label: "외부담당자" },
   { key: "메모", label: "메모" },
 ];
 
@@ -342,7 +342,8 @@ export function TasksClient() {
           ...r,
           id: String(r.id ?? ""),
           sheet_row: String(r.sheet_row ?? ""),
-          업무담당: readTaskAssignee(r as Record<string, string>),
+          외부담당자: readTaskAssignee(r as Record<string, string>),
+          담당자: (r as unknown as Record<string, string>)["담당자"] ?? (r as unknown as Record<string, string>)["피로도"] ?? "",
         };
       });
       setState({ kind: "ready", items });
@@ -632,7 +633,7 @@ export function TasksClient() {
         || (it.세부단위 ?? "").includes(q)
         || (it.관련작품 ?? "").includes(q)
         || (it.난이도 ?? "").includes(q)
-        || (it.피로도 ?? "").includes(q)
+        || ((it as unknown as Record<string, string>)["담당자"] ?? (it as unknown as Record<string, string>)["피로도"] ?? "").includes(q)
         || readTaskAssignee(it).includes(q)
         || (it.메모 ?? "").includes(q)
         || (it.마감일 ?? "").includes(q);
@@ -689,8 +690,8 @@ export function TasksClient() {
       세부단위: item.세부단위 ?? "",
       관련작품: item.관련작품 ?? "",
       난이도: item.난이도 ?? "",
-      피로도: item.피로도 ?? "",
-      업무담당: readTaskAssignee(item),
+      담당자: item.담당자 ?? (item as unknown as Record<string, string>)["피로도"] ?? "",
+      외부담당자: readTaskAssignee(item),
       메모: item.메모 ?? "",
     });
   };
@@ -892,7 +893,7 @@ export function TasksClient() {
               onHideAll: () => setHiddenPlatformsSave(new Set(allPlatforms)),
             },
             {
-              title: "업무담당",
+              title: "외부담당자",
               keys: allAssignees,
               hidden: hiddenAssignees,
               onToggle: toggleAssignee,

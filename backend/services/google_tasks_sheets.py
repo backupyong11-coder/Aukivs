@@ -84,16 +84,18 @@ _TASK_FIELD_KEYS: tuple[str, ...] = (
     "세부단위",
     "관련작품",
     "난이도",
-    "피로도",
-    "업무담당",
+    # NOTE: 2026-05-28: 시트 헤더 변경 대응
+    # - '피로도' → '담당자'
+    # - '업무담당' → '외부담당자'
     "담당자",
+    "외부담당자",
     "메모",
 )
 
 _TASK_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
     "정량화 분": ("정량화 분", "정량화 분류"),
-    "업무담당": ("업무담당", "인물담당", "상태"),
-    "담당자": ("담당자", "담당자/요청주체"),
+    "외부담당자": ("외부담당자", "업무담당", "인물담당", "상태"),
+    "담당자": ("담당자", "피로도", "담당자/요청주체"),
 }
 
 
@@ -227,7 +229,7 @@ def fetch_tasks(settings: Settings) -> list[dict]:
                     _c(cells, "마감일", col_map),
                     _c(cells, "분야", col_map),
                     _c(cells, "분류", col_map),
-                    _c(cells, "업무담당", col_map),
+                    _c(cells, "외부담당자", col_map),
                 )
         out.append({
             "id": _row_id(i),
@@ -249,9 +251,8 @@ def fetch_tasks(settings: Settings) -> list[dict]:
             "세부단위": _c(cells, "세부단위", col_map),
             "관련작품": _c(cells, "관련작품", col_map),
             "난이도": _c(cells, "난이도", col_map),
-            "피로도": _c(cells, "피로도", col_map),
-            "업무담당": _c(cells, "업무담당", col_map),
             "담당자": _c(cells, "담당자", col_map),
+            "외부담당자": _c(cells, "외부담당자", col_map),
             "메모": _c(cells, "메모", col_map),
         })
     return out
@@ -293,19 +294,11 @@ def create_task(settings: Settings, fields: dict) -> dict:
         "세부단위",
         "관련작품",
         "난이도",
-        "피로도",
-        "업무담당",
         "담당자",
+        "외부담당자",
         "메모",
     ):
-        if key == "업무담당":
-            val = str(
-                fields.get(key, "")
-                or fields.get("인물담당", "")
-                or fields.get("상태", "")
-            ).strip()
-        else:
-            val = str(fields.get(key, "")).strip()
+        val = str(fields.get(key, "")).strip()
         if not val:
             continue
         idx = col_map.get(key)
@@ -340,19 +333,16 @@ def create_task(settings: Settings, fields: dict) -> dict:
                 "세부단위",
                 "관련작품",
                 "난이도",
-                "피로도",
-                "업무담당",
                 "담당자",
+                "외부담당자",
                 "메모",
             )
         },
     }
-    if not str(out.get("업무담당", "")).strip():
-        legacy = str(
-            fields.get("인물담당", "") or fields.get("상태", "")
-        ).strip()
+    if not str(out.get("외부담당자", "")).strip():
+        legacy = str(fields.get("업무담당", "") or fields.get("인물담당", "") or fields.get("상태", "")).strip()
         if legacy:
-            out["업무담당"] = legacy
+            out["외부담당자"] = legacy
     return out
 
 
@@ -386,14 +376,7 @@ def update_task(settings: Settings, task_id: str, fields: dict) -> None:
     # 구버전: col_map = { "날짜그룹": "A", ... "메모": "U" } 고정
     data = []
     for key in col_map:
-        if key == "업무담당":
-            if "업무담당" in fields:
-                val = fields["업무담당"]
-            elif "인물담당" in fields or "상태" in fields:
-                val = fields.get("인물담당") or fields.get("상태")
-            else:
-                continue
-        elif key not in fields:
+        if key not in fields:
             continue
         else:
             val = fields[key]

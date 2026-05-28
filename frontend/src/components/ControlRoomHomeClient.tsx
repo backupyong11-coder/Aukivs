@@ -147,8 +147,8 @@ function taskRowSubLines(t: TaskSheetRow): { label: string; value: string }[] {
   push("세부단위", "세부단위");
   push("관련작품", "관련작품");
   push("난이도", "난이도");
-  push("피로도", "피로도");
-  push("업무담당", "업무담당");
+  push("담당자", "담당자");
+  push("외부담당자", "외부담당자");
   push("메모", "메모");
   return rows;
 }

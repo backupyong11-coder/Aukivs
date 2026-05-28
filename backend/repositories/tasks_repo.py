@@ -91,7 +91,7 @@ def _tasks_select(cli: SupabaseRestClient) -> str:
 def _assignee_write_col(cli: SupabaseRestClient) -> str:
     return _probe_tasks_schema(cli)[1]
 
-_WORK_ASSIGNEE_API_KEYS = ("업무담당", "인물담당", "상태")
+_EXTERNAL_ASSIGNEE_API_KEYS = ("외부담당자", "업무담당", "인물담당", "상태")
 
 _KOREAN_TO_DB: dict[str, str] = {
     "날짜그룹": "date_group",
@@ -112,9 +112,13 @@ _KOREAN_TO_DB: dict[str, str] = {
     "세부단위": "detail_unit",
     "관련작품": "related_work",
     "난이도": "difficulty",
+    # NOTE: 2026-05-28 업무정리 헤더 변경 대응
+    # - '피로도' → '담당자' (DB 컬럼은 fatigue 유지)
+    # - '업무담당' → '외부담당자' (DB 컬럼은 work_assignee 유지)
     "피로도": "fatigue",
+    "담당자": "fatigue",
     "업무담당": "work_assignee",
-    "담당자": "task_manager",
+    "외부담당자": "work_assignee",
     "메모": "memo",
 }
 
@@ -136,9 +140,8 @@ _CREATE_RESPONSE_KEYS: tuple[str, ...] = (
     "세부단위",
     "관련작품",
     "난이도",
-    "피로도",
-    "업무담당",
     "담당자",
+    "외부담당자",
     "메모",
 )
 
@@ -177,14 +180,11 @@ def _work_assignee_from_row(row: dict[str, Any]) -> str:
     return ""
 
 
-def _task_manager_from_row(row: dict[str, Any]) -> str:
-    tm = row.get("task_manager")
-    if tm is not None and str(tm).strip():
-        return str(tm).strip()
-    assignee = row.get("assignee")
-    if assignee is not None and str(assignee).strip():
-        return str(assignee).strip()
-    return ""
+def _manager_from_fatigue(row: dict[str, Any]) -> str:
+    v = row.get("fatigue")
+    if v is None:
+        return ""
+    return str(v).strip()
 
 
 def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
@@ -233,9 +233,8 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         "세부단위": opt_str("detail_unit"),
         "관련작품": opt_str("related_work"),
         "난이도": opt_str("difficulty"),
-        "피로도": opt_str("fatigue"),
-        "업무담당": _work_assignee_from_row(row),
-        "담당자": _task_manager_from_row(row),
+        "담당자": _manager_from_fatigue(row),
+        "외부담당자": _work_assignee_from_row(row),
         "메모": opt_str("memo"),
     }
 
@@ -394,7 +393,7 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
             insert[dbk] = str(raw).strip()
 
     if assignee_col not in insert:
-        for kr in _WORK_ASSIGNEE_API_KEYS:
+        for kr in _EXTERNAL_ASSIGNEE_API_KEYS:
             if kr not in fields:
                 continue
             raw = fields[kr]
@@ -402,8 +401,9 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
                 continue
             insert[assignee_col] = str(raw).strip()
             break
-    if _tasks_has_manager_col and "task_manager" not in insert and fields.get("담당자"):
-        insert["task_manager"] = str(fields["담당자"]).strip()
+    # 2026-05-28: '담당자'는 피로도→담당자 변경으로 fatigue에 저장
+    if "fatigue" not in insert and fields.get("담당자"):
+        insert["fatigue"] = str(fields["담당자"]).strip()
 
     cli.post_json("/tasks", [insert], prefer="return=minimal")
 
@@ -416,10 +416,10 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         if k == "업무명":
             continue
         out[k] = str(fields.get(k, "")).strip()
-    if not out.get("업무담당"):
-        for kr in _WORK_ASSIGNEE_API_KEYS:
-            if kr != "업무담당" and fields.get(kr):
-                out["업무담당"] = str(fields[kr]).strip()
+    if not out.get("외부담당자"):
+        for kr in _EXTERNAL_ASSIGNEE_API_KEYS:
+            if kr != "외부담당자" and fields.get(kr):
+                out["외부담당자"] = str(fields[kr]).strip()
                 break
     if not out.get("담당자") and fields.get("담당자"):
         out["담당자"] = str(fields["담당자"]).strip()
@@ -439,7 +439,7 @@ def _patch_body_from_fields(
 ) -> dict[str, Any]:
     patch: dict[str, Any] = {}
     for kr, dbk in _KOREAN_TO_DB.items():
-        if kr in ("업무담당", "인물담당", "상태", "담당자"):
+        if kr in ("업무담당", "외부담당자", "인물담당", "상태", "담당자", "피로도"):
             continue
         if kr not in fields:
             continue
@@ -466,7 +466,7 @@ def _patch_body_from_fields(
         else:
             patch[dbk] = str(raw).strip()
 
-    for kr in _WORK_ASSIGNEE_API_KEYS:
+    for kr in _EXTERNAL_ASSIGNEE_API_KEYS:
         if kr not in fields:
             continue
         raw = fields[kr]
@@ -474,10 +474,10 @@ def _patch_body_from_fields(
         patch[assignee_col] = s or None
         break
 
-    if _tasks_has_manager_col and "담당자" in fields:
+    if "담당자" in fields:
         raw = fields["담당자"]
         s = "" if raw is None else str(raw).strip()
-        patch["task_manager"] = s or None
+        patch["fatigue"] = s or None
 
     return patch
 

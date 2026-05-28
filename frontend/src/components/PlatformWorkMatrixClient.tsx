@@ -171,6 +171,31 @@ export function PlatformWorkMatrixClient() {
   }, []);
 
   const colCount = displayModel?.columns.length ?? 0;
+  const platformCards = useMemo(() => {
+    if (!displayModel) return [];
+    const totalWorks = displayModel.rows.length;
+    return displayModel.columns.map((c, colIdx) => {
+      let active = 0;
+      let progress = 0;
+      let early = 0;
+      let none = 0;
+      for (const r of displayModel.rows) {
+        const k = r.cells[colIdx] ?? "none";
+        if (k === "active") active += 1;
+        else if (k === "progress") progress += 1;
+        else if (k === "early") early += 1;
+        else none += 1;
+      }
+      return {
+        label: c.label,
+        active,
+        progress,
+        early,
+        none,
+        totalWorks,
+      };
+    });
+  }, [displayModel]);
 
   const openWorkEdit = (title: string) => {
     const w = worksItems.find((x) => (x["작품명"] ?? "").trim() === title.trim());
@@ -327,6 +352,57 @@ export function PlatformWorkMatrixClient() {
           대기·계약
         </span>
       </div>
+
+      {load.kind === "ready" && displayModel && colCount > 0 ? (
+        <div className="-mx-1 overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-3 px-1">
+            {platformCards.map((s) => {
+              const touched = s.active + s.progress + s.early;
+              return (
+                <div
+                  key={`card-${s.label}`}
+                  className="w-[15.5rem] shrink-0 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">{s.label}</p>
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        작품 연결 <span className="font-semibold text-zinc-700 dark:text-zinc-300">{touched}</span>
+                        <span className="mx-1">/</span>
+                        {s.totalWorks}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
+                      <div className="mx-auto mb-1 flex justify-center">
+                        <MatrixIcon kind="active" />
+                      </div>
+                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.active}</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">런칭·연재</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
+                      <div className="mx-auto mb-1 flex justify-center">
+                        <MatrixIcon kind="progress" />
+                      </div>
+                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.progress}</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">업로드·세팅</p>
+                    </div>
+                    <div className="rounded-lg bg-zinc-50 px-2 py-2 text-center dark:bg-zinc-900/60">
+                      <div className="mx-auto mb-1 flex justify-center">
+                        <MatrixIcon kind="early" />
+                      </div>
+                      <p className="font-semibold text-zinc-900 dark:text-zinc-50">{s.early}</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">대기·계약</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {load.kind === "error" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200" role="alert">
