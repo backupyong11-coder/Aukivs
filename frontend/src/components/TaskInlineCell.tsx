@@ -7,6 +7,7 @@ import { TagSelectInlineCell, isPriorityTagField } from "@/components/TagSelectI
 export type EditableTaskField =
   | "우선순위"
   | "마감일"
+  | "실행일"
   | "분야"
   | "분류"
   | "대분류"
@@ -114,7 +115,7 @@ export function TaskInlineCell({
     return (
       <input
         ref={inputRef}
-        type="text"
+        type={field === "실행일" ? "date" : "text"}
         value={draft}
         disabled={saving}
         onChange={(e) => setDraft(e.target.value)}

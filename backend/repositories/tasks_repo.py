@@ -12,7 +12,7 @@ from services.supabase_client import SupabaseRestClient, SupabaseRequestError
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
 
 _SELECT_TASKS_BASE = (
-    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,"
+    "id,legacy_id,sheet_row,date_group,priority,completed,due_date,due_date_raw,execute_date,execute_date_raw,"
     "domain,category,major_category,quantification_minutes,title,quantification,quantification_type,"
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
     "difficulty,fatigue"
@@ -98,6 +98,7 @@ _KOREAN_TO_DB: dict[str, str] = {
     "우선순위": "priority",
     "완료": "completed",
     "마감일": "due_date",
+    "실행일": "execute_date",
     "분야": "domain",
     "분류": "category",
     "대분류": "major_category",
@@ -127,6 +128,7 @@ _CREATE_RESPONSE_KEYS: tuple[str, ...] = (
     "우선순위",
     "완료",
     "마감일",
+    "실행일",
     "분야",
     "분류",
     "대분류",
@@ -209,6 +211,11 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
     if not due_s and row.get("due_date_raw"):
         due_s = str(row["due_date_raw"]).strip()
 
+    ex = row.get("execute_date")
+    ex_s = ex.isoformat() if isinstance(ex, date) else opt_str("execute_date")
+    if not ex_s and row.get("execute_date_raw"):
+        ex_s = str(row["execute_date_raw"]).strip()
+
     completed = bool(row.get("completed"))
     comp_cell = "TRUE" if completed else ""
 
@@ -219,6 +226,7 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         "우선순위": opt_str("priority"),
         "완료": comp_cell,
         "마감일": due_s,
+        "실행일": ex_s,
         "분야": opt_str("domain"),
         "분류": opt_str("category"),
         "대분류": opt_str("major_category"),
@@ -387,6 +395,12 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
                 insert["due_date"] = s
             else:
                 insert["due_date_raw"] = s
+        elif dbk == "execute_date":
+            s = str(raw).strip()
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+                insert["execute_date"] = s
+            else:
+                insert["execute_date_raw"] = s
         elif dbk == "work_assignee":
             insert[assignee_col] = str(raw).strip()
         else:
@@ -429,6 +443,10 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
         out["마감일"] = str(insert["due_date"])
     elif "due_date_raw" in insert:
         out["마감일"] = str(insert["due_date_raw"])
+    if "execute_date" in insert:
+        out["실행일"] = str(insert["execute_date"])
+    elif "execute_date_raw" in insert:
+        out["실행일"] = str(insert["execute_date_raw"])
     return out
 
 
@@ -460,6 +478,18 @@ def _patch_body_from_fields(
             else:
                 patch["due_date"] = None
                 patch["due_date_raw"] = s
+            continue
+        if dbk == "execute_date":
+            s = "" if raw is None else str(raw).strip()
+            if not s:
+                patch["execute_date"] = None
+                patch["execute_date_raw"] = None
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+                patch["execute_date"] = s
+                patch["execute_date_raw"] = None
+            else:
+                patch["execute_date"] = None
+                patch["execute_date_raw"] = s
             continue
         if raw is None or (isinstance(raw, str) and not str(raw).strip()):
             patch[dbk] = None

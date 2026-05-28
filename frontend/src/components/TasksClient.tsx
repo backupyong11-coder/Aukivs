@@ -41,6 +41,7 @@ type TaskRow = {
   우선순위: string;
   완료: string;
   마감일: string;
+  실행일: string;
   분야: string;
   분류: string;
   대분류: string;
@@ -62,6 +63,7 @@ type TaskRow = {
 
 type SortKey =
   | "마감일"
+  | "실행일"
   | "관련플랫폼"
   | "분류"
   | "분야"
@@ -81,6 +83,7 @@ const EMPTY_FORM: Omit<TaskRow, "id" | "sheet_row"> = {
   우선순위: "",
   완료: "",
   마감일: "",
+  실행일: "",
   분야: "",
   분류: "",
   대분류: "",
@@ -113,6 +116,7 @@ const TASK_DATA_COLUMNS: {
 }[] = [
   { key: "우선순위", label: "우선순위", sortable: true, align: "center" },
   { key: "마감일", label: "마감일", sortable: true, muted: true, tabular: true },
+  { key: "실행일", label: "실행일", sortable: true, muted: true, tabular: true },
   { key: "분야", label: "분야", sortable: true },
   { key: "분류", label: "분류", sortable: true },
   { key: "대분류", label: "대분류", sortable: true },
@@ -676,6 +680,7 @@ export function TasksClient() {
       우선순위: item.우선순위 ?? "",
       완료: item.완료 ?? "",
       마감일: item.마감일 ?? "",
+      실행일: item.실행일 ?? "",
       분야: item.분야 ?? "",
       분류: item.분류 ?? "",
       대분류: item.대분류 ?? "",
