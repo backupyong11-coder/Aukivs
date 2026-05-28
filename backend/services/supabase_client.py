@@ -127,3 +127,14 @@ def rest_filter_equals(column: str, value: str | int) -> str:
         return f"{column}=eq.{value}"
     return f"{column}=eq.{quote(str(value), safe='')}"
 
+
+def postgrest_eq(value: str | int) -> str:
+    """PostgREST ?col= 값용 eq 필터 (공백·특수문자 제목 안전)."""
+    if isinstance(value, int):
+        return f"eq.{value}"
+    s = str(value)
+    if not s:
+        return 'eq.""'
+    escaped = s.replace('"', '""')
+    return f'eq."{escaped}"'
+

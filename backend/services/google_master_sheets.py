@@ -143,6 +143,52 @@ def _works_col_index(keys: list[str], header: str) -> int | None:
     return None
 
 
+def _resolve_works_sheet_header(keys: list[str], field: str) -> str | None:
+    if field in keys:
+        return field
+    aliases = _WORKS_SHEET_HEADER_ALIASES.get(field, ())
+    for alias in aliases:
+        if alias in keys:
+            return alias
+    return None
+
+
+_WORKS_SHEET_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
+    "작품명": ("작품명", "제목", "작품 제목"),
+    "작품분류": ("작품분류", "분류", "구분"),
+    "글작가": ("글작가", "글 작가"),
+    "그림작가": ("그림작가", "그림 작가", "대표작가"),
+    "분류(일반/성인)": ("분류(일반/성인)", "장르", "성인여부"),
+    "형식(웹툰/웹소설 등)": ("형식(웹툰/웹소설 등)",),
+    "현재상태": ("현재상태", "완결여부", "완결 여부"),
+    "총화수/시즌정보": ("총화수/시즌정보", "화수", "회차 수", "최종화"),
+    "줄거리": ("줄거리", "작품 줄거리"),
+    "UCI (구 ISBN)": ("UCI (구 ISBN)", "UCI(ISBN)", "ISBN -> UCI", "ISBN"),
+    "연령등급": ("연령등급",),
+    "첫 공급 일정": ("첫 공급 일정", "서비스 날짜", "예상 공급 일정"),
+    "태그": ("태그",),
+    "카피라이트": ("카피라이트",),
+    "보유에셋/비고": ("보유에셋/비고", "비고"),
+}
+
+
+def _works_fields_for_sheet(keys: list[str], fields: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, val in fields.items():
+        sheet_key = _resolve_works_sheet_header(keys, key)
+        if sheet_key:
+            out[sheet_key] = val
+    # infer genre for sheet if possible
+    if "작품분류" not in out and _resolve_works_sheet_header(keys, "작품분류"):
+        adult = str(out.get(_resolve_works_sheet_header(keys, "분류(일반/성인)") or "") or fields.get("분류(일반/성인)") or "").strip()
+        fmt = str(out.get(_resolve_works_sheet_header(keys, "형식(웹툰/웹소설 등)") or "") or fields.get("형식(웹툰/웹소설 등)") or "").strip()
+        if adult.upper() in {"Y", "성인", "19", "19세"} and "웹툰" in fmt:
+            sk = _resolve_works_sheet_header(keys, "작품분류")
+            if sk:
+                out[sk] = "성인웹툰"
+    return out
+
+
 def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
     """작품정리 탭에 행 추가. 작품명(B) 필수."""
     title = str(fields.get("작품명", "")).strip()
@@ -154,10 +200,11 @@ def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[
         raise SheetsParseError("[파싱] 작품정리 시트 헤더를 읽지 못했습니다.")
     width = len(keys)
     row: list[object] = [""] * width
+    sheet_fields = _works_fields_for_sheet(keys, fields)
     for i, key in enumerate(keys):
-        if key not in fields:
+        if key not in sheet_fields:
             continue
-        val = fields.get(key)
+        val = sheet_fields.get(key)
         if val is None:
             continue
         s = str(val).strip()
@@ -198,9 +245,8 @@ def update_works_master_row(
     spreadsheet_id = spreadsheet_id_from_url(settings.google_sheet_url)
     esc = _escape_tab(tab)
     writes: list[dict[str, Any]] = []
-    for key, val in fields.items():
-        if key not in keys:
-            continue
+    sheet_fields = _works_fields_for_sheet(keys, fields)
+    for key, val in sheet_fields.items():
         idx = _works_col_index(keys, key)
         if idx is None:
             continue

@@ -6,7 +6,7 @@ from typing import Any
 
 from config import Settings
 from services.sheets_errors import SheetsNotFoundError, SheetsParseError
-from services.supabase_client import SupabaseRestClient, SupabaseRequestError
+from services.supabase_client import SupabaseRestClient, SupabaseRequestError, postgrest_eq
 from services.sheets_errors import SheetsParseError
 
 # google_master_sheets 주석 A~X 열 순서 + migrate_scripts 의 DB 컬럼명 (표준 헤더 문자열)
@@ -142,9 +142,11 @@ def _row_to_master_dict(row: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(extra, dict):
         extra = {}
 
+    _coalesce_canonical_from_extra(out, extra)
+
     for k in sorted(extra.keys(), key=lambda x: str(x)):
         key = str(k)
-        if key in out:
+        if _cell_has_value(out.get(key)):
             continue
         if key in _CANONICAL_HEADERS:
             continue
@@ -300,6 +302,114 @@ def list_works_master_for_matrix(settings: Settings) -> list[dict[str, Any]]:
 
 _HEADER_TO_COLUMN: dict[str, str] = {h: c for h, c in _WORKS_HEADER_ORDER}
 
+# 플랫폼 서지 CSV(무툰·왓챠·투믹스 등) ↔ 작품정리 헤더 별칭
+_WORKS_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "작품명": ("작품명", "제목", "작품 제목"),
+    "작품분류": ("작품분류", "분류", "구분"),
+    "글작가": ("글작가", "글 작가"),
+    "그림작가": ("그림작가", "그림 작가", "대표작가"),
+    "분류(일반/성인)": ("분류(일반/성인)", "장르", "성인여부"),
+    "형식(웹툰/웹소설 등)": ("형식(웹툰/웹소설 등)", "구분"),
+    "현재상태": ("현재상태", "완결여부", "완결 여부"),
+    "총화수/시즌정보": ("총화수/시즌정보", "화수", "회차 수", "최종화"),
+    "줄거리": ("줄거리", "작품 줄거리"),
+    "UCI (구 ISBN)": ("UCI (구 ISBN)", "UCI(ISBN)", "ISBN -> UCI", "ISBN"),
+    "연령등급": ("연령등급", "연령\n등급"),
+    "첫 공급 일정": ("첫 공급 일정", "서비스 날짜", "예상 공급 일정"),
+    "태그": ("태그",),
+    "카피라이트": ("카피라이트",),
+    "보유에셋/비고": ("보유에셋/비고", "비고"),
+    "대여가격": ("대여가격", "대여캐시", "대여가격"),
+    "소장가격": ("소장가격", "소장캐시", "투믹스 소장 코인"),
+    "무료제공화수": ("무료제공화수", "무료제공", "무료 제공\n화수", "기본 무료회차 구간"),
+}
+
+
+def _cell_has_value(v: object) -> bool:
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return bool(v.strip())
+    return True
+
+
+def _coalesce_canonical_from_extra(out: dict[str, Any], extra: dict[str, Any]) -> None:
+    if not isinstance(extra, dict):
+        return
+    for hdr, col in _WORKS_HEADER_ORDER:
+        if col == "production_done":
+            continue
+        if _cell_has_value(out.get(hdr)):
+            continue
+        for alias in (hdr, *_WORKS_FIELD_ALIASES.get(hdr, ())):
+            if alias not in extra:
+                continue
+            val = _api_cell(extra.get(alias))
+            if val:
+                out[hdr] = val
+                break
+
+
+def _normalize_incoming_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """API/시트 별칭 키를 표준 헤더로 정규화."""
+    out: dict[str, Any] = dict(fields)
+    alias_to_canonical: dict[str, str] = {}
+    for canonical, aliases in _WORKS_FIELD_ALIASES.items():
+        for alias in aliases:
+            alias_to_canonical[alias] = canonical
+    for alias, canonical in alias_to_canonical.items():
+        if alias in out and canonical not in out:
+            out[canonical] = out[alias]
+    inferred = _infer_work_genre(out)
+    if inferred and not str(out.get("작품분류") or "").strip():
+        out["작품분류"] = inferred
+    return out
+
+
+def _infer_work_genre(fields: dict[str, Any]) -> str | None:
+    explicit = str(fields.get("작품분류") or "").strip()
+    if explicit:
+        return explicit
+    adult_raw = str(
+        fields.get("분류(일반/성인)")
+        or fields.get("장르")
+        or fields.get("성인여부")
+        or ""
+    ).strip()
+    fmt = str(fields.get("형식(웹툰/웹소설 등)") or fields.get("구분") or "").strip()
+    is_bl = "BL" in adult_raw.upper() or "BL" in fmt.upper()
+    is_adult = adult_raw.upper() in {"Y", "YES", "성인", "19", "19세", "ADULT"} or "성인" in adult_raw
+    if "애니" in fmt:
+        return "BL애니" if is_bl else ("성인애니" if is_adult else None)
+    if "웹툰" in fmt or fmt == "웹툰":
+        return "BL웹툰" if is_bl else ("성인웹툰" if is_adult else None)
+    return None
+
+
+def _mirror_canonical_to_extra(patch: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    """DB 컬럼 미마이그레이션·extra fallback 읽기용 — 표준 필드를 extra 에도 저장."""
+    out = dict(extra)
+    for hdr, col in _WORKS_HEADER_ORDER:
+        if col == "production_done":
+            if col in patch:
+                out[hdr] = bool(patch[col])
+            continue
+        if col not in patch:
+            continue
+        val = patch[col]
+        if val is None or (isinstance(val, str) and not val.strip()):
+            out.pop(hdr, None)
+        else:
+            out[hdr] = val
+    genre = patch.get("work_genre")
+    if genre and str(genre).strip():
+        out["작품분류"] = str(genre).strip()
+    elif "work_genre" in patch and not genre:
+        out.pop("작품분류", None)
+    return out
+
 
 def _next_sheet_row(settings: Settings) -> int:
     rows = _client(settings).get_json(
@@ -314,6 +424,7 @@ def _next_sheet_row(settings: Settings) -> int:
 
 
 def _fields_to_db_patch(fields: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    fields = _normalize_incoming_fields(fields)
     patch: dict[str, Any] = {}
     extra: dict[str, Any] = {}
     for k, v in fields.items():
@@ -336,7 +447,7 @@ def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
     rows = _fetch_works_json(
         cli,
         select=_SELECT,
-        params={"title": f"eq.{title}", "limit": "1"},
+        params={"title": postgrest_eq(title), "limit": "1"},
     )
     if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
         raise SheetsNotFoundError(f"[찾을수없음] 작품명 없음: {title}")
@@ -344,39 +455,104 @@ def _get_by_title(settings: Settings, title: str) -> dict[str, Any]:
 
 
 def _post_works_row(cli: SupabaseRestClient, patch: dict[str, Any]) -> list[Any]:
-    try:
-        rows = cli.post_json("/works", patch, prefer="return=representation")
-    except SupabaseRequestError as exc:
-        if _is_missing_column_error(exc) and "work_genre" in patch:
-            retry = dict(patch)
-            retry.pop("work_genre", None)
-            rows = cli.post_json("/works", retry, prefer="return=representation")
-        else:
-            raise
-    if not isinstance(rows, list):
-        raise SheetsParseError("Supabase works.create 응답 없음")
-    return rows
+    remaining = dict(patch)
+    last_exc: SupabaseRequestError | None = None
+    for _ in range(max(1, len(remaining) + 1)):
+        if not remaining:
+            raise SheetsParseError("Supabase works.create 응답 없음")
+        try:
+            rows = cli.post_json("/works", remaining, prefer="return=representation")
+            if not isinstance(rows, list):
+                raise SheetsParseError("Supabase works.create 응답 없음")
+            return rows
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            last_exc = exc
+            msg = str(exc).lower()
+            removed = False
+            for col in list(remaining.keys()):
+                if col in ("extra", "title", "sheet_row", "id"):
+                    continue
+                if col.replace("_", " ") in msg or col in msg:
+                    hdr = next((h for h, c in _WORKS_HEADER_ORDER if c == col), col)
+                    extra = remaining.get("extra")
+                    if not isinstance(extra, dict):
+                        extra = {}
+                    val = remaining.pop(col)
+                    if val is not None and str(val).strip():
+                        extra[hdr] = str(val).strip()
+                    remaining["extra"] = extra
+                    removed = True
+                    break
+            if not removed and "work_genre" in remaining:
+                val = remaining.pop("work_genre")
+                extra = remaining.get("extra")
+                if not isinstance(extra, dict):
+                    extra = {}
+                if val is not None and str(val).strip():
+                    extra["작품분류"] = str(val).strip()
+                remaining["extra"] = extra
+                continue
+            if not removed:
+                raise
+    if last_exc:
+        raise last_exc
+    raise SheetsParseError("Supabase works.create 응답 없음")
 
 
 def _patch_works_row(cli: SupabaseRestClient, row_id: object, patch: dict[str, Any]) -> None:
-    try:
-        cli.patch_json("/works", params={"id": f"eq.{row_id}"}, body=patch)
-    except SupabaseRequestError as exc:
-        if _is_missing_column_error(exc) and "work_genre" in patch:
-            retry = dict(patch)
-            retry.pop("work_genre", None)
-            cli.patch_json("/works", params={"id": f"eq.{row_id}"}, body=retry)
-        else:
-            raise
+    remaining = dict(patch)
+    last_exc: SupabaseRequestError | None = None
+    for _ in range(max(1, len(remaining) + 1)):
+        if not remaining:
+            return
+        try:
+            cli.patch_json("/works", params={"id": postgrest_eq(str(row_id))}, body=remaining)
+            return
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            last_exc = exc
+            msg = str(exc).lower()
+            removed = False
+            for col in list(remaining.keys()):
+                if col in ("extra", "title", "sheet_row", "id"):
+                    continue
+                if col.replace("_", " ") in msg or col in msg:
+                    hdr = next((h for h, c in _WORKS_HEADER_ORDER if c == col), col)
+                    extra = remaining.get("extra")
+                    if not isinstance(extra, dict):
+                        extra = {}
+                    val = remaining.pop(col)
+                    if val is not None and str(val).strip():
+                        extra[hdr] = str(val).strip()
+                    remaining["extra"] = extra
+                    removed = True
+                    break
+            if not removed and "work_genre" in remaining:
+                val = remaining.pop("work_genre")
+                extra = remaining.get("extra")
+                if not isinstance(extra, dict):
+                    extra = {}
+                if val is not None and str(val).strip():
+                    extra["작품분류"] = str(val).strip()
+                remaining["extra"] = extra
+                continue
+            if not removed:
+                raise
+    if last_exc:
+        raise last_exc
 
 
 def create_works_master_row(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
+    fields = _normalize_incoming_fields(fields)
     title = str(fields.get("작품명", "")).strip()
     if not title:
         raise SheetsParseError("[파싱] 작품명이 비어 있습니다.")
     patch, extra = _fields_to_db_patch(fields)
     patch["title"] = title
-    patch["extra"] = _merge_work_genre_extra(patch, extra)
+    patch["extra"] = _mirror_canonical_to_extra(patch, _merge_work_genre_extra(patch, extra))
     n = _next_sheet_row(settings)
     patch["sheet_row"] = n
     cli = _client(settings)
@@ -392,6 +568,7 @@ def update_works_master_row(
     orig = original_title.strip()
     if not orig:
         raise SheetsParseError("[파싱] 원본 작품명이 비어 있습니다.")
+    fields = _normalize_incoming_fields(fields)
     current = _get_by_title(settings, orig)
     row_id = current.get("id")
     if not row_id:
@@ -400,12 +577,14 @@ def update_works_master_row(
     base_ex = current.get("extra") or {}
     if not isinstance(base_ex, dict):
         base_ex = {}
-    merged_ex = _merge_work_genre_extra(patch, {**base_ex, **extra_in})
+    merged_ex = _mirror_canonical_to_extra(
+        patch,
+        _merge_work_genre_extra(patch, {**base_ex, **extra_in}),
+    )
     for k in list(merged_ex.keys()):
         if k in fields and (fields[k] is None or str(fields[k]).strip() == ""):
             merged_ex.pop(k, None)
-    if patch or extra_in or merged_ex != base_ex:
-        patch["extra"] = merged_ex
+    patch["extra"] = merged_ex
     new_title = str(fields.get("작품명", "")).strip()
     if new_title:
         patch["title"] = new_title

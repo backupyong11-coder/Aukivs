@@ -52,23 +52,26 @@ const WORKS_PINNED_ORDER: string[] = [
   "분류(일반/성인)",
   "형식(웹툰/웹소설 등)",
   "현재상태",
+  "총화수/시즌정보",
+  "연령등급",
+  "첫 공급 일정",
+  "줄거리",
+  "태그",
+  "UCI (구 ISBN)",
+  "카피라이트",
+  "대여가격",
+  "소장가격",
+  "무료제공화수",
   "업로드해야 하는 사이트",
   "런칭된 사이트",
   "대기중 사이트",
   "계약된 사이트",
-  "총화수/시즌정보",
-  "첫 공급 일정",
+  "연재중인 사이트",
   "연재요일",
   "연재중인 곳 갯수",
-  "연재중인 사이트",
-  "줄거리",
   "캐릭터",
-  "카피라이트",
-  "UCI (구 ISBN)",
-  "태그",
-  "보유에셋/비고",
   "스태프",
-  "연령등급",
+  "보유에셋/비고",
 ];
 
 const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] = [
@@ -76,15 +79,25 @@ const CREATE_MODAL_FIELDS: { key: string; label: string; required?: boolean }[] 
   { key: "작품명", label: "작품명", required: true },
   { key: "글작가", label: "글작가" },
   { key: "그림작가", label: "그림작가" },
-  { key: "분류(일반/성인)", label: "분류(일반/성인)" },
-  { key: "형식(웹툰/웹소설 등)", label: "형식" },
-  { key: "현재상태", label: "현재상태" },
+  { key: "분류(일반/성인)", label: "장르/성인여부" },
+  { key: "형식(웹툰/웹소설 등)", label: "형식(웹툰/애니 등)" },
+  { key: "현재상태", label: "완결/제작상태" },
+  { key: "총화수/시즌정보", label: "화수/회차" },
+  { key: "연령등급", label: "연령등급" },
+  { key: "첫 공급 일정", label: "첫 공급/서비스일" },
+  { key: "줄거리", label: "줄거리" },
+  { key: "태그", label: "태그" },
+  { key: "UCI (구 ISBN)", label: "UCI/ISBN" },
+  { key: "카피라이트", label: "카피라이트" },
+  { key: "대여가격", label: "대여가격" },
+  { key: "소장가격", label: "소장가격" },
+  { key: "무료제공화수", label: "무료제공화수" },
   { key: "연재중인 사이트", label: "연재중인 사이트" },
   { key: "런칭된 사이트", label: "런칭된 사이트" },
   { key: "업로드해야 하는 사이트", label: "업로드해야 하는 사이트" },
   { key: "대기중 사이트", label: "대기중 사이트" },
   { key: "계약된 사이트", label: "계약된 사이트" },
-  { key: "첫 공급 일정", label: "첫 공급 일정" },
+  { key: "보유에셋/비고", label: "비고" },
 ];
 
 function normalizeWorkRow(raw: WorksMasterItem): WorkRow {
@@ -357,9 +370,7 @@ export function WorksMasterClient() {
       try {
         const r = await updateWorksMasterRow(rowTitleKey, { [field]: newValue });
         if (!r.ok) throw new Error(r.message);
-        if (field === "작품명" && newValue.trim() !== rowTitleKey) {
-          setRefreshKey((k) => k + 1);
-        }
+        setRefreshKey((k) => k + 1);
       } catch (e) {
         setFieldInState(rowTitleKey, field, prev);
         setActionError(e instanceof Error ? e.message : "저장 실패");
