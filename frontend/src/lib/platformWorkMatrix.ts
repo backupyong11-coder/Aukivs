@@ -21,6 +21,7 @@ export type PlatformWorkMatrixModel = {
 
 /** 플랫폼 연동 매트릭스(/platform-matrix) 열(플랫폼명) 사용자 순서 */
 export const PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY = "platform_work_matrix_col_labels_v1";
+export const PLATFORM_MATRIX_HIDDEN_COLS_STORAGE_KEY = "platform_work_matrix_hidden_cols_v1";
 
 /** 플랫폼 연동 매트릭스(/platform-matrix) 셀별 UI 오버라이드(로컬 전용) */
 export const PLATFORM_MATRIX_CELL_OVERRIDE_STORAGE_KEY = "platform_work_matrix_cell_overrides_v1";
@@ -104,6 +105,33 @@ export function saveMatrixColumnOrder(labels: string[]) {
 export function clearMatrixColumnOrder() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(PLATFORM_MATRIX_COL_ORDER_STORAGE_KEY);
+}
+
+export function loadMatrixHiddenColumns(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PLATFORM_MATRIX_HIDDEN_COLS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function saveMatrixHiddenColumns(labels: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PLATFORM_MATRIX_HIDDEN_COLS_STORAGE_KEY, JSON.stringify(labels));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearMatrixHiddenColumns() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(PLATFORM_MATRIX_HIDDEN_COLS_STORAGE_KEY);
 }
 
 /** 저장된 플랫폼명 순서를 반영하고, 빠진 열·신규 열은 기본 모델 순서로 이어붙입니다. */

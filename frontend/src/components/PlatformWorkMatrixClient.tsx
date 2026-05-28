@@ -22,11 +22,14 @@ import type { WorksMasterItem } from "@/lib/worksMaster";
 import {
   buildPlatformWorkMatrix,
   clearMatrixColumnOrder,
+  clearMatrixHiddenColumns,
   getMatrixCellOverride,
   loadMatrixCellOverrides,
+  loadMatrixHiddenColumns,
   loadMatrixColumnOrder,
   reorderPlatformWorkMatrix,
   saveMatrixColumnOrder,
+  saveMatrixHiddenColumns,
   setMatrixCellOverride,
   type MatrixCellKind,
 } from "@/lib/platformWorkMatrix";
@@ -127,6 +130,8 @@ export function PlatformWorkMatrixClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   /** null → localStorage(또는 기본 모델 순서); 비-null → 방금 조작한 순서 */
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set());
+  const [colDragOver, setColDragOver] = useState<string | null>(null);
 
   const [model, setModel] = useState<ReturnType<typeof buildPlatformWorkMatrix> | null>(null);
   const [platformRows, setPlatformRows] = useState<PlatformRowRecord[]>([]);
@@ -149,6 +154,7 @@ export function PlatformWorkMatrixClient() {
 
   useEffect(() => {
     setCellOverrides(loadMatrixCellOverrides());
+    setHiddenCols(new Set(loadMatrixHiddenColumns()));
   }, []);
 
   useEffect(() => {
@@ -190,7 +196,14 @@ export function PlatformWorkMatrixClient() {
   const displayModel = useMemo(() => {
     if (!model) return null;
     const preferred = columnOrder ?? loadMatrixColumnOrder();
-    return reorderPlatformWorkMatrix(model, preferred);
+    const ordered = reorderPlatformWorkMatrix(model, preferred);
+    if (hiddenCols.size === 0) return ordered;
+    const keep = ordered.columns
+      .map((c) => c.label)
+      .filter((l) => !hiddenCols.has(l));
+    if (keep.length === ordered.columns.length) return ordered;
+    const filtered = reorderPlatformWorkMatrix(ordered, keep);
+    return filtered;
   }, [model, columnOrder]);
 
   const movePlatformColumn = useCallback((idx: number, dir: -1 | 1) => {
@@ -207,6 +220,29 @@ export function PlatformWorkMatrixClient() {
   const resetColumnOrder = useCallback(() => {
     clearMatrixColumnOrder();
     setColumnOrder(null);
+  }, []);
+
+  const resetHiddenColumns = useCallback(() => {
+    clearMatrixHiddenColumns();
+    setHiddenCols(new Set());
+  }, []);
+
+  const hideColumn = useCallback((label: string) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      next.add(label);
+      saveMatrixHiddenColumns(Array.from(next));
+      return next;
+    });
+  }, []);
+
+  const unhideColumn = useCallback((label: string) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      next.delete(label);
+      saveMatrixHiddenColumns(Array.from(next));
+      return next;
+    });
   }, []);
 
   const colCount = displayModel?.columns.length ?? 0;
@@ -545,8 +581,35 @@ export function PlatformWorkMatrixClient() {
       {load.kind === "ready" && displayModel && colCount > 0 && displayModel.rows.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
           <p className="border-b border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-            각 플랫폼 열 머리글의 ◀ ▶ 로 좌우 순서를 바꿀 수 있습니다. 이 브라우저에만 저장됩니다.
+            플랫폼 열은 드래그로 옮길 수 있고, 머리글에서 숨길 수 있습니다. (이 브라우저에만 저장)
           </p>
+          {hiddenCols.size > 0 ? (
+            <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
+              숨김:{" "}
+              {Array.from(hiddenCols)
+                .sort((a, b) => a.localeCompare(b, "ko"))
+                .slice(0, 12)
+                .map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => unhideColumn(l)}
+                    className="mx-0.5 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[10px] text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    title="클릭: 다시 표시"
+                  >
+                    {l} ✕
+                  </button>
+                ))}
+              {hiddenCols.size > 12 ? <span className="ml-1 text-zinc-400">+{hiddenCols.size - 12}</span> : null}
+              <button
+                type="button"
+                onClick={resetHiddenColumns}
+                className="ml-2 rounded border border-zinc-300 bg-white px-2 py-1 text-[10px] text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                숨김 초기화
+              </button>
+            </div>
+          ) : null}
           <table className="w-full min-w-[960px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
@@ -559,20 +622,62 @@ export function PlatformWorkMatrixClient() {
                   return (
                     <th
                       key={c.label}
-                      className="min-w-[6rem] border-l border-zinc-200 align-top dark:border-zinc-700"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/x-platform-col", c.label);
+                        e.dataTransfer.setData("text/plain", c.label);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setColDragOver(c.label);
+                      }}
+                      onDragLeave={() => setColDragOver(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const drag =
+                          e.dataTransfer.getData("application/x-platform-col") ||
+                          e.dataTransfer.getData("text/plain");
+                        setColDragOver(null);
+                        const dragLabel = (drag || "").trim();
+                        if (!dragLabel || dragLabel === c.label) return;
+                        const labels = displayModel.columns.map((x) => x.label);
+                        const fromIdx = labels.indexOf(dragLabel);
+                        const toIdx = labels.indexOf(c.label);
+                        if (fromIdx < 0 || toIdx < 0) return;
+                        const next = [...labels];
+                        next.splice(fromIdx, 1);
+                        next.splice(toIdx, 0, dragLabel);
+                        setColumnOrder(next);
+                        saveMatrixColumnOrder(next);
+                      }}
+                      className={`min-w-[6rem] border-l border-zinc-200 align-top dark:border-zinc-700 ${
+                        colDragOver === c.label ? "ring-2 ring-emerald-500 ring-inset" : ""
+                      }`}
                     >
                       <div className="flex items-stretch gap-0">
                         <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1.5">
                           <span className="text-center text-xs font-semibold text-zinc-800 dark:text-zinc-100">
                             {c.label}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => openPlatformEdit(c.label)}
-                            className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                          >
-                            편집
-                          </button>
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openPlatformEdit(c.label)}
+                              className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                            >
+                              편집
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => hideColumn(c.label)}
+                              className="rounded border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                              title="이 플랫폼 열 숨기기"
+                            >
+                              숨김
+                            </button>
+                          </div>
                         </div>
                         <div className="flex shrink-0 flex-col justify-center gap-0.5 border-l border-zinc-200 py-0.5 pl-1 dark:border-zinc-600">
                           <button
