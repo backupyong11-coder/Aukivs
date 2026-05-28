@@ -16,6 +16,8 @@ import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
+import { useTableRowOrder } from "@/hooks/useTableRowOrder";
+import { TableRowDragHandle } from "@/components/TableRowDragHandle";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   PlatformRowInlineCell,
@@ -512,7 +514,21 @@ export function PlatformRowsClient() {
     });
   }, [state, filterText, hiddenByField, sortKey, sortDir, columnOrder]);
 
-  const list = useTableListDisplay("platforms", sorted);
+  const rowsForOrder = useMemo(
+    () => (state.kind === "ready" ? state.items : []),
+    [state],
+  );
+  const rowOrder = useTableRowOrder(
+    "platforms.row-order.v1",
+    rowsForOrder,
+    (row) => row.id,
+  );
+  const orderedSorted = useMemo(
+    () => rowOrder.sortByOrder(sorted),
+    [rowOrder, sorted],
+  );
+
+  const list = useTableListDisplay("platforms", orderedSorted);
   const colWidths = useTableColumnWidths("platforms", colVis.visibleKeys, colLabels.getLabel);
 
   const handleSort = (key: string) => {
@@ -622,6 +638,16 @@ export function PlatformRowsClient() {
         >
           열 순서 초기화
         </button>
+        {rowOrder.hasManualOrder ? (
+          <button
+            type="button"
+            onClick={rowOrder.reset}
+            title="드래그로 옮긴 행 순서를 기본 정렬로 되돌립니다."
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+          >
+            행 순서 초기화
+          </button>
+        ) : null}
         {undoCount > 0 ? (
           <button
             type="button"
@@ -751,16 +777,26 @@ export function PlatformRowsClient() {
                 list.displayed.map((item) => (
                   <tr
                     key={item.id}
-                    className="border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40"
+                    {...rowOrder.getDropTargetProps(item.id)}
+                    className={`border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40 ${
+                      rowOrder.draggingId === item.id ? "opacity-50" : ""
+                    } ${
+                      rowOrder.overId === item.id && rowOrder.draggingId && rowOrder.draggingId !== item.id
+                        ? "border-t-2 border-t-zinc-700 dark:border-t-zinc-300"
+                        : ""
+                    }`}
                   >
                     <td className="whitespace-nowrap px-2 py-1.5 align-top">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(item)}
-                        className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                      >
-                        수정
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <TableRowDragHandle sourceProps={rowOrder.getSourceProps(item.id)} active={rowOrder.draggingId === item.id} />
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(item)}
+                          className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                        >
+                          수정
+                        </button>
+                      </div>
                     </td>
                     {colVis.visibleKeys.map((field) => {
                       const isBool = booleanFields.has(field);

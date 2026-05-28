@@ -16,6 +16,8 @@ import { TableListControls } from "@/components/TableListControls";
 import { useColumnLabels } from "@/hooks/useColumnLabels";
 import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
+import { useTableRowOrder } from "@/hooks/useTableRowOrder";
+import { TableRowDragHandle } from "@/components/TableRowDragHandle";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   boolToCell,
@@ -324,7 +326,21 @@ export function WorksMasterClient() {
     });
   }, [filtered, sortKey, sortDir]);
 
-  const list = useTableListDisplay("works-master", sorted);
+  const rowsForOrder = useMemo<WorkRow[]>(
+    () => (state.kind === "ready" ? state.items : []),
+    [state],
+  );
+  const rowOrder = useTableRowOrder<WorkRow>(
+    "works-master.row-order.v1",
+    rowsForOrder,
+    (row) => rowKey(row),
+  );
+  const orderedSorted = useMemo(
+    () => rowOrder.sortByOrder(sorted),
+    [rowOrder, sorted],
+  );
+
+  const list = useTableListDisplay("works-master", orderedSorted);
   const colWidths = useTableColumnWidths("works-master", colVis.visibleKeys, colLabels.getLabel);
 
   const genreFilterOptions = useMemo(() => {
@@ -515,7 +531,7 @@ export function WorksMasterClient() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        작품정리 DB입니다. 셀을 클릭해 바로 수정할 수 있습니다. 플랫폼 매트릭스·캘린더·관제실과 연동됩니다.
+        작품관리 DB입니다. 셀을 클릭해 바로 수정할 수 있습니다. 플랫폼 매트릭스·캘린더·관제실과 연동됩니다.
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -559,6 +575,16 @@ export function WorksMasterClient() {
         >
           열 순서 초기화
         </button>
+        {rowOrder.hasManualOrder ? (
+          <button
+            type="button"
+            onClick={rowOrder.reset}
+            title="드래그로 옮긴 행 순서를 기본 정렬로 되돌립니다."
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-400"
+          >
+            행 순서 초기화
+          </button>
+        ) : null}
       </div>
 
       {state.kind === "ready" && columnOrder.includes(FILTER_TAG_FIELD) && (
@@ -685,16 +711,26 @@ export function WorksMasterClient() {
                       return (
                         <tr
                           key={title}
-                          className="border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40"
+                          {...rowOrder.getDropTargetProps(title)}
+                          className={`border-b border-zinc-100 hover:bg-zinc-50/60 dark:border-zinc-800 dark:hover:bg-zinc-900/40 ${
+                            rowOrder.draggingId === title ? "opacity-50" : ""
+                          } ${
+                            rowOrder.overId === title && rowOrder.draggingId && rowOrder.draggingId !== title
+                              ? "border-t-2 border-t-zinc-700 dark:border-t-zinc-300"
+                              : ""
+                          }`}
                         >
                           <td className="whitespace-nowrap px-2 py-1.5 align-top">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(item)}
-                              className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                            >
-                              수정
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <TableRowDragHandle sourceProps={rowOrder.getSourceProps(title)} active={rowOrder.draggingId === title} />
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(item)}
+                                className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                              >
+                                수정
+                              </button>
+                            </div>
                           </td>
                           {colVis.visibleKeys.map((field) => {
                             const isBool = field === BOOL_FIELD;
