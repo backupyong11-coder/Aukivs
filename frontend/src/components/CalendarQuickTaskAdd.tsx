@@ -44,27 +44,27 @@ export function CalendarQuickTaskAdd({ ymd, categoryHints, onCreated, compact }:
     onCreated?.();
   }
 
-  const fieldsCls = compact ? "space-y-1" : "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end";
+  const fieldsCls = compact ? "space-y-1" : "flex min-w-0 items-center gap-2";
 
   return (
     <form
       onSubmit={(e) => void submit(e)}
-      className={compact ? "space-y-1 border-t border-zinc-200 pt-2 dark:border-zinc-700" : "space-y-2"}
+      className={compact ? "space-y-1 border-t border-zinc-200 pt-2 dark:border-zinc-700" : "space-y-1"}
     >
-      {!compact ? (
-        <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">업무 빠른 추가</p>
-      ) : null}
       <div className={fieldsCls}>
-        <label className={compact ? "block" : "min-w-[7rem] flex-1 sm:max-w-[10rem]"}>
+        {!compact ? (
+          <p className="shrink-0 text-xs font-semibold text-zinc-600 dark:text-zinc-400">업무 빠른 추가</p>
+        ) : null}
+        <label className={compact ? "block" : "min-w-[8rem] flex-1 sm:max-w-[12rem]"}>
           {!compact ? (
-            <span className="mb-0.5 block text-[10px] font-medium text-zinc-500 dark:text-zinc-400">분류</span>
+            <span className="sr-only">분류</span>
           ) : null}
           <input
             type="text"
             list={listId}
             value={분류}
             onChange={(e) => set분류(e.target.value)}
-            placeholder={compact ? "분류" : "예: 시스템, 지원사업"}
+            placeholder={compact ? "분류" : "분류"}
             className={inputCls}
             disabled={saving}
           />
@@ -74,15 +74,15 @@ export function CalendarQuickTaskAdd({ ymd, categoryHints, onCreated, compact }:
             ))}
           </datalist>
         </label>
-        <label className={compact ? "block" : "min-w-[10rem] flex-[2]"}>
+        <label className={compact ? "block" : "min-w-[14rem] flex-[3]"}>
           {!compact ? (
-            <span className="mb-0.5 block text-[10px] font-medium text-zinc-500 dark:text-zinc-400">업무명</span>
+            <span className="sr-only">업무명</span>
           ) : null}
           <input
             type="text"
             value={업무명}
             onChange={(e) => set업무명(e.target.value)}
-            placeholder={compact ? "업무명" : "할 일 제목"}
+            placeholder={compact ? "업무명" : "업무명"}
             className={inputCls}
             disabled={saving}
             required
@@ -94,7 +94,7 @@ export function CalendarQuickTaskAdd({ ymd, categoryHints, onCreated, compact }:
           className={
             compact
               ? "w-full rounded-md bg-zinc-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-              : "rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              : "shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
           }
         >
           {saving ? "저장…" : compact ? "+ 추가" : "추가"}
