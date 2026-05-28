@@ -1,5 +1,7 @@
 export type PersonnelDirectoryPerson = {
   name: string;
+  /** 업체 */
+  company?: string;
   /** 직위 */
   position?: string;
   /** 연락처 */
@@ -8,6 +10,8 @@ export type PersonnelDirectoryPerson = {
   role?: string;
   /** 생년월일 (자유 입력, 예: 1999-01-23) */
   birthdate?: string;
+  /** 메모 */
+  memo?: string;
 };
 
 export type PersonnelDirectoryBundle = {
@@ -35,10 +39,12 @@ function normalizeBundle(raw: unknown): PersonnelDirectoryBundle {
     if (!name) continue;
     const item: PersonnelDirectoryPerson = {
       name,
+      company: typeof o.company === "string" ? o.company : "",
       position: typeof o.position === "string" ? o.position : "",
       contact: typeof o.contact === "string" ? o.contact : "",
       role: typeof o.role === "string" ? o.role : "",
       birthdate: typeof o.birthdate === "string" ? o.birthdate : "",
+      memo: typeof o.memo === "string" ? o.memo : "",
     };
     people.push(item);
   }
@@ -83,10 +89,12 @@ export function upsertDirectoryPerson(person: PersonnelDirectoryPerson): void {
   const idx = next.people.findIndex((p) => normalizeName(p.name) === name);
   const item: PersonnelDirectoryPerson = {
     name,
+    company: (person.company ?? "").trim(),
     position: (person.position ?? "").trim(),
     contact: (person.contact ?? "").trim(),
     role: (person.role ?? "").trim(),
     birthdate: (person.birthdate ?? "").trim(),
+    memo: (person.memo ?? "").trim(),
   };
   if (idx >= 0) next.people[idx] = item;
   else next.people.push(item);

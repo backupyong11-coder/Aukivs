@@ -34,6 +34,28 @@ type PersonnelTasksLabels = {
 const EXTERNAL_EXCLUDE = new Set(["문자빈", "황승현", "김영화"]);
 const MANAGER_PINNED = ["문자빈", "황승현", "김영화"] as const;
 
+function loadPeopleOrder(mode: PersonnelAssigneeMode): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(`worksheet_personnel_people_order_v1:${mode}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function savePeopleOrder(mode: PersonnelAssigneeMode, names: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`worksheet_personnel_people_order_v1:${mode}`, JSON.stringify(names));
+  } catch {
+    /* ignore */
+  }
+}
+
 function normalizePeople(
   boardNames: string[],
   tasks: TaskSheetRow[],
@@ -57,8 +79,7 @@ function normalizePeople(
   for (const task of tasks) {
     add(readPersonnelAssignee(task, mode));
   }
-  out.sort((a, b) => a.localeCompare(b, "ko"));
-  return out;
+  return out.sort((a, b) => a.localeCompare(b, "ko"));
 }
 
 function statsForPerson(
@@ -84,6 +105,9 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
   const [selected, setSelected] = useState<string>("");
   const [showDone, setShowDone] = useState(false);
   const [profileDraft, setProfileDraft] = useState<PersonnelDirectoryPerson | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [sortEdit, setSortEdit] = useState(false);
+  const [manualOrder, setManualOrder] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,10 +132,32 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
     return board?.rows.map((r) => r.name.trim()).filter(Boolean) ?? [];
   }, [tasks]);
 
-  const people = useMemo(
-    () => normalizePeople(mode === "employee" ? boardNames : [], tasks, mode),
-    [boardNames, tasks, mode],
-  );
+  useEffect(() => {
+    setManualOrder(loadPeopleOrder(mode));
+  }, [mode]);
+
+  const people = useMemo(() => {
+    const base = normalizePeople(mode === "employee" ? boardNames : [], tasks, mode);
+    const seen = new Set(base);
+    const ordered: string[] = [];
+    for (const n of manualOrder) {
+      const name = n.trim();
+      if (!name) continue;
+      if (mode === "employee" && EXTERNAL_EXCLUDE.has(name)) continue;
+      if (!seen.has(name)) continue;
+      if (!ordered.includes(name)) ordered.push(name);
+    }
+    for (const name of base) {
+      if (!ordered.includes(name)) ordered.push(name);
+    }
+    // 담당자 탭: 고정 3명은 항상 포함(정렬에도 들어가게)
+    if (mode === "manager") {
+      for (const p of MANAGER_PINNED) {
+        if (!ordered.includes(p)) ordered.unshift(p);
+      }
+    }
+    return ordered;
+  }, [boardNames, tasks, mode, manualOrder]);
 
   useEffect(() => {
     if (people.length === 0) {
@@ -126,16 +172,20 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
   useEffect(() => {
     if (!selected) {
       setProfileDraft(null);
+      setProfileOpen(false);
       return;
     }
     const p = getDirectoryPerson(selected);
     setProfileDraft({
       name: selected,
+      company: p?.company ?? "",
       position: p?.position ?? "",
       contact: p?.contact ?? "",
       role: p?.role ?? "",
       birthdate: p?.birthdate ?? "",
+      memo: p?.memo ?? "",
     });
+    setProfileOpen(false);
   }, [selected]);
 
   const stats = useMemo(
@@ -215,6 +265,14 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
           >
             새로고침
           </button>
+          <button
+            type="button"
+            onClick={() => setSortEdit((v) => !v)}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-900"
+            title="카드 순서를 직접 조정합니다 (이 브라우저에 저장)"
+          >
+            {sortEdit ? "정렬 완료" : "정렬"}
+          </button>
         </div>
       </div>
 
@@ -236,20 +294,58 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
         <>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {stats.map((s) => (
-              <button
+              <div
                 key={s.name}
-                type="button"
-                onClick={() => setSelected(s.name)}
                 className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                   selected === s.name
                     ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
                     : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
                 }`}
               >
-                <p className="truncate text-sm font-semibold">{s.name}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <button type="button" onClick={() => setSelected(s.name)} className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-sm font-semibold">{s.name}</p>
+                  </button>
+                  {sortEdit ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[10px] text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                        onClick={() => {
+                          const idx = people.indexOf(s.name);
+                          if (idx <= 0) return;
+                          const next = [...people];
+                          [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                          setManualOrder(next);
+                          savePeopleOrder(mode, next);
+                        }}
+                        aria-label="위로"
+                        title="위로"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[10px] text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                        onClick={() => {
+                          const idx = people.indexOf(s.name);
+                          if (idx < 0 || idx >= people.length - 1) return;
+                          const next = [...people];
+                          [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                          setManualOrder(next);
+                          savePeopleOrder(mode, next);
+                        }}
+                        aria-label="아래로"
+                        title="아래로"
+                      >
+                        ▼
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 {(() => {
                   const p = getDirectoryPerson(s.name);
-                  const meta = [p?.position, p?.role, p?.contact]
+                  const meta = [p?.company, p?.position, p?.role, p?.contact]
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
                     .join(" · ");
@@ -263,13 +359,13 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                   ) : null;
                 })()}
                 <p className={`mt-1 text-xs ${selected === s.name ? "opacity-90" : "text-zinc-500 dark:text-zinc-400"}`}>
-                  미완료 <span className="font-semibold">{s.open}</span>
+                  전체 {s.total}
                   <span className="mx-1">·</span>
                   완료 {s.done}
                   <span className="mx-1">·</span>
-                  전체 {s.total}
+                  미완료 <span className="font-semibold">{s.open}</span>
                 </p>
-              </button>
+              </div>
             ))}
           </div>
 
@@ -291,52 +387,90 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
 
             {selected && profileDraft ? (
               <div className="border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
-                <div className="grid gap-2 md:grid-cols-2">
-                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
-                    직위
-                    <input
-                      value={profileDraft.position ?? ""}
-                      onChange={(e) =>
-                        setProfileDraft((p) => (p ? { ...p, position: e.target.value } : p))
-                      }
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                      placeholder="예: 사원 / 과장 / 팀장"
-                    />
-                  </label>
-                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
-                    연락처
-                    <input
-                      value={profileDraft.contact ?? ""}
-                      onChange={(e) =>
-                        setProfileDraft((p) => (p ? { ...p, contact: e.target.value } : p))
-                      }
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                      placeholder="예: 010-0000-0000"
-                    />
-                  </label>
-                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
-                    담당업무
-                    <input
-                      value={profileDraft.role ?? ""}
-                      onChange={(e) =>
-                        setProfileDraft((p) => (p ? { ...p, role: e.target.value } : p))
-                      }
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                      placeholder="예: 유통 / 제작 / 계약 / 운영"
-                    />
-                  </label>
-                  <label className="text-xs text-zinc-600 dark:text-zinc-400">
-                    생년월일
-                    <input
-                      value={profileDraft.birthdate ?? ""}
-                      onChange={(e) =>
-                        setProfileDraft((p) => (p ? { ...p, birthdate: e.target.value } : p))
-                      }
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                      placeholder="예: 1999-01-23"
-                    />
-                  </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    {mode === "manager" ? "담당자" : "외부담당자"} 정보
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setProfileOpen((v) => !v)}
+                    className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                  >
+                    {profileOpen ? "접기" : "펼치기"}
+                  </button>
                 </div>
+
+                {profileOpen ? (
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                      업체
+                      <input
+                        value={profileDraft.company ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, company: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 오키브스"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                      직위
+                      <input
+                        value={profileDraft.position ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, position: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 사원 / 과장 / 팀장"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                      연락처
+                      <input
+                        value={profileDraft.contact ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, contact: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 010-0000-0000"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                      담당업무
+                      <input
+                        value={profileDraft.role ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, role: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 유통 / 제작 / 계약 / 운영"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400">
+                      생년월일
+                      <input
+                        value={profileDraft.birthdate ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, birthdate: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 1999-01-23"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-600 dark:text-zinc-400 md:col-span-2">
+                      메모
+                      <input
+                        value={profileDraft.memo ?? ""}
+                        onChange={(e) =>
+                          setProfileDraft((p) => (p ? { ...p, memo: e.target.value } : p))
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="예: 특이사항"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
                 <div className="mt-2 flex justify-end">
                   <button
                     type="button"
