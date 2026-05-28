@@ -383,7 +383,6 @@ export function WorksMasterClient() {
           { [field]: newValue },
         );
         if (!r.ok) throw new Error(r.message);
-        setRefreshKey((k) => k + 1);
       } catch (e) {
         setFieldInState(rowTitleKey, field, prev);
         setActionError(e instanceof Error ? e.message : "저장 실패");
@@ -427,13 +426,38 @@ export function WorksMasterClient() {
       columnOrder.forEach((key) => {
         payload[key] = modalForm[key] ?? "";
       });
+      const stableId = rowStableId(modalItem);
       const r = await updateWorksMasterRow(
-        { id: rowStableId(modalItem), originalTitle: modalOriginalTitle },
+        { id: stableId, originalTitle: modalOriginalTitle },
         payload,
       );
       if (!r.ok) throw new Error(r.message);
+      setState((s) => {
+        if (s.kind !== "ready") return s;
+        return {
+          kind: "ready",
+          items: s.items.map((it) => {
+            const matches = stableId
+              ? rowStableId(it) === stableId
+              : rowKey(it) === rowKey(modalItem);
+            if (!matches) return it;
+            const next: WorkRow = { ...it };
+            for (const key of columnOrder) {
+              const value = payload[key] ?? "";
+              if (key === BOOL_FIELD) {
+                next[key] = boolToCell(isWorksBoolValue(value));
+              } else {
+                next[key] = value.trim();
+              }
+            }
+            if (next["__id"] === undefined && it["__id"] !== undefined) {
+              next["__id"] = it["__id"];
+            }
+            return next;
+          }),
+        };
+      });
       setModalItem(null);
-      setRefreshKey((k) => k + 1);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "수정 실패");
     } finally {

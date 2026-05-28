@@ -415,16 +415,24 @@ export function PlatformWorkMatrixClient() {
   const handleWorkGenreChange = async (title: string, genre: string) => {
     setGenreSavingTitle(title);
     setActionError(null);
+    const prevItems = worksItems;
+    setWorksItems((items) =>
+      items.map((it) =>
+        (it["작품명"] ?? "").trim() === title.trim()
+          ? { ...it, [WORK_GENRE_FIELD]: genre }
+          : it,
+      ),
+    );
     const r = await updateWorksMasterRow({ originalTitle: title }, {
       작품명: title,
       [WORK_GENRE_FIELD]: genre,
     });
     setGenreSavingTitle(null);
     if (!r.ok) {
+      setWorksItems(prevItems);
       setActionError(r.message);
       return;
     }
-    setRefreshKey((k) => k + 1);
   };
 
   const handleWorkSave = async () => {
