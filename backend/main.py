@@ -56,6 +56,10 @@ from schemas import (
     TableListColumnWidthsGetResponse,
     TableListColumnWidthsPutRequest,
     TableListColumnWidthsPutResponse,
+    WeeklyMeetingMinutesItem,
+    WeeklyMeetingMinutesListResponse,
+    WeeklyMeetingMinutesUpsertRequest,
+    WeeklyMeetingMinutesUpsertResponse,
 )
 from services.briefing_aggregate import aggregate_briefing_today
 from services.ai_checklist_suggest import suggest_checklist_ai
@@ -87,6 +91,7 @@ from repositories.memos_repo import list_memos as list_memos_supabase
 from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from repositories import weekly_agenda_repo
+from repositories import weekly_meeting_minutes_repo
 from repositories import table_list_prefs_repo
 from repositories import snapshot_repo
 from services.google_uploads_sheets import (
@@ -1273,6 +1278,91 @@ def put_works_master_preferences(
     except SupabaseRequestError as e:
         status = e.status_code if e.status_code and e.status_code >= 400 else 502
         raise HTTPException(status_code=status, detail=str(e)) from e
+
+
+# ── 주간 회의록 ───────────────────────────────────────────────────────
+@app.get(
+    "/weekly-meeting-minutes",
+    response_model=WeeklyMeetingMinutesListResponse,
+)
+def get_weekly_meeting_minutes(
+    from_ymd: str | None = None,
+    to_ymd: str | None = None,
+) -> WeeklyMeetingMinutesListResponse:
+    settings = load_settings()
+    try:
+        items = weekly_meeting_minutes_repo.list_minutes(
+            settings, from_ymd=from_ymd, to_ymd=to_ymd
+        )
+        return WeeklyMeetingMinutesListResponse(
+            items=[WeeklyMeetingMinutesItem(**it) for it in items]
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get(
+    "/weekly-meeting-minutes/{week_start}",
+    response_model=WeeklyMeetingMinutesItem,
+)
+def get_weekly_meeting_minutes_one(week_start: str) -> WeeklyMeetingMinutesItem:
+    settings = load_settings()
+    try:
+        got = weekly_meeting_minutes_repo.get_minutes(settings, week_start)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if got is None:
+        raise HTTPException(status_code=404, detail=f"[찾을수없음] 회의록 없음: {week_start}")
+    return WeeklyMeetingMinutesItem(**got)
+
+
+@app.post(
+    "/weekly-meeting-minutes",
+    response_model=WeeklyMeetingMinutesUpsertResponse,
+)
+def post_weekly_meeting_minutes(
+    body: WeeklyMeetingMinutesUpsertRequest,
+) -> WeeklyMeetingMinutesUpsertResponse:
+    settings = load_settings()
+    try:
+        item = weekly_meeting_minutes_repo.upsert_minutes(settings, body.model_dump())
+        return WeeklyMeetingMinutesUpsertResponse(
+            ok=True, item=WeeklyMeetingMinutesItem(**item)
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/weekly-meeting-minutes/{week_start}")
+def delete_weekly_meeting_minutes(week_start: str):
+    settings = load_settings()
+    try:
+        weekly_meeting_minutes_repo.delete_minutes(settings, week_start)
+        return {"deleted": True}
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except SheetsNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except SheetsParseError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ── 대시보드 통계 ────────────────────────────────────────────────────

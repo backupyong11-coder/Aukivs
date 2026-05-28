@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarQuickTaskAdd } from "@/components/CalendarQuickTaskAdd";
 import { DayAgendaDetail } from "@/components/DayAgendaDetail";
+import { WeeklyMeetingMinutesModal } from "@/components/WeeklyMeetingMinutesModal";
 import { useCalendarWindow } from "@/hooks/useCalendarWindow";
 import type { CalendarWindowState } from "@/hooks/useCalendarWindow";
 import {
@@ -23,6 +24,10 @@ import {
 } from "@/lib/sheetDates";
 import { safeInt } from "@/lib/safeInt";
 import { worksFirstSupplyYmd } from "@/lib/worksMasterDisplay";
+import {
+  fetchWeeklyMeetingMinutes,
+  type WeeklyMeetingMinutesItem,
+} from "@/lib/weeklyMeetingMinutesApi";
 
 type CalendarView = "month" | "week" | "day";
 
@@ -96,6 +101,31 @@ export function FullCalendarClient() {
   const win = useCalendarWindow(range.from, range.to, refreshKey);
   const activityMap = useMemo(() => activityDotsMap(win), [win]);
   const ready = win.kind === "ready";
+
+  const [minutesByWeek, setMinutesByWeek] = useState<Map<string, WeeklyMeetingMinutesItem>>(new Map());
+  const [minutesModal, setMinutesModal] = useState<string | null>(null);
+  const [minutesRefreshKey, setMinutesRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const r = await fetchWeeklyMeetingMinutes({
+        fromYmd: range.from,
+        toYmd: range.to,
+      });
+      if (cancelled) return;
+      if (!r.ok) {
+        setMinutesByWeek(new Map());
+        return;
+      }
+      const m = new Map<string, WeeklyMeetingMinutesItem>();
+      for (const it of r.items) m.set(it.week_start, it);
+      setMinutesByWeek(m);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [range.from, range.to, minutesRefreshKey]);
 
   const categoryHints = useMemo(
     () => (win.kind === "ready" ? collectCategoryHints(win.data.allTasks) : []),
@@ -335,21 +365,46 @@ export function FullCalendarClient() {
                     ? "border-red-600 ring-2 ring-red-500 dark:border-red-400 dark:ring-red-400"
                     : "border-zinc-900 ring-2 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
                   : `border-zinc-200 dark:border-zinc-700 ${cellHover}`;
+                const isMonday = new Date(monthGrid.vy, monthGrid.vm - 1, d).getDay() === 1;
+                const minutesItem = isMonday ? minutesByWeek.get(ymd) : undefined;
                 return (
-                  <button
+                  <div
                     key={`${ymd}-${i}`}
-                    type="button"
-                    onClick={() => setSelectedYmd(ymd)}
-                    className={`flex min-h-[5rem] flex-col rounded-lg border p-2 text-left text-sm transition-colors ${cellBg} ${selBorder}`}
+                    className={`relative flex min-h-[5rem] flex-col rounded-lg border p-2 text-left text-sm transition-colors ${cellBg} ${selBorder}`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedYmd(ymd)}
+                      className="absolute inset-0 z-0 rounded-lg"
+                      aria-label={`${ymd} 선택`}
+                    />
                     <span
-                      className={`text-base font-semibold tabular-nums ${
+                      className={`relative z-10 text-base font-semibold tabular-nums ${
                         isToday ? "text-red-900 dark:text-red-100" : "text-zinc-800 dark:text-zinc-200"
                       }`}
                     >
                       {d}
                     </span>
-                    <span className="mt-auto flex flex-wrap gap-1 pt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    {isMonday ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedYmd(ymd);
+                          setMinutesModal(ymd);
+                        }}
+                        title={minutesItem ? `회의록: ${minutesItem.title}` : "이번 주 회의록 작성"}
+                        className={`relative z-10 mt-1 inline-flex w-fit items-center gap-1 self-start rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          minutesItem
+                            ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-200"
+                            : "border border-dashed border-zinc-300 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                        }`}
+                      >
+                        <span>📝</span>
+                        <span>{minutesItem ? "회의록" : "회의록 +"}</span>
+                      </button>
+                    ) : null}
+                    <span className="relative z-10 mt-auto flex flex-wrap gap-1 pt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                       {hasTask ? <span className="rounded bg-zinc-200 px-1 py-0.5 dark:bg-zinc-700">업무 {act?.tasks}</span> : null}
                       {hasUpload ? (
                         <span className="rounded bg-emerald-100 px-1 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
@@ -362,7 +417,7 @@ export function FullCalendarClient() {
                         </span>
                       ) : null}
                     </span>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -383,6 +438,8 @@ export function FullCalendarClient() {
               const launches = win.data.uploadRows.filter((it) => normalizeSheetDateYmd(it["런칭일"] ?? "") === ymd);
               const memos = win.data.memos.filter((mo) => normalizeSheetDateYmd(mo.memo_date ?? "") === ymd);
               const works = win.data.worksMaster.filter((w) => worksFirstSupplyYmd(w) === ymd);
+              const isMondayCol = new Date(y, m - 1, d).getDay() === 1;
+              const minutesItem = isMondayCol ? minutesByWeek.get(ymd) : undefined;
               return (
                 <div
                   key={ymd}
@@ -422,6 +479,26 @@ export function FullCalendarClient() {
                       {weekdayShortKo(y, m, d)}요일
                     </p>
                   </button>
+                  {isMondayCol ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedYmd(ymd);
+                        setMinutesModal(ymd);
+                      }}
+                      className={`mx-2 mt-2 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${
+                        minutesItem
+                          ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-200"
+                          : "border border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-950/50"
+                      }`}
+                      title="주간 회의록"
+                    >
+                      <span>📝</span>
+                      <span className="truncate">
+                        {minutesItem ? minutesItem.title || "주간 회의록" : "주간 회의록 작성"}
+                      </span>
+                    </button>
+                  ) : null}
                   <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2 text-[11px]">
                     {tasks.length > 0 && (
                       <div>
@@ -641,6 +718,17 @@ export function FullCalendarClient() {
             />
           </div>
         </section>
+      )}
+
+      {minutesModal && (
+        <WeeklyMeetingMinutesModal
+          open
+          weekStart={minutesModal}
+          initial={minutesByWeek.get(minutesModal) ?? null}
+          onClose={() => setMinutesModal(null)}
+          onSaved={() => setMinutesRefreshKey((k) => k + 1)}
+          onDeleted={() => setMinutesRefreshKey((k) => k + 1)}
+        />
       )}
     </div>
   );

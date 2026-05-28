@@ -595,3 +595,51 @@ class WorksMasterPreferencesPutRequest(BaseModel):
 class WorksMasterPreferencesPutResponse(BaseModel):
     ok: bool = True
     updated_at: str | None = None
+
+
+class WeeklyMeetingMinutesActionItem(BaseModel):
+    """주간 회의록 액션 아이템."""
+
+    text: str
+    owner: str | None = None
+    due: str | None = None
+    done: bool = False
+
+
+class WeeklyMeetingMinutesItem(BaseModel):
+    """주간 회의록 한 건. week_start(YYYY-MM-DD, 월요일)이 키."""
+
+    week_start: str
+    title: str = ""
+    content: str = ""
+    attendees: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    action_items: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = "draft"
+    tags: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class WeeklyMeetingMinutesListResponse(BaseModel):
+    items: list[WeeklyMeetingMinutesItem] = Field(default_factory=list)
+
+
+class WeeklyMeetingMinutesUpsertRequest(BaseModel):
+    """POST /weekly-meeting-minutes — week_start 기반 upsert."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    week_start: str
+    title: str | None = None
+    content: str | None = None
+    attendees: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    action_items: list[dict[str, Any]] = Field(default_factory=list)
+    status: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class WeeklyMeetingMinutesUpsertResponse(BaseModel):
+    ok: bool = True
+    item: WeeklyMeetingMinutesItem
