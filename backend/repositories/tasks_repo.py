@@ -17,11 +17,13 @@ _SELECT_TASKS_BASE = (
     "time_raw,time_converted,platform,detail_value,detail_unit,related_work,"
     "difficulty,fatigue"
 )
+_SELECT_TASKS_WITH_MANAGER = f"{_SELECT_TASKS_BASE},work_assignee,task_manager,memo"
 _SELECT_TASKS_NEW = f"{_SELECT_TASKS_BASE},work_assignee,memo"
 _SELECT_TASKS_LEGACY = f"{_SELECT_TASKS_BASE},status,assignee,memo"
 
 _tasks_select_cache: str | None = None
 _assignee_write_col_cache: str | None = None
+_tasks_has_manager_col: bool | None = None
 
 
 def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
@@ -31,29 +33,36 @@ def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
     return "42703" in msg or "does not exist" in msg
 
 
-def _set_tasks_schema(*, use_new: bool) -> tuple[str, str]:
-    global _tasks_select_cache, _assignee_write_col_cache
-    if use_new:
+def _set_tasks_schema(*, variant: str) -> tuple[str, str]:
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col
+    if variant == "with_manager":
+        _tasks_select_cache = _SELECT_TASKS_WITH_MANAGER
+        _assignee_write_col_cache = "work_assignee"
+        _tasks_has_manager_col = True
+    elif variant == "new":
         _tasks_select_cache = _SELECT_TASKS_NEW
         _assignee_write_col_cache = "work_assignee"
+        _tasks_has_manager_col = False
     else:
         _tasks_select_cache = _SELECT_TASKS_LEGACY
         _assignee_write_col_cache = "status"
+        _tasks_has_manager_col = False
     return _tasks_select_cache, _assignee_write_col_cache
 
 
 def _reset_tasks_schema_cache() -> None:
-    global _tasks_select_cache, _assignee_write_col_cache
+    global _tasks_select_cache, _assignee_write_col_cache, _tasks_has_manager_col
     _tasks_select_cache = None
     _assignee_write_col_cache = None
+    _tasks_has_manager_col = None
 
 
 def _fetch_tasks(cli: SupabaseRestClient, params: dict[str, Any]) -> Any:
-    """GET /tasks — work_assignee 마이그레이션 전·후 스키마 자동 전환."""
+    """GET /tasks — work_assignee·task_manager 마이그레이션 전·후 스키마 자동 전환."""
     base = {k: v for k, v in params.items() if k != "select"}
     last_exc: SupabaseRequestError | None = None
-    for use_new in (True, False):
-        select, _ = _set_tasks_schema(use_new=use_new)
+    for variant in ("with_manager", "new", "legacy"):
+        select, _ = _set_tasks_schema(variant=variant)
         try:
             return cli.get_json("/tasks", params={**base, "select": select})
         except SupabaseRequestError as exc:
@@ -82,7 +91,7 @@ def _tasks_select(cli: SupabaseRestClient) -> str:
 def _assignee_write_col(cli: SupabaseRestClient) -> str:
     return _probe_tasks_schema(cli)[1]
 
-_ASSIGNEE_API_KEYS = ("업무담당", "상태", "담당자")
+_WORK_ASSIGNEE_API_KEYS = ("업무담당", "인물담당", "상태")
 
 _KOREAN_TO_DB: dict[str, str] = {
     "날짜그룹": "date_group",
@@ -105,6 +114,7 @@ _KOREAN_TO_DB: dict[str, str] = {
     "난이도": "difficulty",
     "피로도": "fatigue",
     "업무담당": "work_assignee",
+    "담당자": "task_manager",
     "메모": "memo",
 }
 
@@ -128,6 +138,7 @@ _CREATE_RESPONSE_KEYS: tuple[str, ...] = (
     "난이도",
     "피로도",
     "업무담당",
+    "담당자",
     "메모",
 )
 
@@ -156,14 +167,23 @@ def _bool_from_sheet_val(v: object) -> bool | None:
     return _truthy_cell(v)
 
 
-def _assignee_from_row(row: dict[str, Any]) -> str:
+def _work_assignee_from_row(row: dict[str, Any]) -> str:
     wa = row.get("work_assignee")
     if wa is not None and str(wa).strip():
         return str(wa).strip()
-    for legacy in ("status", "assignee"):
-        v = row.get(legacy)
-        if v is not None and str(v).strip():
-            return str(v).strip()
+    status = row.get("status")
+    if status is not None and str(status).strip():
+        return str(status).strip()
+    return ""
+
+
+def _task_manager_from_row(row: dict[str, Any]) -> str:
+    tm = row.get("task_manager")
+    if tm is not None and str(tm).strip():
+        return str(tm).strip()
+    assignee = row.get("assignee")
+    if assignee is not None and str(assignee).strip():
+        return str(assignee).strip()
     return ""
 
 
@@ -214,7 +234,8 @@ def _db_row_to_task_dict(row: dict[str, Any]) -> dict[str, Any]:
         "관련작품": opt_str("related_work"),
         "난이도": opt_str("difficulty"),
         "피로도": opt_str("fatigue"),
-        "업무담당": _assignee_from_row(row),
+        "업무담당": _work_assignee_from_row(row),
+        "담당자": _task_manager_from_row(row),
         "메모": opt_str("memo"),
     }
 
@@ -258,7 +279,7 @@ def _db_row_to_checklist_item(row: dict[str, Any]) -> ChecklistItem | None:
         quantification=opt("quantification"),
         difficulty=opt("difficulty"),
         fatigue=opt("fatigue"),
-        work_status=_assignee_from_row(row) or None,
+        work_status=_work_assignee_from_row(row) or None,
         memo=opt("memo"),
     )
 
@@ -373,7 +394,7 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
             insert[dbk] = str(raw).strip()
 
     if assignee_col not in insert:
-        for kr in _ASSIGNEE_API_KEYS:
+        for kr in _WORK_ASSIGNEE_API_KEYS:
             if kr not in fields:
                 continue
             raw = fields[kr]
@@ -381,6 +402,8 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
                 continue
             insert[assignee_col] = str(raw).strip()
             break
+    if _tasks_has_manager_col and "task_manager" not in insert and fields.get("담당자"):
+        insert["task_manager"] = str(fields["담당자"]).strip()
 
     cli.post_json("/tasks", [insert], prefer="return=minimal")
 
@@ -394,10 +417,12 @@ def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
             continue
         out[k] = str(fields.get(k, "")).strip()
     if not out.get("업무담당"):
-        for kr in _ASSIGNEE_API_KEYS:
+        for kr in _WORK_ASSIGNEE_API_KEYS:
             if kr != "업무담당" and fields.get(kr):
                 out["업무담당"] = str(fields[kr]).strip()
                 break
+    if not out.get("담당자") and fields.get("담당자"):
+        out["담당자"] = str(fields["담당자"]).strip()
     out["업무명"] = title
     out["완료"] = _completed_to_cell(bool(insert.get("completed")))
     if "due_date" in insert:
@@ -414,7 +439,7 @@ def _patch_body_from_fields(
 ) -> dict[str, Any]:
     patch: dict[str, Any] = {}
     for kr, dbk in _KOREAN_TO_DB.items():
-        if kr in ("업무담당", "상태", "담당자"):
+        if kr in ("업무담당", "인물담당", "상태", "담당자"):
             continue
         if kr not in fields:
             continue
@@ -441,13 +466,18 @@ def _patch_body_from_fields(
         else:
             patch[dbk] = str(raw).strip()
 
-    for kr in _ASSIGNEE_API_KEYS:
+    for kr in _WORK_ASSIGNEE_API_KEYS:
         if kr not in fields:
             continue
         raw = fields[kr]
         s = "" if raw is None else str(raw).strip()
         patch[assignee_col] = s or None
         break
+
+    if _tasks_has_manager_col and "담당자" in fields:
+        raw = fields["담당자"]
+        s = "" if raw is None else str(raw).strip()
+        patch["task_manager"] = s or None
 
     return patch
 

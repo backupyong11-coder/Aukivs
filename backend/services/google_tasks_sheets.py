@@ -86,12 +86,14 @@ _TASK_FIELD_KEYS: tuple[str, ...] = (
     "난이도",
     "피로도",
     "업무담당",
+    "담당자",
     "메모",
 )
 
 _TASK_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
     "정량화 분": ("정량화 분", "정량화 분류"),
-    "업무담당": ("업무담당", "상태", "담당자", "담당자/요청주체"),
+    "업무담당": ("업무담당", "인물담당", "상태"),
+    "담당자": ("담당자", "담당자/요청주체"),
 }
 
 
@@ -249,6 +251,7 @@ def fetch_tasks(settings: Settings) -> list[dict]:
             "난이도": _c(cells, "난이도", col_map),
             "피로도": _c(cells, "피로도", col_map),
             "업무담당": _c(cells, "업무담당", col_map),
+            "담당자": _c(cells, "담당자", col_map),
             "메모": _c(cells, "메모", col_map),
         })
     return out
@@ -292,13 +295,17 @@ def create_task(settings: Settings, fields: dict) -> dict:
         "난이도",
         "피로도",
         "업무담당",
+        "담당자",
         "메모",
     ):
-        val = str(
-            fields.get(key, "") or fields.get("상태", "") or fields.get("담당자", "")
-            if key == "업무담당"
-            else fields.get(key, "")
-        ).strip()
+        if key == "업무담당":
+            val = str(
+                fields.get(key, "")
+                or fields.get("인물담당", "")
+                or fields.get("상태", "")
+            ).strip()
+        else:
+            val = str(fields.get(key, "")).strip()
         if not val:
             continue
         idx = col_map.get(key)
@@ -335,12 +342,15 @@ def create_task(settings: Settings, fields: dict) -> dict:
                 "난이도",
                 "피로도",
                 "업무담당",
+                "담당자",
                 "메모",
             )
         },
     }
     if not str(out.get("업무담당", "")).strip():
-        legacy = str(fields.get("상태", "") or fields.get("담당자", "")).strip()
+        legacy = str(
+            fields.get("인물담당", "") or fields.get("상태", "")
+        ).strip()
         if legacy:
             out["업무담당"] = legacy
     return out
@@ -379,8 +389,8 @@ def update_task(settings: Settings, task_id: str, fields: dict) -> None:
         if key == "업무담당":
             if "업무담당" in fields:
                 val = fields["업무담당"]
-            elif "상태" in fields or "담당자" in fields:
-                val = fields.get("상태") or fields.get("담당자")
+            elif "인물담당" in fields or "상태" in fields:
+                val = fields.get("인물담당") or fields.get("상태")
             else:
                 continue
         elif key not in fields:

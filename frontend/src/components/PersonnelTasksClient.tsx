@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadPersonnelBoard } from "@/lib/personnelBoardStorage";
 import {
-  TASK_ASSIGNEE_FIELD,
+  type PersonnelAssigneeMode,
   isTaskDone,
-  readTaskAssignee,
-  taskMatchesAssignee,
+  readPersonnelAssignee,
+  readTaskManager,
+  readWorkAssignee,
+  taskMatchesPersonnelAssignee,
 } from "@/lib/taskAssignee";
 import { fetchTasks, type TaskSheetRow } from "@/lib/tasks";
 
@@ -18,7 +20,29 @@ type PersonStat = {
   total: number;
 };
 
-function normalizePeople(boardNames: string[], tasks: TaskSheetRow[]): string[] {
+const MODE_CONFIG: Record<
+  PersonnelAssigneeMode,
+  { tabLabel: string; fieldLabel: string; emptyHint: string; unassignedHint: string }
+> = {
+  employee: {
+    tabLabel: "임직원별",
+    fieldLabel: "인물담당(업무담당)",
+    emptyHint: "인물담당(업무담당)을 입력해 주세요.",
+    unassignedHint: "인물담당(업무담당)이 비어 있는 미완료 업무",
+  },
+  manager: {
+    tabLabel: "담당자",
+    fieldLabel: "담당자",
+    emptyHint: "담당자를 입력해 주세요.",
+    unassignedHint: "담당자가 비어 있는 미완료 업무",
+  },
+};
+
+function normalizePeople(
+  boardNames: string[],
+  tasks: TaskSheetRow[],
+  mode: PersonnelAssigneeMode,
+): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of boardNames) {
@@ -28,7 +52,7 @@ function normalizePeople(boardNames: string[], tasks: TaskSheetRow[]): string[] 
     out.push(name);
   }
   for (const task of tasks) {
-    const name = readTaskAssignee(task);
+    const name = readPersonnelAssignee(task, mode);
     if (!name || seen.has(name)) continue;
     seen.add(name);
     out.push(name);
@@ -37,8 +61,12 @@ function normalizePeople(boardNames: string[], tasks: TaskSheetRow[]): string[] 
   return out;
 }
 
-function statsForPerson(tasks: TaskSheetRow[], name: string): PersonStat {
-  const matched = tasks.filter((t) => taskMatchesAssignee(t, name));
+function statsForPerson(
+  tasks: TaskSheetRow[],
+  name: string,
+  mode: PersonnelAssigneeMode,
+): PersonStat {
+  const matched = tasks.filter((t) => taskMatchesPersonnelAssignee(t, name, mode));
   const done = matched.filter((t) => isTaskDone(t.완료)).length;
   return {
     name,
@@ -52,6 +80,7 @@ export function PersonnelTasksClient() {
   const [tasks, setTasks] = useState<TaskSheetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<PersonnelAssigneeMode>("employee");
   const [selected, setSelected] = useState<string>("");
   const [showDone, setShowDone] = useState(false);
 
@@ -65,11 +94,7 @@ export function PersonnelTasksClient() {
       setLoading(false);
       return;
     }
-    const normalized = res.items.map((row) => ({
-      ...row,
-      [TASK_ASSIGNEE_FIELD]: readTaskAssignee(row),
-    }));
-    setTasks(normalized);
+    setTasks(res.items);
     setLoading(false);
   }, []);
 
@@ -83,8 +108,8 @@ export function PersonnelTasksClient() {
   }, [tasks]);
 
   const people = useMemo(
-    () => normalizePeople(boardNames, tasks),
-    [boardNames, tasks],
+    () => normalizePeople(mode === "employee" ? boardNames : [], tasks, mode),
+    [boardNames, tasks, mode],
   );
 
   useEffect(() => {
@@ -98,13 +123,13 @@ export function PersonnelTasksClient() {
   }, [people, selected]);
 
   const stats = useMemo(
-    () => people.map((name) => statsForPerson(tasks, name)),
-    [people, tasks],
+    () => people.map((name) => statsForPerson(tasks, name, mode)),
+    [people, tasks, mode],
   );
 
   const selectedTasks = useMemo(() => {
     if (!selected) return [];
-    let rows = tasks.filter((t) => taskMatchesAssignee(t, selected));
+    let rows = tasks.filter((t) => taskMatchesPersonnelAssignee(t, selected, mode));
     if (!showDone) rows = rows.filter((t) => !isTaskDone(t.완료));
     return [...rows].sort((a, b) => {
       const da = (a.마감일 ?? "").trim();
@@ -114,12 +139,17 @@ export function PersonnelTasksClient() {
       if (!db) return -1;
       return da.localeCompare(db, "ko");
     });
-  }, [tasks, selected, showDone]);
+  }, [tasks, selected, showDone, mode]);
 
   const unassignedCount = useMemo(
-    () => tasks.filter((t) => !readTaskAssignee(t) && !isTaskDone(t.완료)).length,
-    [tasks],
+    () =>
+      tasks.filter(
+        (t) => !readPersonnelAssignee(t, mode) && !isTaskDone(t.완료),
+      ).length,
+    [tasks, mode],
   );
+
+  const cfg = MODE_CONFIG[mode];
 
   if (loading) {
     return (
@@ -145,12 +175,33 @@ export function PersonnelTasksClient() {
     );
   }
 
+  const subTabBtn = (active: boolean) =>
+    active
+      ? "rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+      : "rounded-md px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900";
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-900/50">
+        {(Object.keys(MODE_CONFIG) as PersonnelAssigneeMode[]).map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={subTabBtn(mode === id)}
+            onClick={() => setMode(id)}
+          >
+            {MODE_CONFIG[id].tabLabel}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          업무정리 DB의 <strong className="font-medium text-zinc-800 dark:text-zinc-200">업무담당</strong> 기준으로
-          직원별 미완료 업무를 봅니다. 인물 보드에 등록한 이름과 자동으로 합쳐집니다.
+          업무정리 DB의 <strong className="font-medium text-zinc-800 dark:text-zinc-200">{cfg.fieldLabel}</strong>{" "}
+          기준으로 {mode === "employee" ? "임직원" : "담당자"}별 미완료 업무를 봅니다.
+          {mode === "employee"
+            ? " 인물 보드에 등록한 이름과 자동으로 합쳐집니다."
+            : " 담당자 열 값만 표시합니다."}
         </p>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -171,14 +222,17 @@ export function PersonnelTasksClient() {
 
       {unassignedCount > 0 ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-          업무담당이 비어 있는 미완료 업무 {unassignedCount}건 — 업무정리 DB에서 담당자를 입력해 주세요.
+          {cfg.unassignedHint} {unassignedCount}건 — 업무정리 DB에서 {cfg.fieldLabel}을 입력해 주세요.
         </p>
       ) : null}
 
       {people.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          표시할 직원 이름이 없습니다. 아래「인물 보드」탭에서 이름을 추가하거나, 업무정리 DB에 업무담당을
-          입력해 주세요.
+          표시할 이름이 없습니다.
+          {mode === "employee"
+            ? " 아래「인물 보드」탭에서 이름을 추가하거나,"
+            : ""}{" "}
+          업무정리 DB에 {cfg.emptyHint}
         </p>
       ) : (
         <>
@@ -229,6 +283,10 @@ export function PersonnelTasksClient() {
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {selectedTasks.map((task) => {
                   const done = isTaskDone(task.완료);
+                  const other =
+                    mode === "employee"
+                      ? readTaskManager(task)
+                      : readWorkAssignee(task);
                   return (
                     <li
                       key={task.id}
@@ -243,6 +301,11 @@ export function PersonnelTasksClient() {
                         <p className="mt-0.5 text-xs text-zinc-500">
                           {[task.분야, task.분류, task.관련플랫폼].filter(Boolean).join(" · ") || "—"}
                         </p>
+                        {other ? (
+                          <p className="mt-0.5 text-xs text-zinc-400">
+                            {mode === "employee" ? "담당자" : "인물담당"}: {other}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="shrink-0 text-right text-xs text-zinc-500">
                         {task.마감일 ? <p>{task.마감일}</p> : null}
