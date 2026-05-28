@@ -353,7 +353,10 @@ export function PersonnelTasksClient(props: { mode: PersonnelAssigneeMode; label
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
                     .join(" · ");
-                  const line2 = [(p?.role ?? "").trim()].filter(Boolean).join(" · ");
+                  const line2 = [p?.role, p?.birthdate]
+                    .map((x) => (x ?? "").trim())
+                    .filter(Boolean)
+                    .join(" · ");
                   const line3 = [p?.contact, p?.email]
                     .map((x) => (x ?? "").trim())
                     .filter(Boolean)
