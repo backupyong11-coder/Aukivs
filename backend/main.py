@@ -47,6 +47,9 @@ from schemas import (
     WeeklyAgendaGetResponse,
     WeeklyAgendaPutRequest,
     WeeklyAgendaPutResponse,
+    CompanyProfileGetResponse,
+    CompanyProfilePutRequest,
+    CompanyProfilePutResponse,
     PlatformMatrixPreferencesGetResponse,
     PlatformMatrixPreferencesPutRequest,
     PlatformMatrixPreferencesPutResponse,
@@ -92,6 +95,7 @@ from repositories.memos_repo import list_memos as list_memos_supabase
 from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from repositories import weekly_agenda_repo
+from repositories import company_repo
 from repositories import weekly_meeting_minutes_repo
 from repositories import table_list_prefs_repo
 from repositories import snapshot_repo
@@ -1179,6 +1183,43 @@ def put_weekly_agenda(body: WeeklyAgendaPutRequest) -> WeeklyAgendaPutResponse:
     try:
         updated_at = weekly_agenda_repo.upsert_workbook(settings, body.workbook)
         return WeeklyAgendaPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ── 회사 대시보드 (Supabase JSON 문서) ─────────────────────────────────
+@app.get("/company-profile", response_model=CompanyProfileGetResponse)
+def get_company_profile() -> CompanyProfileGetResponse:
+    settings = load_settings()
+    try:
+        row = company_repo.get_profile(settings)
+        if not row:
+            return CompanyProfileGetResponse(profile=None, updated_at=None)
+        ua = row.get("updated_at")
+        return CompanyProfileGetResponse(
+            profile=row["profile"],
+            updated_at=str(ua) if ua is not None else None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/company-profile", response_model=CompanyProfilePutResponse)
+def put_company_profile(body: CompanyProfilePutRequest) -> CompanyProfilePutResponse:
+    settings = load_settings()
+    try:
+        updated_at = company_repo.upsert_profile(settings, body.profile)
+        return CompanyProfilePutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SupabaseRequestError as e:

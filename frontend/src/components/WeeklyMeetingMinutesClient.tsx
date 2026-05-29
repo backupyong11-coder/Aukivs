@@ -326,38 +326,35 @@ function CardView({
   onOpen: (ws: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,13rem))] gap-3">
       {items.map((it) => (
         <button
           key={it.week_start}
           type="button"
           onClick={() => onOpen(it.week_start)}
-          className="group flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+          className="group flex aspect-square w-full max-w-[13rem] flex-col gap-1.5 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-              {formatWeekShort(it.week_start)} · {weekRangeShort(it.week_start)}
+          <div className="flex shrink-0 items-start justify-between gap-1">
+            <span className="line-clamp-2 text-[10px] font-semibold leading-tight text-zinc-500 dark:text-zinc-400">
+              {formatWeekShort(it.week_start)}
             </span>
             <StatusBadge status={it.status} />
           </div>
-          <h3 className="line-clamp-2 text-base font-bold text-zinc-900 dark:text-zinc-50">
+          <h3 className="line-clamp-2 shrink-0 text-sm font-bold leading-snug text-zinc-900 dark:text-zinc-50">
             {it.title || "(제목 없음)"}
           </h3>
-          <p className="line-clamp-3 text-xs text-zinc-600 dark:text-zinc-400">{summary(it)}</p>
-          <div className="mt-auto flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
-            {it.tags.slice(0, 4).map((t) => (
-              <span key={t} className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
+          <p className="line-clamp-4 min-h-0 flex-1 text-[11px] leading-snug text-zinc-600 dark:text-zinc-400">
+            {summary(it)}
+          </p>
+          <div className="flex shrink-0 flex-wrap gap-1 text-[10px] text-zinc-500">
+            {it.tags.slice(0, 2).map((t) => (
+              <span key={t} className="rounded-full bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">
                 #{t}
               </span>
             ))}
             {it.attendees.length > 0 && (
-              <span className="rounded-full bg-zinc-50 px-2 py-0.5 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-                참석 {it.attendees.length}명
-              </span>
-            )}
-            {it.action_items.length > 0 && (
-              <span className="rounded-full bg-zinc-50 px-2 py-0.5 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-                액션 {it.action_items.filter((a) => a.done).length}/{it.action_items.length}
+              <span className="rounded-full bg-zinc-50 px-1.5 py-0.5 dark:bg-zinc-900">
+                {it.attendees.length}명
               </span>
             )}
           </div>

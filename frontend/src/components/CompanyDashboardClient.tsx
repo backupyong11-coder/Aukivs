@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { EditableCompanyTable } from "@/components/EditableCompanyTable";
 import {
+  fetchCompanyProfileFromServer,
+  saveCompanyProfileToServer,
+} from "@/lib/companyApi";
+import {
   computeCompanyKpis,
   createDefaultCompanyProfile,
   loadCompanyProfile,
@@ -13,6 +17,8 @@ import {
 } from "@/lib/companyStorage";
 
 const BAR_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"];
+
+type SyncStatus = "loading" | "synced" | "saving" | "local" | "error";
 
 function KpiCard(props: {
   label: string;
@@ -72,21 +78,90 @@ function RevenueChart({ slices }: { slices: { label: string; value: number }[] }
   );
 }
 
+function syncBanner(status: SyncStatus, message: string | null) {
+  if (status === "loading") return "불러오는 중…";
+  if (status === "saving") return "서버에 저장 중…";
+  if (status === "synced") return "서버에 저장됨";
+  if (status === "local") return message ?? "로컬만 저장됨";
+  return message ?? "서버 저장 실패";
+}
+
 export function CompanyDashboardClient() {
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
-  const [savedFlash, setSavedFlash] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setProfile(loadCompanyProfile());
+    let cancelled = false;
+
+    async function loadInitial() {
+      const server = await fetchCompanyProfileFromServer();
+      if (cancelled) return;
+
+      if (server.ok && server.profile) {
+        setProfile(server.profile);
+        saveCompanyProfile(server.profile);
+        setSyncStatus("synced");
+        setSyncMessage(null);
+        setHydrated(true);
+        return;
+      }
+
+      if (server.ok && !server.profile) {
+        const local = loadCompanyProfile();
+        const seed =
+          local.sections.length > 0 && local.companyName
+            ? local
+            : createDefaultCompanyProfile();
+        setProfile(seed);
+        setHydrated(true);
+        const pushed = await saveCompanyProfileToServer(seed);
+        if (cancelled) return;
+        if (pushed.ok) {
+          saveCompanyProfile(seed);
+          setSyncStatus("synced");
+          setSyncMessage("초기 데이터를 서버에 올렸습니다.");
+        } else {
+          setSyncStatus("local");
+          setSyncMessage(pushed.message);
+        }
+        return;
+      }
+
+      const local = loadCompanyProfile();
+      setProfile(local);
+      setSyncStatus("local");
+      setSyncMessage(server.ok ? "서버에 문서가 없어 로컬을 열었습니다." : server.message);
+      setHydrated(true);
+    }
+
+    void loadInitial();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!profile) return;
+    if (!hydrated || !profile) return;
     saveCompanyProfile(profile);
-    setSavedFlash(true);
-    const t = window.setTimeout(() => setSavedFlash(false), 1500);
-    return () => window.clearTimeout(t);
-  }, [profile]);
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setSyncStatus((prev) => (prev === "error" ? "error" : "saving"));
+        const result = await saveCompanyProfileToServer(profile);
+        if (result.ok) {
+          setSyncStatus("synced");
+          setSyncMessage(null);
+        } else {
+          setSyncStatus("error");
+          setSyncMessage(result.message);
+        }
+      })();
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [profile, hydrated]);
 
   const kpis = useMemo(() => (profile ? computeCompanyKpis(profile) : null), [profile]);
   const chartSlices = useMemo(() => (profile ? revenueChartSlices(profile) : []), [profile]);
@@ -102,7 +177,7 @@ export function CompanyDashboardClient() {
   }
 
   function resetDefault() {
-    if (!window.confirm("CSV 기준 초기 데이터로 되돌릴까요? (브라우저 저장 내용은 사라집니다)")) return;
+    if (!window.confirm("CSV 기준 초기 데이터로 되돌릴까요? 서버·브라우저 모두 갱신됩니다.")) return;
     const fresh = createDefaultCompanyProfile();
     setProfile(fresh);
     saveCompanyProfile(fresh);
@@ -111,6 +186,13 @@ export function CompanyDashboardClient() {
   if (!profile) {
     return <p className="text-sm text-zinc-500">불러오는 중…</p>;
   }
+
+  const bannerCls =
+    syncStatus === "error"
+      ? "text-red-600 dark:text-red-400"
+      : syncStatus === "synced"
+        ? "text-emerald-600 dark:text-emerald-400"
+        : "text-zinc-500 dark:text-zinc-400";
 
   return (
     <div className="space-y-8 pb-8">
@@ -130,11 +212,7 @@ export function CompanyDashboardClient() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {savedFlash ? (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400">저장됨</span>
-          ) : (
-            <span className="text-xs text-zinc-400">자동 저장 (브라우저)</span>
-          )}
+          <span className={`text-xs ${bannerCls}`}>{syncBanner(syncStatus, syncMessage)}</span>
           <button
             type="button"
             onClick={resetDefault}
