@@ -2,7 +2,7 @@
  * 회사(오키브스) 대시보드 — 편집 가능 표 + localStorage
  */
 
-export type CompanyColumn = { id: string; label: string };
+export type CompanyColumn = { id: string; label: string; widthPx?: number };
 export type CompanyRow = { id: string; cells: Record<string, string> };
 
 export type CompanyTableSection = {
@@ -131,7 +131,13 @@ function normalizeSection(raw: unknown): CompanyTableSection | null {
     if (!c || typeof c !== "object") continue;
     const o = c as Record<string, unknown>;
     if (typeof o.id !== "string") continue;
-    columns.push({ id: o.id, label: typeof o.label === "string" ? o.label : "열" });
+    const widthPx =
+      typeof o.widthPx === "number" && Number.isFinite(o.widthPx) ? Math.round(o.widthPx) : undefined;
+    columns.push({
+      id: o.id,
+      label: typeof o.label === "string" ? o.label : "열",
+      ...(widthPx !== undefined ? { widthPx } : {}),
+    });
   }
   if (columns.length === 0) return null;
   const rows: CompanyRow[] = [];
