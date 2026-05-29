@@ -55,6 +55,201 @@ def _is_missing_column_error(exc: SupabaseRequestError) -> bool:
 
 _EXECUTE_HEADER = "실행일"
 
+_UNCHANGED = object()
+_EXECUTE_MEMO_PREFIX = "[execute_date:"
+
+
+def _error_msg_mentions_column(msg: str, col: str) -> bool:
+    m = msg.lower()
+    c = col.lower()
+    return c in m or c.replace("_", " ") in m
+
+
+def _split_execute_payload(body: dict[str, Any]) -> tuple[dict[str, Any], bool, dict[str, Any], dict[str, Any]]:
+    """Split non-execute body from execute columns + extra execute header."""
+    remaining = dict(body)
+    execute_cols: dict[str, Any] = {}
+    for col in ("execute_date", "execute_date_raw"):
+        if col in remaining:
+            execute_cols[col] = remaining.pop(col)
+
+    extra_all = remaining.pop("extra", None)
+    extra_other: dict[str, Any] = dict(extra_all) if isinstance(extra_all, dict) else {}
+    execute_touched = bool(execute_cols)
+    if _EXECUTE_HEADER in extra_other:
+        execute_touched = True
+        extra_other = {k: v for k, v in extra_other.items() if k != _EXECUTE_HEADER}
+
+    return remaining, execute_touched, execute_cols, extra_other
+
+
+def _execute_display_value(execute_cols: dict[str, Any]) -> str:
+    for col in ("execute_date", "execute_date_raw"):
+        val = execute_cols.get(col)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    return ""
+
+
+def _attach_execute_to_payload(
+    payload: dict[str, Any],
+    execute_cols: dict[str, Any],
+    extra_other: dict[str, Any],
+    *,
+    use_columns: bool,
+    use_extra: bool,
+) -> dict[str, Any]:
+    out = dict(payload)
+    if use_columns:
+        for col in ("execute_date", "execute_date_raw"):
+            if col in execute_cols:
+                out[col] = execute_cols[col]
+    if use_extra:
+        extra = dict(extra_other)
+        display = _execute_display_value(execute_cols)
+        if display:
+            extra[_EXECUTE_HEADER] = display
+        else:
+            extra.pop(_EXECUTE_HEADER, None)
+        if extra or execute_cols:
+            out["extra"] = extra
+    elif extra_other and "extra" not in out:
+        out["extra"] = dict(extra_other)
+    return out
+
+
+def _attach_execute_memo_fallback(
+    payload: dict[str, Any],
+    execute_cols: dict[str, Any],
+) -> dict[str, Any]:
+    out = dict(payload)
+    display = _execute_display_value(execute_cols)
+    memo = "" if out.get("memo") is None else str(out.get("memo"))
+    if display:
+        line = f"{_EXECUTE_MEMO_PREFIX}{display}]"
+        if _EXECUTE_MEMO_PREFIX not in memo:
+            memo = f"{memo.rstrip()}\n{line}".strip() if memo.strip() else line
+    out["memo"] = memo or None
+    return out
+
+
+def _raise_execute_persist_error(last_exc: SupabaseRequestError | None) -> None:
+    detail = (
+        "실행일(execute_date)을 저장할 수 없습니다. "
+        "Supabase public.tasks에 execute_date/execute_date_raw 또는 extra 컬럼이 필요합니다. "
+        "supabase/migrations/008_tasks_execute_date.sql 및 "
+        "010_tasks_extra_execute.sql 을 적용한 뒤 PostgREST 스키마 캐시를 갱신하세요."
+    )
+    if last_exc:
+        raise SupabaseRequestError(f"{detail} ({last_exc})") from last_exc
+    raise SheetsParseError(detail)
+
+
+def _persist_task_row(
+    cli: SupabaseRestClient,
+    body: dict[str, Any],
+    *,
+    row_id: object | None = None,
+    is_create: bool = False,
+    allow_memo_fallback: bool = False,
+) -> None:
+    base, execute_touched, execute_cols, extra_other = _split_execute_payload(body)
+    execute_saved = not execute_touched
+    missing_exec_cols = False
+    missing_extra_col = False
+    memo_fallback_used = False
+    remaining = dict(base)
+    last_exc: SupabaseRequestError | None = None
+
+    for _ in range(max(1, len(body) + 8)):
+        payload = dict(remaining)
+        if execute_touched and not execute_saved:
+            use_columns = not missing_exec_cols
+            use_extra = missing_exec_cols and not missing_extra_col
+            if use_columns or use_extra:
+                payload = _attach_execute_to_payload(
+                    payload,
+                    execute_cols,
+                    extra_other,
+                    use_columns=use_columns,
+                    use_extra=use_extra,
+                )
+            elif allow_memo_fallback and not memo_fallback_used and "memo" not in remaining:
+                payload = _attach_execute_memo_fallback(payload, execute_cols)
+                memo_fallback_used = True
+            else:
+                _raise_execute_persist_error(last_exc)
+
+        if not payload:
+            if execute_touched and not execute_saved:
+                _raise_execute_persist_error(last_exc)
+            return
+
+        try:
+            if is_create:
+                cli.post_json("/tasks", [payload], prefer="return=minimal")
+            else:
+                assert row_id is not None
+                cli.patch_json("/tasks", params={"id": f"eq.{row_id}"}, body=payload)
+            if execute_touched:
+                execute_saved = True
+            return
+        except SupabaseRequestError as exc:
+            if not _is_missing_column_error(exc):
+                raise
+            last_exc = exc
+            msg = str(exc).lower()
+            removed = False
+
+            if not missing_exec_cols and (
+                _error_msg_mentions_column(msg, "execute_date")
+                or _error_msg_mentions_column(msg, "execute_date_raw")
+            ):
+                missing_exec_cols = True
+                removed = True
+
+            if not removed and not missing_extra_col and _error_msg_mentions_column(msg, "extra"):
+                missing_extra_col = True
+                if "extra" in remaining:
+                    extra_block = remaining.pop("extra")
+                    if isinstance(extra_block, dict):
+                        for k, v in extra_block.items():
+                            if k == _EXECUTE_HEADER:
+                                continue
+                            extra_other[k] = v
+                removed = True
+
+            if not removed:
+                for col in list(remaining.keys()):
+                    if _error_msg_mentions_column(msg, col):
+                        val = remaining.pop(col)
+                        if col == "extra":
+                            if isinstance(val, dict):
+                                for k, v in val.items():
+                                    if k != _EXECUTE_HEADER:
+                                        extra_other[k] = v
+                        elif col not in ("execute_date", "execute_date_raw"):
+                            extra_other[
+                                next(
+                                    (kr for kr, dbk in _KOREAN_TO_DB.items() if dbk == col),
+                                    col,
+                                )
+                            ] = val
+                        removed = True
+                        break
+
+            if not removed:
+                if execute_touched and not execute_saved:
+                    _raise_execute_persist_error(exc)
+                raise
+
+    if execute_touched and not execute_saved:
+        _raise_execute_persist_error(last_exc)
+    if last_exc:
+        raise last_exc
+
+
+
 
 def _row_extra(row: dict[str, Any]) -> dict[str, Any]:
     ex = row.get("extra")
@@ -449,92 +644,11 @@ def list_tasks_limited(settings: Settings, *, limit: int | None = None) -> list[
 
 
 def _patch_task_row(cli: SupabaseRestClient, row_id: object, patch: dict[str, Any]) -> None:
-    remaining = dict(patch)
-    last_exc: SupabaseRequestError | None = None
-    for _ in range(max(1, len(remaining) + 4)):
-        if not remaining:
-            return
-        try:
-            cli.patch_json("/tasks", params={"id": f"eq.{row_id}"}, body=remaining)
-            return
-        except SupabaseRequestError as exc:
-            if not _is_missing_column_error(exc):
-                raise
-            last_exc = exc
-            msg = str(exc).lower()
-            removed = False
-            for col in ("execute_date", "execute_date_raw"):
-                if col in remaining:
-                    val = remaining.pop(col)
-                    extra = remaining.get("extra")
-                    if not isinstance(extra, dict):
-                        extra = {}
-                    if val is not None and str(val).strip():
-                        extra[_EXECUTE_HEADER] = str(val).strip()
-                    remaining["extra"] = extra
-                    removed = True
-                    break
-            if not removed and "extra" in remaining and "extra" in msg:
-                remaining.pop("extra")
-                removed = True
-            if not removed:
-                for col in list(remaining.keys()):
-                    if col.replace("_", " ") in msg or col in msg:
-                        if col == "extra":
-                            remaining.pop(col)
-                        else:
-                            val = remaining.pop(col)
-                            extra = remaining.get("extra")
-                            if not isinstance(extra, dict):
-                                extra = {}
-                            hdr = next(
-                                (kr for kr, dbk in _KOREAN_TO_DB.items() if dbk == col),
-                                col,
-                            )
-                            if val is not None and str(val).strip():
-                                extra[hdr] = str(val).strip()
-                            remaining["extra"] = extra
-                        removed = True
-                        break
-            if not removed:
-                raise
-    if last_exc:
-        raise last_exc
+    _persist_task_row(cli, patch, row_id=row_id, is_create=False)
 
 
 def _post_task_row(cli: SupabaseRestClient, insert: dict[str, Any]) -> None:
-    remaining = dict(insert)
-    last_exc: SupabaseRequestError | None = None
-    for _ in range(max(1, len(remaining) + 4)):
-        if not remaining:
-            raise SheetsParseError("Supabase tasks.create 응답 없음")
-        try:
-            cli.post_json("/tasks", [remaining], prefer="return=minimal")
-            return
-        except SupabaseRequestError as exc:
-            if not _is_missing_column_error(exc):
-                raise
-            last_exc = exc
-            msg = str(exc).lower()
-            removed = False
-            for col in ("execute_date", "execute_date_raw"):
-                if col in remaining:
-                    val = remaining.pop(col)
-                    extra = remaining.get("extra")
-                    if not isinstance(extra, dict):
-                        extra = {}
-                    if val is not None and str(val).strip():
-                        extra[_EXECUTE_HEADER] = str(val).strip()
-                    remaining["extra"] = extra
-                    removed = True
-                    break
-            if not removed and "extra" in remaining and "extra" in msg:
-                remaining.pop("extra")
-                removed = True
-            if not removed:
-                raise
-    if last_exc:
-        raise last_exc
+    _persist_task_row(cli, insert, is_create=True)
 
 
 def create_task(settings: Settings, fields: dict[str, Any]) -> dict[str, Any]:
@@ -680,6 +794,9 @@ def _patch_body_from_fields(
         raw = fields["담당자"]
         s = "" if raw is None else str(raw).strip()
         patch["fatigue"] = s or None
+
+    if extra:
+        patch["extra"] = extra
 
     return patch
 
