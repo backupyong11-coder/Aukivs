@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { WeeklyAgendaPersonGrid } from "@/components/WeeklyAgendaPersonGrid";
-import { fetchTasks, type TaskSheetRow } from "@/lib/tasks";
+import { fetchTasks, updateTaskFields, type TaskSheetRow } from "@/lib/tasks";
 import {
   addRangeTab,
   loadWeeklyAgendaRangesWorkbook,
@@ -26,10 +26,14 @@ type LoadState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: TaskSheetRow[] };
 
+const agendaCellInputCls =
+  "w-full min-w-0 border-0 bg-transparent px-0 py-0 text-sm text-zinc-900 shadow-none outline-none ring-0 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400/60 focus:ring-offset-0 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+
 export function WeeklyAgendaTasksClient() {
   const [wb, setWb] = useState<WeeklyAgendaRangeWorkbook>(() => loadWeeklyAgendaRangesWorkbook());
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [patchError, setPatchError] = useState<string | null>(null);
 
   useEffect(() => {
     saveWeeklyAgendaRangesWorkbook(wb);
@@ -95,6 +99,36 @@ export function WeeklyAgendaTasksClient() {
     "border border-zinc-400 bg-zinc-200 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50";
   const tdCls =
     "align-top border border-zinc-400 bg-white px-2 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100";
+
+  const patchTaskField = useCallback(
+    async (taskId: string, field: "마감일" | "실행일", nextValue: string) => {
+      if (load.kind !== "ready") return;
+      const item = load.items.find((it) => it.id === taskId);
+      if (!item) return;
+      const prev = item[field] ?? "";
+      if (prev === nextValue) return;
+      setPatchError(null);
+      setLoad((s) => {
+        if (s.kind !== "ready") return s;
+        return {
+          kind: "ready",
+          items: s.items.map((it) => (it.id === taskId ? { ...it, [field]: nextValue } : it)),
+        };
+      });
+      const r = await updateTaskFields(taskId, { [field]: nextValue });
+      if (!r.ok) {
+        setLoad((s) => {
+          if (s.kind !== "ready") return s;
+          return {
+            kind: "ready",
+            items: s.items.map((it) => (it.id === taskId ? { ...it, [field]: prev } : it)),
+          };
+        });
+        setPatchError(r.message);
+      }
+    },
+    [load],
+  );
 
   return (
     <div className="space-y-4 pb-16">
@@ -164,25 +198,30 @@ export function WeeklyAgendaTasksClient() {
 
       {load.kind === "loading" ? <p className="text-sm text-zinc-500">불러오는 중…</p> : null}
       {load.kind === "error" ? <p className="text-sm text-red-600 dark:text-red-400">{load.message}</p> : null}
+      {patchError ? <p className="text-sm text-red-600 dark:text-red-400">{patchError}</p> : null}
 
       {load.kind === "ready" ? (
         <div className="space-y-8">
           <section className="space-y-2">
             <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">일반 업무표</p>
             <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
-              <table className="w-full min-w-[920px] border-collapse text-sm">
+              <table className="w-full min-w-[1020px] border-collapse text-sm">
                 <colgroup>
                   <col className="w-[10rem]" />
                   <col className="w-[9rem]" />
                   <col />
-                  <col />
                   <col className="w-[8rem]" />
+                  <col className="w-[8rem]" />
+                  <col className="w-[8rem]" />
+                  <col className="w-[5rem]" />
                 </colgroup>
                 <thead>
                   <tr>
                     <th className={thCls}>대분류</th>
                     <th className={thCls}>소분류</th>
                     <th className={thCls}>세부 내용</th>
+                    <th className={thCls}>마감일</th>
+                    <th className={thCls}>실행일</th>
                     <th className={thCls}>체크 사항</th>
                     <th className={thCls}>작업</th>
                   </tr>
@@ -191,7 +230,7 @@ export function WeeklyAgendaTasksClient() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={7}
                         className="border border-zinc-400 px-3 py-8 text-center text-zinc-500 dark:border-zinc-600"
                       >
                         선택한 기간({active?.from} ~ {active?.to})에 해당하는 실행일 업무가 없습니다.
@@ -201,15 +240,30 @@ export function WeeklyAgendaTasksClient() {
                     filtered.map((t, idx) => (
                       <tr key={`${t.id ?? idx}-${idx}`}>
                         <td className={`${tdCls} bg-zinc-50 dark:bg-zinc-900/50`}>{taskAgendaMajor(t)}</td>
-                        <td className={tdCls}>
-                          <div className="space-y-0.5">
-                            <p className="font-medium">{taskAgendaMinor(t) || "—"}</p>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              실행일 {(t["실행일"] ?? "").trim() || "—"} · 마감일 {(t["마감일"] ?? "").trim() || "—"}
-                            </p>
-                          </div>
-                        </td>
+                        <td className={tdCls}>{taskAgendaMinor(t) || "—"}</td>
                         <td className={tdCls}>{taskAgendaDetails(t) || "—"}</td>
+                        <td className={tdCls}>
+                          <input
+                            type="text"
+                            spellCheck={false}
+                            defaultValue={(t["마감일"] ?? "").trim()}
+                            key={`${t.id}-due-${t["마감일"]}`}
+                            onBlur={(e) => void patchTaskField(t.id, "마감일", e.target.value.trim())}
+                            className={agendaCellInputCls}
+                            placeholder="—"
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            type="text"
+                            spellCheck={false}
+                            defaultValue={(t["실행일"] ?? "").trim()}
+                            key={`${t.id}-exec-${t["실행일"]}`}
+                            onBlur={(e) => void patchTaskField(t.id, "실행일", e.target.value.trim())}
+                            className={agendaCellInputCls}
+                            placeholder="—"
+                          />
+                        </td>
                         <td className={tdCls}>—</td>
                         <td className={tdCls}>
                           <Link href="/tasks" className="text-xs text-zinc-700 underline dark:text-zinc-200">

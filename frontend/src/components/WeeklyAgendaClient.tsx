@@ -599,6 +599,12 @@ export function WeeklyAgendaClient() {
                 <th className="border border-zinc-400 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                   세부 내용
                 </th>
+                <th className="w-28 border border-zinc-400 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
+                  마감일
+                </th>
+                <th className="w-28 border border-zinc-400 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
+                  실행일
+                </th>
                 <th className="border border-zinc-400 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50">
                   체크 사항
                 </th>
@@ -619,7 +625,7 @@ export function WeeklyAgendaClient() {
                         {major.name}
                       </td>
                       <td
-                        colSpan={3}
+                        colSpan={5}
                         className="border border-zinc-400 px-3 py-4 text-center text-zinc-500 dark:border-zinc-600 dark:text-zinc-400"
                       >
                         행이 없습니다. 위 「{major.name} +」로 추가하세요.
@@ -682,6 +688,26 @@ export function WeeklyAgendaClient() {
                         onChange={(e) => patchRow(row.id, { details: e.target.value })}
                         className={cellInputCls}
                         placeholder="세부 내용"
+                      />
+                    </td>
+                    <td className="border border-zinc-400 p-1 dark:border-zinc-600">
+                      <input
+                        type="text"
+                        spellCheck={false}
+                        value={row.dueDate}
+                        onChange={(e) => patchRow(row.id, { dueDate: e.target.value })}
+                        className={cellInputCls}
+                        placeholder="마감일"
+                      />
+                    </td>
+                    <td className="border border-zinc-400 p-1 dark:border-zinc-600">
+                      <input
+                        type="text"
+                        spellCheck={false}
+                        value={row.executeDate}
+                        onChange={(e) => patchRow(row.id, { executeDate: e.target.value })}
+                        className={cellInputCls}
+                        placeholder="실행일"
                       />
                     </td>
                     <td className="border border-zinc-400 p-1 dark:border-zinc-600">

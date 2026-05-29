@@ -23,6 +23,10 @@ export type AgendaRow = {
   majorId: string;
   minor: string;
   details: string;
+  /** 마감일 (자유 형식 텍스트) */
+  dueDate: string;
+  /** 실행일 (자유 형식 텍스트) */
+  executeDate: string;
   checklist: string;
   /** 체크 사항 열을 강조(빨간색) — 스크린샷의 긴급 표기용 */
   urgent: boolean;
@@ -100,6 +104,11 @@ export function createPersonRow(order: number): PersonGridRow {
 }
 
 export function ensurePersonGrid(state: WeeklyAgendaState): WeeklyAgendaState {
+  const normalizedRows = (state.rows ?? []).map((r) => ({
+    ...r,
+    dueDate: typeof r.dueDate === "string" ? r.dueDate : "",
+    executeDate: typeof r.executeDate === "string" ? r.executeDate : "",
+  }));
   const pg = state.personGrid;
   if (pg && Array.isArray(pg.rows) && typeof pg.title === "string") {
     const rows = pg.rows.map((r, i) => {
@@ -113,9 +122,9 @@ export function ensurePersonGrid(state: WeeklyAgendaState): WeeklyAgendaState {
         cells,
       };
     });
-    return { ...state, personGrid: { title: pg.title, rows } };
+    return { ...state, personGrid: { title: pg.title, rows }, rows: normalizedRows };
   }
-  return { ...state, personGrid: createDefaultPersonGrid() };
+  return { ...state, personGrid: createDefaultPersonGrid(), rows: normalizedRows };
 }
 
 export function createDefaultState(): WeeklyAgendaState {
@@ -281,6 +290,8 @@ export function createRow(majorId: string): AgendaRow {
     majorId,
     minor: "",
     details: "",
+    dueDate: "",
+    executeDate: "",
     checklist: "",
     urgent: false,
   };

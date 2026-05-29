@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoPersonGridFromTasks,
   buildWeekColumnDefs,
+  compareWeeklyAgendaPersonName,
   taskAgendaDetails,
   taskAgendaMajor,
   taskAgendaMinor,
@@ -51,6 +52,14 @@ describe("buildAutoPersonGridFromTasks", () => {
     const row = grid.rows.find((r) => r.name === "김영화");
     expect(row?.cells.wed).toContain("[업로드]");
     expect(row?.cells.wed).toContain("코스프레 유부녀 미툰");
+  });
+});
+
+describe("compareWeeklyAgendaPersonName", () => {
+  it("orders 김영화 → 황승현 → 문자빈", () => {
+    expect(compareWeeklyAgendaPersonName("김영화", "황승현")).toBeLessThan(0);
+    expect(compareWeeklyAgendaPersonName("황승현", "문자빈")).toBeLessThan(0);
+    expect(compareWeeklyAgendaPersonName("김영화", "문자빈")).toBeLessThan(0);
   });
 });
 

@@ -16,7 +16,18 @@ import {
   type WeekdayKey,
 } from "@/lib/weeklyAgendaStorage";
 
-export const WEEKLY_AGENDA_MANAGER_PINNED = ["문자빈", "황승현", "김영화"] as const;
+export const WEEKLY_AGENDA_MANAGER_PINNED = ["김영화", "황승현", "문자빈"] as const;
+
+export function compareWeeklyAgendaPersonName(a: string, b: string): number {
+  if (a === "(담당자 없음)") return 1;
+  if (b === "(담당자 없음)") return -1;
+  const ia = WEEKLY_AGENDA_MANAGER_PINNED.indexOf(a as (typeof WEEKLY_AGENDA_MANAGER_PINNED)[number]);
+  const ib = WEEKLY_AGENDA_MANAGER_PINNED.indexOf(b as (typeof WEEKLY_AGENDA_MANAGER_PINNED)[number]);
+  if (ia >= 0 && ib >= 0) return ia - ib;
+  if (ia >= 0) return -1;
+  if (ib >= 0) return 1;
+  return a.localeCompare(b, "ko");
+}
 
 export type WeekColumnDef = {
   key: WeekdayKey;
@@ -237,8 +248,11 @@ export function buildAutoPersonGridFromTasks(
     });
   }
 
+  rows.sort((a, b) => compareWeeklyAgendaPersonName(a.name, b.name));
+  const sortedRows = rows.map((r, order) => ({ ...r, order }));
+
   return {
-    grid: { title: "인물별 주간", rows },
+    grid: { title: "인물별 주간", rows: sortedRows },
     weekColumns,
     matchedCount,
   };

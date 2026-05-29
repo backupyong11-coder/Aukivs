@@ -42,6 +42,37 @@ export async function createTask(
   }
 }
 
+export async function updateTaskFields(
+  id: string,
+  fields: Partial<TaskSheetRow>,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const base = getApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/tasks/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id, ...fields }),
+    });
+    const rawText = await res.text();
+    if (!res.ok) {
+      let message = rawText;
+      try {
+        const j = JSON.parse(rawText) as { detail?: string };
+        if (j.detail) message = j.detail;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, message: message || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (e: unknown) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "요청 중 오류가 발생했습니다.",
+    };
+  }
+}
+
 export async function fetchTasks(): Promise<
   { ok: true; items: TaskSheetRow[] } | { ok: false; message: string }
 > {

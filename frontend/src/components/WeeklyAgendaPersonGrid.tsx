@@ -25,7 +25,10 @@ const nameInputCls =
   "w-full min-h-[2rem] border-0 bg-transparent px-0 py-0.5 text-sm font-semibold text-zinc-900 shadow-none outline-none ring-0 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400/60 focus:ring-offset-0 dark:text-zinc-100 dark:placeholder:text-zinc-400";
 
 const thCls =
-  "min-w-[6.5rem] border border-zinc-400 px-2 py-2 text-center font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50";
+  "border border-zinc-400 px-2 py-2 text-center font-bold text-zinc-900 dark:border-zinc-600 dark:text-zinc-50";
+
+const weekdayCellInnerCls =
+  "min-h-[4rem] max-w-full break-words whitespace-pre-wrap px-1 py-1 text-sm text-zinc-900 dark:text-zinc-100";
 
 type Props = {
   grid: PersonGridState;
@@ -39,6 +42,9 @@ type Props = {
 function sortedRows(grid: PersonGridState) {
   return [...grid.rows].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko"));
 }
+
+/** 월~금 열 균일 너비 */
+const WEEKDAY_COL_WIDTH = "11rem";
 
 function weekdayTdCls(): string {
   return "align-top border border-zinc-400 bg-white p-1 dark:border-zinc-600 dark:bg-zinc-950";
@@ -131,13 +137,13 @@ export function WeeklyAgendaPersonGrid({ grid, onChange, readOnly = false, weekC
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
-        <table className="w-full min-w-[640px] border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: "52rem" }}>
           <colgroup>
-            <col className="w-[7.5rem]" />
+            <col style={{ width: "7.5rem" }} />
             {WEEKDAY_KEYS.map((k) => (
-              <col key={k} />
+              <col key={k} style={{ width: WEEKDAY_COL_WIDTH }} />
             ))}
-            {!readOnly ? <col className="w-24" /> : null}
+            {!readOnly ? <col style={{ width: "6rem" }} /> : null}
           </colgroup>
           <thead>
             <tr className="bg-zinc-200 dark:bg-zinc-800">
@@ -188,7 +194,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange, readOnly = false, weekC
                       className={`${weekdayTdCls()} ${!columnInRange(day, weekColumns) ? "bg-zinc-50 dark:bg-zinc-900/40" : ""}`}
                     >
                       {readOnly ? (
-                        <div className="min-h-[4rem] whitespace-pre-wrap px-1 py-1 text-sm text-zinc-900 dark:text-zinc-100">
+                        <div className={weekdayCellInnerCls}>
                           {(row.cells[day] ?? "").trim() || (
                             <span className="text-zinc-400 dark:text-zinc-500">—</span>
                           )}
@@ -198,7 +204,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange, readOnly = false, weekC
                           spellCheck={false}
                           value={row.cells[day] ?? ""}
                           onChange={(e) => patchCell(row.id, day, e.target.value)}
-                          className={cellTextareaCls}
+                          className={`${cellTextareaCls} max-w-full`}
                           placeholder={`${headerLabel(day, weekColumns)} 일정`}
                           rows={3}
                         />
