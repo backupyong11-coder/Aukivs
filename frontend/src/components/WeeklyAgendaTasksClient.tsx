@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { WeeklyAgendaPersonGrid } from "@/components/WeeklyAgendaPersonGrid";
 import { fetchTasks, type TaskSheetRow } from "@/lib/tasks";
 import {
   addRangeTab,
@@ -10,35 +11,20 @@ import {
   saveWeeklyAgendaRangesWorkbook,
   type WeeklyAgendaRangeWorkbook,
 } from "@/lib/weeklyAgendaRangeStorage";
+import {
+  buildAutoPersonGridFromTasks,
+  buildWeekColumnDefs,
+  collectWeeklyAgendaPersonNames,
+  filterTasksByExecuteRange,
+  taskAgendaDetails,
+  taskAgendaMajor,
+  taskAgendaMinor,
+} from "@/lib/weeklyAgendaTasksPersonGrid";
 
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: TaskSheetRow[] };
-
-function ymdInRange(ymd: string, from: string, to: string): boolean {
-  const a = (from || "").trim();
-  const b = (to || "").trim();
-  const x = (ymd || "").trim();
-  if (!x) return false;
-  if (a && x < a) return false;
-  if (b && x > b) return false;
-  return true;
-}
-
-function groupByCategory(items: TaskSheetRow[]): Map<string, TaskSheetRow[]> {
-  const m = new Map<string, TaskSheetRow[]>();
-  for (const it of items) {
-    const cat = (it["분류"] ?? "").trim() || "미분류";
-    const list = m.get(cat) ?? [];
-    list.push(it);
-    m.set(cat, list);
-  }
-  for (const [, list] of m) {
-    list.sort((a, b) => (a["실행일"] ?? "").localeCompare(b["실행일"] ?? "") || (a["업무명"] ?? "").localeCompare(b["업무명"] ?? "", "ko"));
-  }
-  return new Map([...m.entries()].sort(([a], [b]) => a.localeCompare(b, "ko")));
-}
 
 export function WeeklyAgendaTasksClient() {
   const [wb, setWb] = useState<WeeklyAgendaRangeWorkbook>(() => loadWeeklyAgendaRangesWorkbook());
@@ -66,15 +52,44 @@ export function WeeklyAgendaTasksClient() {
     };
   }, [refreshKey]);
 
-  const tabs = useMemo(() => [...wb.tabs].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "ko")), [wb.tabs]);
-  const active = useMemo(() => wb.tabs.find((t) => t.id === wb.activeId) ?? tabs[0] ?? null, [tabs, wb.activeId, wb.tabs]);
+  const tabs = useMemo(
+    () => [...wb.tabs].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "ko")),
+    [wb.tabs],
+  );
+  const active = useMemo(
+    () => wb.tabs.find((t) => t.id === wb.activeId) ?? tabs[0] ?? null,
+    [tabs, wb.activeId, wb.tabs],
+  );
+
+  const autoGrid = useMemo(() => {
+    if (load.kind !== "ready" || !active) {
+      return {
+        grid: { title: "인물별 주간", rows: [] },
+        weekColumns: buildWeekColumnDefs(active?.from ?? "", active?.to ?? ""),
+        matchedCount: 0,
+      };
+    }
+    const personNames = collectWeeklyAgendaPersonNames(load.items, "manager");
+    return buildAutoPersonGridFromTasks(load.items, active.from, active.to, personNames, "manager");
+  }, [load, active]);
 
   const filtered = useMemo(() => {
     if (load.kind !== "ready" || !active) return [];
-    return load.items.filter((t) => ymdInRange((t["실행일"] ?? "").trim(), active.from, active.to));
+    return filterTasksByExecuteRange(load.items, active.from, active.to).sort(
+      (a, b) =>
+        (a["실행일"] ?? "").localeCompare(b["실행일"] ?? "") ||
+        taskAgendaMajor(a).localeCompare(taskAgendaMajor(b), "ko") ||
+        taskAgendaDetails(a).localeCompare(taskAgendaDetails(b), "ko"),
+    );
   }, [load, active]);
 
-  const grouped = useMemo(() => groupByCategory(filtered), [filtered]);
+  const periodLabel = useMemo(() => {
+    const cols = autoGrid.weekColumns.filter((c) => c.inRange);
+    if (cols.length === 0) return "";
+    const first = cols[0]?.label ?? "";
+    const last = cols[cols.length - 1]?.label ?? "";
+    return `${first} ~ ${last}`;
+  }, [autoGrid.weekColumns]);
 
   const thCls =
     "border border-zinc-400 bg-zinc-200 px-2 py-2 text-left font-bold text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50";
@@ -87,19 +102,23 @@ export function WeeklyAgendaTasksClient() {
         <div>
           <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">주간 아젠다</p>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            업무정리 DB의 <strong className="font-medium text-zinc-700 dark:text-zinc-300">실행일</strong>이 선택한 기간에 포함되는 업무만 표시합니다.
+            업무정리 DB의 <strong className="font-medium text-zinc-700 dark:text-zinc-300">실행일</strong>이 선택한
+            기간에 포함되는 업무를 표시합니다. 소분류=정량화 분, 세부 내용=업무명 · 담당자 기준 월~금 표는 아래에
+            자동 배치됩니다.
           </p>
         </div>
-        <Link href="/tasks" className="text-sm font-medium text-zinc-700 underline dark:text-zinc-300">
-          업무정리 DB →
-        </Link>
-        <button
-          type="button"
-          onClick={() => setRefreshKey((k) => k + 1)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-300"
-        >
-          새로고침
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/tasks" className="text-sm font-medium text-zinc-700 underline dark:text-zinc-300">
+            업무정리 DB →
+          </Link>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-300"
+          >
+            새로고침
+          </button>
+        </div>
       </div>
 
       {active ? (
@@ -134,6 +153,11 @@ export function WeeklyAgendaTasksClient() {
             >
               탭 이름
             </button>
+            {periodLabel ? (
+              <p className="mt-5 text-xs text-zinc-500 dark:text-zinc-400">
+                요일 열: <span className="font-medium text-zinc-700 dark:text-zinc-300">{periodLabel}</span>
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -142,57 +166,77 @@ export function WeeklyAgendaTasksClient() {
       {load.kind === "error" ? <p className="text-sm text-red-600 dark:text-red-400">{load.message}</p> : null}
 
       {load.kind === "ready" ? (
-        <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
-          <table className="w-full min-w-[920px] border-collapse text-sm">
-            <colgroup>
-              <col className="w-[10rem]" />
-              <col className="w-[9rem]" />
-              <col />
-              <col />
-              <col className="w-[8rem]" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th className={thCls}>대분류</th>
-                <th className={thCls}>소분류</th>
-                <th className={thCls}>세부 내용</th>
-                <th className={thCls}>체크 사항</th>
-                <th className={thCls}>작업</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="border border-zinc-400 px-3 py-8 text-center text-zinc-500 dark:border-zinc-600">
-                    선택한 기간({active?.from} ~ {active?.to})에 해당하는 실행일 업무가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                Array.from(grouped.entries()).flatMap(([cat, list]) =>
-                  list.map((t, idx) => (
-                    <tr key={`${cat}-${idx}-${t.id ?? ""}`}>
-                      <td className={`${tdCls} bg-zinc-50 dark:bg-zinc-900/50`}>{cat}</td>
-                      <td className={tdCls}>
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{(t["업무명"] ?? "").trim() || "(제목 없음)"}</p>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            실행일 {(t["실행일"] ?? "").trim() || "—"} · 마감일 {(t["마감일"] ?? "").trim() || "—"}
-                          </p>
-                        </div>
-                      </td>
-                      <td className={tdCls}>{(t["메모"] ?? "").trim() || "—"}</td>
-                      <td className={tdCls}>—</td>
-                      <td className={tdCls}>
-                        <Link href="/tasks" className="text-xs text-zinc-700 underline dark:text-zinc-200">
-                          열기
-                        </Link>
+        <div className="space-y-8">
+          <section className="space-y-2">
+            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">일반 업무표</p>
+            <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
+              <table className="w-full min-w-[920px] border-collapse text-sm">
+                <colgroup>
+                  <col className="w-[10rem]" />
+                  <col className="w-[9rem]" />
+                  <col />
+                  <col />
+                  <col className="w-[8rem]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className={thCls}>대분류</th>
+                    <th className={thCls}>소분류</th>
+                    <th className={thCls}>세부 내용</th>
+                    <th className={thCls}>체크 사항</th>
+                    <th className={thCls}>작업</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="border border-zinc-400 px-3 py-8 text-center text-zinc-500 dark:border-zinc-600"
+                      >
+                        선택한 기간({active?.from} ~ {active?.to})에 해당하는 실행일 업무가 없습니다.
                       </td>
                     </tr>
-                  )),
-                )
-              )}
-            </tbody>
-          </table>
+                  ) : (
+                    filtered.map((t, idx) => (
+                      <tr key={`${t.id ?? idx}-${idx}`}>
+                        <td className={`${tdCls} bg-zinc-50 dark:bg-zinc-900/50`}>{taskAgendaMajor(t)}</td>
+                        <td className={tdCls}>
+                          <div className="space-y-0.5">
+                            <p className="font-medium">{taskAgendaMinor(t) || "—"}</p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                              실행일 {(t["실행일"] ?? "").trim() || "—"} · 마감일 {(t["마감일"] ?? "").trim() || "—"}
+                            </p>
+                          </div>
+                        </td>
+                        <td className={tdCls}>{taskAgendaDetails(t) || "—"}</td>
+                        <td className={tdCls}>—</td>
+                        <td className={tdCls}>
+                          <Link href="/tasks" className="text-xs text-zinc-700 underline dark:text-zinc-200">
+                            열기
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">인물별 주간 표</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {autoGrid.matchedCount > 0
+                ? `기간 내 실행일 업무 ${autoGrid.matchedCount}건을 담당자·요일에 배치했습니다.`
+                : `선택한 기간(${active?.from} ~ ${active?.to})에 해당하는 실행일 업무가 없습니다.`}
+            </p>
+            <WeeklyAgendaPersonGrid
+              grid={autoGrid.grid}
+              readOnly
+              weekColumns={autoGrid.weekColumns}
+            />
+          </section>
         </div>
       ) : null}
 
@@ -227,7 +271,9 @@ export function WeeklyAgendaTasksClient() {
                   setWb((prev) => {
                     const next = {
                       ...prev,
-                      tabs: prev.tabs.map((x) => (x.id === t.id ? { ...x, from: from.trim(), to: to.trim() } : x)),
+                      tabs: prev.tabs.map((x) =>
+                        x.id === t.id ? { ...x, from: from.trim(), to: to.trim() } : x,
+                      ),
                     };
                     saveWeeklyAgendaRangesWorkbook(next);
                     return next;
@@ -256,4 +302,3 @@ export function WeeklyAgendaTasksClient() {
     </div>
   );
 }
-

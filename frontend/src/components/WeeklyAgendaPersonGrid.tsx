@@ -1,5 +1,6 @@
 "use client";
 
+import type { WeekColumnDef } from "@/lib/weeklyAgendaTasksPersonGrid";
 import {
   WEEKDAY_KEYS,
   WEEKDAY_LABELS,
@@ -28,7 +29,11 @@ const thCls =
 
 type Props = {
   grid: PersonGridState;
-  onChange: (fn: (prev: PersonGridState) => PersonGridState) => void;
+  onChange?: (fn: (prev: PersonGridState) => PersonGridState) => void;
+  /** DB 연동 등 읽기 전용 표시 */
+  readOnly?: boolean;
+  /** 기간 탭 기준 동적 요일 헤더 (예: 월 (5.18)) */
+  weekColumns?: WeekColumnDef[];
 };
 
 function sortedRows(grid: PersonGridState) {
@@ -39,10 +44,21 @@ function weekdayTdCls(): string {
   return "align-top border border-zinc-400 bg-white p-1 dark:border-zinc-600 dark:bg-zinc-950";
 }
 
-export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
+function headerLabel(key: WeekdayKey, weekColumns?: WeekColumnDef[]): string {
+  const col = weekColumns?.find((c) => c.key === key);
+  return col?.label ?? WEEKDAY_LABELS[key];
+}
+
+function columnInRange(key: WeekdayKey, weekColumns?: WeekColumnDef[]): boolean {
+  const col = weekColumns?.find((c) => c.key === key);
+  return col ? col.inRange : true;
+}
+
+export function WeeklyAgendaPersonGrid({ grid, onChange, readOnly = false, weekColumns }: Props) {
   const rows = sortedRows(grid);
 
   function addPerson() {
+    if (!onChange) return;
     onChange((g) => {
       const maxOrder = g.rows.reduce((acc, r) => Math.max(acc, r.order), -1);
       return { ...g, rows: [...g.rows, createPersonRow(maxOrder + 1)] };
@@ -50,6 +66,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
   }
 
   function patchRow(id: string, patch: Partial<{ name: string; cells: Record<WeekdayKey, string> }>) {
+    if (!onChange) return;
     onChange((g) => ({
       ...g,
       rows: g.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
@@ -57,6 +74,7 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
   }
 
   function patchCell(rowId: string, day: WeekdayKey, value: string) {
+    if (!onChange) return;
     onChange((g) => ({
       ...g,
       rows: g.rows.map((r) =>
@@ -66,10 +84,12 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
   }
 
   function removeRow(id: string) {
+    if (!onChange) return;
     onChange((g) => ({ ...g, rows: g.rows.filter((r) => r.id !== id) }));
   }
 
   function moveRow(id: string, dir: -1 | 1) {
+    if (!onChange) return;
     onChange((g) => {
       const sorted = sortedRows(g);
       const idx = sorted.findIndex((r) => r.id === id);
@@ -85,23 +105,29 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
   return (
     <section className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex flex-1 items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-          인물별 표 제목
-          <input
-            type="text"
-            spellCheck={false}
-            value={grid.title}
-            onChange={(e) => onChange((g) => ({ ...g, title: e.target.value }))}
-            className={`${inputCls} max-w-md`}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={addPerson}
-          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          + 인물 추가
-        </button>
+        {readOnly ? (
+          <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{grid.title}</p>
+        ) : (
+          <label className="flex flex-1 items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            인물별 표 제목
+            <input
+              type="text"
+              spellCheck={false}
+              value={grid.title}
+              onChange={(e) => onChange?.((g) => ({ ...g, title: e.target.value }))}
+              className={`${inputCls} max-w-md`}
+            />
+          </label>
+        )}
+        {!readOnly ? (
+          <button
+            type="button"
+            onClick={addPerson}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            + 인물 추가
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-300 dark:border-zinc-600">
@@ -111,85 +137,107 @@ export function WeeklyAgendaPersonGrid({ grid, onChange }: Props) {
             {WEEKDAY_KEYS.map((k) => (
               <col key={k} />
             ))}
-            <col className="w-24" />
+            {!readOnly ? <col className="w-24" /> : null}
           </colgroup>
           <thead>
             <tr className="bg-zinc-200 dark:bg-zinc-800">
               <th className={nameHeaderThCls}>인물</th>
               {WEEKDAY_KEYS.map((k) => (
-                <th key={k} className={thCls}>
-                  {WEEKDAY_LABELS[k]}
+                <th
+                  key={k}
+                  className={`${thCls} ${!columnInRange(k, weekColumns) ? "text-zinc-400 dark:text-zinc-500" : ""}`}
+                >
+                  {headerLabel(k, weekColumns)}
                 </th>
               ))}
-              <th className={`${thCls} w-24`}>작업</th>
+              {!readOnly ? <th className={`${thCls} w-24`}>작업</th> : null}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr className="bg-white dark:bg-zinc-950">
                 <td
-                  colSpan={WEEKDAY_KEYS.length + 2}
+                  colSpan={WEEKDAY_KEYS.length + (readOnly ? 1 : 2)}
                   className="border border-zinc-400 px-3 py-6 text-center text-zinc-500 dark:border-zinc-600 dark:text-zinc-400"
                 >
-                  인물이 없습니다. 「+ 인물 추가」로 행을 만드세요.
+                  {readOnly
+                    ? "선택한 기간에 표시할 업무가 없습니다."
+                    : "인물이 없습니다. 「+ 인물 추가」로 행을 만드세요."}
                 </td>
               </tr>
             ) : (
               rows.map((row, idx) => (
                 <tr key={row.id} className="bg-white dark:bg-zinc-950">
                   <td className={nameBodyTdCls}>
-                    <input
-                      type="text"
-                      spellCheck={false}
-                      value={row.name}
-                      onChange={(e) => patchRow(row.id, { name: e.target.value })}
-                      className={nameInputCls}
-                      placeholder="이름"
-                    />
+                    {readOnly ? (
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{row.name}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        spellCheck={false}
+                        value={row.name}
+                        onChange={(e) => patchRow(row.id, { name: e.target.value })}
+                        className={nameInputCls}
+                        placeholder="이름"
+                      />
+                    )}
                   </td>
                   {WEEKDAY_KEYS.map((day) => (
-                    <td key={day} className={weekdayTdCls()}>
-                      <textarea
-                        spellCheck={false}
-                        value={row.cells[day] ?? ""}
-                        onChange={(e) => patchCell(row.id, day, e.target.value)}
-                        className={cellTextareaCls}
-                        placeholder={`${WEEKDAY_LABELS[day]} 일정`}
-                        rows={3}
-                      />
+                    <td
+                      key={day}
+                      className={`${weekdayTdCls()} ${!columnInRange(day, weekColumns) ? "bg-zinc-50 dark:bg-zinc-900/40" : ""}`}
+                    >
+                      {readOnly ? (
+                        <div className="min-h-[4rem] whitespace-pre-wrap px-1 py-1 text-sm text-zinc-900 dark:text-zinc-100">
+                          {(row.cells[day] ?? "").trim() || (
+                            <span className="text-zinc-400 dark:text-zinc-500">—</span>
+                          )}
+                        </div>
+                      ) : (
+                        <textarea
+                          spellCheck={false}
+                          value={row.cells[day] ?? ""}
+                          onChange={(e) => patchCell(row.id, day, e.target.value)}
+                          className={cellTextareaCls}
+                          placeholder={`${headerLabel(day, weekColumns)} 일정`}
+                          rows={3}
+                        />
+                      )}
                     </td>
                   ))}
-                  <td className="border border-zinc-400 p-1 text-center align-middle dark:border-zinc-600">
-                    <div className="flex flex-wrap items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        disabled={idx === 0}
-                        onClick={() => moveRow(row.id, -1)}
-                        className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
-                        title="위로"
-                        aria-label="행 위로"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        disabled={idx === rows.length - 1}
-                        onClick={() => moveRow(row.id, 1)}
-                        className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
-                        title="아래로"
-                        aria-label="행 아래로"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeRow(row.id)}
-                        className="text-xs text-red-600 underline hover:no-underline dark:text-red-400"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </td>
+                  {!readOnly ? (
+                    <td className="border border-zinc-400 p-1 text-center align-middle dark:border-zinc-600">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveRow(row.id, -1)}
+                          className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                          title="위로"
+                          aria-label="행 위로"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === rows.length - 1}
+                          onClick={() => moveRow(row.id, 1)}
+                          className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs disabled:opacity-40 dark:border-zinc-600"
+                          title="아래로"
+                          aria-label="행 아래로"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          className="text-xs text-red-600 underline hover:no-underline dark:text-red-400"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
