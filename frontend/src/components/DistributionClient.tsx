@@ -34,7 +34,7 @@ function syncBanner(status: SyncStatus, message: string | null) {
 function ThinBar({ stats, className = "" }: { stats: ProgressStats; className?: string }) {
   return (
     <div className={`flex min-w-0 items-center gap-2 ${className}`}>
-      <div className="h-1.5 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
         <div
           className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500 transition-all duration-500"
           style={{ width: `${Math.max(stats.total === 0 ? 0 : 4, stats.percent)}%` }}
@@ -51,7 +51,6 @@ function Modal(props: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
-  wide?: boolean;
 }) {
   return (
     <div
@@ -62,9 +61,7 @@ function Modal(props: {
         role="dialog"
         aria-modal
         aria-labelledby="dist-modal-title"
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950 ${
-          props.wide ? "max-w-2xl" : "max-w-lg"
-        }`}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
@@ -140,55 +137,6 @@ function CheckListEditor(props: {
   );
 }
 
-function PlatformInfoModal(props: {
-  platform: DistributionPlatform;
-  onChange: (next: DistributionPlatform) => void;
-  onClose: () => void;
-  onRemove: () => void;
-}) {
-  const { platform } = props;
-  function patch(partial: Partial<DistributionPlatform>) {
-    props.onChange({ ...platform, ...partial });
-  }
-  return (
-    <Modal title={`${platform.platform} — 플랫폼 정보`} onClose={props.onClose} wide>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs sm:col-span-2">
-          <span className="mb-1 block text-zinc-500">플랫폼</span>
-          <input className={inputCls} value={platform.platform} onChange={(e) => patch({ platform: e.target.value })} />
-        </label>
-        <label className="block text-xs">
-          <span className="mb-1 block text-zinc-500">소통 방식</span>
-          <input className={inputCls} value={platform.communication} onChange={(e) => patch({ communication: e.target.value })} />
-        </label>
-        <label className="block text-xs">
-          <span className="mb-1 block text-zinc-500">사이트</span>
-          <input className={inputCls} value={platform.site} onChange={(e) => patch({ site: e.target.value })} />
-        </label>
-        <label className="block text-xs sm:col-span-2">
-          <span className="mb-1 block text-zinc-500">유통 개요</span>
-          <textarea className={inputCls} rows={4} value={platform.overview} onChange={(e) => patch({ overview: e.target.value })} />
-        </label>
-        <label className="block text-xs">
-          <span className="mb-1 block text-zinc-500">아이디</span>
-          <input className={inputCls} value={platform.loginId} onChange={(e) => patch({ loginId: e.target.value })} />
-        </label>
-        <label className="block text-xs">
-          <span className="mb-1 block text-zinc-500">비밀번호</span>
-          <input className={inputCls} value={platform.loginPassword} onChange={(e) => patch({ loginPassword: e.target.value })} />
-        </label>
-        <label className="block text-xs sm:col-span-2">
-          <span className="mb-1 block text-zinc-500">참고</span>
-          <input className={inputCls} value={platform.notes} onChange={(e) => patch({ notes: e.target.value })} />
-        </label>
-      </div>
-      <button type="button" onClick={props.onRemove} className="mt-4 text-xs text-red-600 hover:underline">
-        플랫폼 삭제
-      </button>
-    </Modal>
-  );
-}
-
 function StepDetailModal(props: {
   step: DistributionStep;
   index: number;
@@ -201,7 +149,7 @@ function StepDetailModal(props: {
     props.onChange(syncStepDone({ ...step, ...partial }));
   }
   return (
-    <Modal title={`STEP ${index + 1} — ${step.title}`} onClose={props.onClose} wide>
+    <Modal title={`STEP ${index + 1} — ${step.title}`} onClose={props.onClose}>
       <label className="mb-3 block text-xs">
         <span className="mb-1 block text-zinc-500">단계 제목</span>
         <input className={inputCls} value={step.title} onChange={(e) => patch({ title: e.target.value })} />
@@ -233,7 +181,7 @@ function StepDetailModal(props: {
 
 function StepConnector({ filled }: { filled: boolean }) {
   return (
-    <div className="flex w-8 shrink-0 items-center self-center px-0.5" aria-hidden>
+    <div className="flex w-6 shrink-0 items-center self-center sm:w-10" aria-hidden>
       <div className={`h-1 flex-1 rounded-full ${filled ? "bg-emerald-400" : "bg-zinc-200 dark:bg-zinc-700"}`} />
       <span className={`mx-0.5 text-[10px] ${filled ? "text-emerald-500" : "text-zinc-300"}`}>▶</span>
     </div>
@@ -250,81 +198,12 @@ function allStepItems(step: DistributionStep): { item: DistributionCheckItem; ki
 function StepFlowCard(props: {
   step: DistributionStep;
   index: number;
-  selected: boolean;
   isCurrent: boolean;
-  onSelect: () => void;
-  onOpenDetail: () => void;
-}) {
-  const { step, index, selected, isCurrent } = props;
-  const stats = stepProgress(step);
-  const preview = allStepItems(step)
-    .filter(({ item }) => !item.done)
-    .slice(0, 3);
-
-  return (
-    <button
-      type="button"
-      onClick={props.onSelect}
-      className={`flex w-[11.5rem] shrink-0 flex-col rounded-xl border text-left shadow-sm transition-all ${
-        step.done
-          ? "border-emerald-300 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/30"
-          : selected
-            ? "border-teal-500 bg-teal-50 ring-2 ring-teal-400/40 dark:border-teal-600 dark:bg-teal-950/40"
-            : isCurrent
-              ? "border-teal-300 bg-white dark:border-teal-800 dark:bg-zinc-950"
-              : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
-      }`}
-    >
-      <div className="flex items-center gap-1.5 border-b border-zinc-100 px-2.5 py-2 dark:border-zinc-800">
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-            step.done ? "bg-emerald-500 text-white" : isCurrent ? "bg-teal-500 text-white" : "bg-zinc-200 dark:bg-zinc-700"
-          }`}
-        >
-          {index + 1}
-        </span>
-        <span className="line-clamp-2 flex-1 text-xs font-bold leading-tight text-zinc-900 dark:text-zinc-50">
-          {step.title}
-        </span>
-        <span className="text-[10px] tabular-nums text-zinc-400">{stats.percent}%</span>
-      </div>
-      <div className="space-y-1 px-2.5 py-2">
-        {preview.length === 0 ? (
-          <p className="text-[10px] text-emerald-600 dark:text-emerald-400">완료</p>
-        ) : (
-          preview.map(({ item, kind }) => (
-            <p key={item.id} className="flex items-start gap-1 text-[10px] leading-snug text-zinc-600 dark:text-zinc-300">
-              <span className={`mt-0.5 shrink-0 ${kind === "prep" ? "text-amber-500" : "text-teal-500"}`}>●</span>
-              <span className="line-clamp-2">{item.label}</span>
-            </p>
-          ))
-        )}
-        {allStepItems(step).filter(({ item }) => !item.done).length > 3 ? (
-          <p className="text-[10px] text-zinc-400">+ 더 있음</p>
-        ) : null}
-      </div>
-      <div className="mt-auto border-t border-zinc-100 px-2.5 py-1.5 dark:border-zinc-800">
-        <span
-          role="presentation"
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onOpenDetail();
-          }}
-          className="text-[10px] font-medium text-teal-600 hover:underline dark:text-teal-400"
-        >
-          상세·편집
-        </span>
-      </div>
-    </button>
-  );
-}
-
-function StepQuickPanel(props: {
-  step: DistributionStep;
   onChange: (next: DistributionStep) => void;
   onOpenDetail: () => void;
 }) {
-  const { step } = props;
+  const { step, index, isCurrent } = props;
+  const stats = stepProgress(step);
   const items = allStepItems(step);
 
   function toggle(id: string, kind: "prep" | "action", done: boolean) {
@@ -346,44 +225,139 @@ function StepQuickPanel(props: {
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{step.title}</p>
+    <article
+      className={`flex min-w-0 flex-1 flex-col rounded-xl border shadow-sm transition-all ${
+        step.done
+          ? "border-emerald-300 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/30"
+          : isCurrent
+            ? "border-teal-500 bg-teal-50/60 ring-2 ring-teal-400/30 dark:border-teal-600 dark:bg-teal-950/30"
+            : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+      }`}
+    >
+      <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+            step.done ? "bg-emerald-500 text-white" : isCurrent ? "bg-teal-500 text-white" : "bg-zinc-200 dark:bg-zinc-700"
+          }`}
+        >
+          {index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-50">{step.title}</p>
+          {step.summary ? (
+            <p className="truncate text-[11px] text-zinc-500">{step.summary}</p>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-zinc-400">{stats.percent}%</span>
+      </div>
+
+      <ul className="flex-1 space-y-1.5 px-3 py-2.5">
+        {items.length === 0 ? (
+          <li className="text-xs text-zinc-400">항목 없음</li>
+        ) : (
+          items.map(({ item, kind }) => (
+            <li key={item.id} className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={item.done === true}
+                onChange={(e) => toggle(item.id, kind, e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded"
+              />
+              <span
+                className={`mt-0.5 shrink-0 rounded px-1 py-px text-[9px] font-bold ${
+                  kind === "prep"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                    : "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                }`}
+              >
+                {kind === "prep" ? "준비" : "실행"}
+              </span>
+              <span
+                className={`min-w-0 flex-1 text-xs leading-snug ${
+                  item.done ? "line-through opacity-50" : "text-zinc-700 dark:text-zinc-200"
+                }`}
+              >
+                {item.label}
+              </span>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
         <button
           type="button"
           onClick={props.onOpenDetail}
           className="text-[11px] font-medium text-teal-600 hover:underline dark:text-teal-400"
         >
-          전체 항목·편집
+          항목 편집
         </button>
       </div>
-      {step.summary ? (
-        <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{step.summary}</p>
+    </article>
+  );
+}
+
+function PlatformInfoFold(props: {
+  platform: DistributionPlatform;
+  expanded: boolean;
+  onToggle: () => void;
+  onChange: (next: DistributionPlatform) => void;
+  onRemove: () => void;
+}) {
+  const { platform, expanded } = props;
+
+  function patch(partial: Partial<DistributionPlatform>) {
+    props.onChange({ ...platform, ...partial });
+  }
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/60 dark:border-zinc-700 dark:bg-zinc-900/40">
+      <button
+        type="button"
+        onClick={props.onToggle}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50"
+      >
+        <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">플랫폼 정보</span>
+        <span className="text-xs text-zinc-400">{expanded ? "접기 ▲" : "펼치기 ▼"}</span>
+      </button>
+
+      {expanded ? (
+        <div className="space-y-3 border-t border-zinc-200 px-4 py-4 dark:border-zinc-700">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block text-xs">
+              <span className="mb-1 block text-zinc-500">플랫폼</span>
+              <input className={inputCls} value={platform.platform} onChange={(e) => patch({ platform: e.target.value })} />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-zinc-500">소통 방식</span>
+              <input className={inputCls} value={platform.communication} onChange={(e) => patch({ communication: e.target.value })} />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-zinc-500">사이트</span>
+              <input className={inputCls} value={platform.site} onChange={(e) => patch({ site: e.target.value })} />
+            </label>
+            <label className="block text-xs sm:col-span-2 lg:col-span-3">
+              <span className="mb-1 block text-zinc-500">유통 개요</span>
+              <textarea className={inputCls} rows={3} value={platform.overview} onChange={(e) => patch({ overview: e.target.value })} />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-zinc-500">아이디</span>
+              <input className={inputCls} value={platform.loginId} onChange={(e) => patch({ loginId: e.target.value })} />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-zinc-500">비밀번호</span>
+              <input className={inputCls} value={platform.loginPassword} onChange={(e) => patch({ loginPassword: e.target.value })} />
+            </label>
+            <label className="block text-xs sm:col-span-2 lg:col-span-3">
+              <span className="mb-1 block text-zinc-500">참고</span>
+              <input className={inputCls} value={platform.notes} onChange={(e) => patch({ notes: e.target.value })} />
+            </label>
+          </div>
+          <button type="button" onClick={props.onRemove} className="text-xs text-red-600 hover:underline dark:text-red-400">
+            플랫폼 삭제
+          </button>
+        </div>
       ) : null}
-      <ul className="space-y-1">
-        {items.map(({ item, kind }) => (
-          <li key={item.id} className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={item.done === true}
-              onChange={(e) => toggle(item.id, kind, e.target.checked)}
-              className="h-3.5 w-3.5 shrink-0 rounded"
-            />
-            <span
-              className={`shrink-0 rounded px-1 py-px text-[9px] font-bold uppercase ${
-                kind === "prep"
-                  ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                  : "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
-              }`}
-            >
-              {kind === "prep" ? "준비" : "실행"}
-            </span>
-            <span className={`min-w-0 flex-1 text-xs ${item.done ? "line-through opacity-50" : "text-zinc-700 dark:text-zinc-200"}`}>
-              {item.label}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -398,17 +372,13 @@ function PlatformFlow(props: {
     () => [...platform.steps].sort((a, b) => a.order - b.order),
     [platform.steps],
   );
-  const currentStepId = sortedSteps.find((s) => !s.done)?.id ?? sortedSteps[sortedSteps.length - 1]?.id ?? null;
-  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const currentStepId = sortedSteps.find((s) => !s.done)?.id ?? null;
+  const [infoExpanded, setInfoExpanded] = useState(false);
   const [detailStepId, setDetailStepId] = useState<string | null>(null);
-
-  const activeStepId = selectedStepId ?? currentStepId;
-  const activeStep = sortedSteps.find((s) => s.id === activeStepId);
   const stats = platformProgress(platform);
 
   useEffect(() => {
-    setSelectedStepId(null);
+    setInfoExpanded(false);
   }, [platform.id]);
 
   function patch(partial: Partial<DistributionPlatform>) {
@@ -422,12 +392,11 @@ function PlatformFlow(props: {
   }
 
   function addStep() {
-    const id = distributionNewId("dstep");
     patch({
       steps: [
         ...platform.steps,
         syncStepDone({
-          id,
+          id: distributionNewId("dstep"),
           order: platform.steps.length + 1,
           title: "새 단계",
           summary: "",
@@ -437,7 +406,6 @@ function PlatformFlow(props: {
         }),
       ],
     });
-    setSelectedStepId(id);
   }
 
   const detailStep = detailStepId ? sortedSteps.find((s) => s.id === detailStepId) : null;
@@ -445,75 +413,47 @@ function PlatformFlow(props: {
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50">{platform.platform}</h2>
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
               {platform.communication || "소통 방식 미입력"}
             </span>
           </div>
-          <ThinBar stats={stats} className="mt-1 max-w-xs" />
+          <ThinBar stats={stats} className="mt-2 w-full max-w-md" />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setInfoOpen(true)}
-            className="rounded-lg border border-zinc-300 px-2.5 py-1 text-[11px] font-medium hover:bg-white dark:border-zinc-600 dark:hover:bg-zinc-800"
-          >
-            플랫폼 정보
-          </button>
-          <button
-            type="button"
-            onClick={addStep}
-            className="rounded-lg border border-zinc-300 px-2.5 py-1 text-[11px] font-medium hover:bg-white dark:border-zinc-600 dark:hover:bg-zinc-800"
-          >
-            + 단계
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={addStep}
+          className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-[11px] font-medium hover:bg-white dark:border-zinc-600 dark:hover:bg-zinc-800"
+        >
+          + 단계
+        </button>
       </div>
 
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-stretch gap-0 px-0.5 py-1">
-          {sortedSteps.map((s, i) => (
-            <div key={s.id} className="flex items-stretch">
-              <StepFlowCard
-                step={s}
-                index={i}
-                selected={s.id === activeStepId}
-                isCurrent={s.id === currentStepId}
-                onSelect={() => setSelectedStepId(s.id)}
-                onOpenDetail={() => setDetailStepId(s.id)}
-              />
-              {i < sortedSteps.length - 1 ? (
-                <StepConnector filled={s.done === true} />
-              ) : null}
-            </div>
-          ))}
-        </div>
+      <div className="flex w-full items-stretch">
+        {sortedSteps.map((s, i) => (
+          <div key={s.id} className="flex min-w-0 flex-1 items-stretch">
+            <StepFlowCard
+              step={s}
+              index={i}
+              isCurrent={s.id === currentStepId}
+              onChange={(next) => patchStep(s.id, next)}
+              onOpenDetail={() => setDetailStepId(s.id)}
+            />
+            {i < sortedSteps.length - 1 ? <StepConnector filled={s.done === true} /> : null}
+          </div>
+        ))}
       </div>
 
-      {activeStep ? (
-        <div className="mt-3">
-          <StepQuickPanel
-            step={activeStep}
-            onChange={(next) => patchStep(activeStep.id, next)}
-            onOpenDetail={() => setDetailStepId(activeStep.id)}
-          />
-        </div>
-      ) : null}
-
-      {infoOpen ? (
-        <PlatformInfoModal
-          platform={platform}
-          onChange={props.onChange}
-          onClose={() => setInfoOpen(false)}
-          onRemove={() => {
-            setInfoOpen(false);
-            props.onRemove();
-          }}
-        />
-      ) : null}
+      <PlatformInfoFold
+        platform={platform}
+        expanded={infoExpanded}
+        onToggle={() => setInfoExpanded((v) => !v)}
+        onChange={props.onChange}
+        onRemove={props.onRemove}
+      />
 
       {detailStep && detailIndex >= 0 ? (
         <StepDetailModal
@@ -528,7 +468,6 @@ function PlatformFlow(props: {
                 .map((x, j) => ({ ...x, order: j + 1 })),
             });
             setDetailStepId(null);
-            setSelectedStepId(null);
           }}
         />
       ) : null}
@@ -656,7 +595,7 @@ export function DistributionClient() {
   }, []);
 
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <input
@@ -664,8 +603,8 @@ export function DistributionClient() {
             value={profile.title}
             onChange={(e) => setProfile((p) => ({ ...p, title: e.target.value }))}
           />
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <ThinBar stats={totalStats} className="max-w-[12rem]" />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <ThinBar stats={totalStats} className="min-w-[10rem] max-w-sm flex-1" />
             <span className="text-[11px] text-zinc-500">
               전체 {totalStats.done}/{totalStats.total}
             </span>
@@ -714,7 +653,7 @@ export function DistributionClient() {
       </div>
 
       {activePlatform ? (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+        <section className="w-full rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 dark:border-zinc-700 dark:bg-zinc-950">
           <PlatformFlow
             key={activePlatform.id}
             platform={activePlatform}
