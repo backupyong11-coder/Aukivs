@@ -37,6 +37,15 @@ export function normalizeSheetDateYmd(raw: string): string | null {
   return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
 }
 
+/** 업무정리 마감일·실행일 — HTML date input용 YYYY-MM-DD */
+export function toDateInputValue(raw: string): string {
+  return normalizeSheetDateYmd(raw) ?? "";
+}
+
+export function isTaskDateField(field: string): boolean {
+  return field === "마감일" || field === "실행일";
+}
+
 export function ymdFromParts(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }

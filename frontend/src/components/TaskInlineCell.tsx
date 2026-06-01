@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TableTruncatedText } from "@/components/TableTruncatedText";
 import { TagSelectInlineCell, isPriorityTagField } from "@/components/TagSelectInlineCell";
+import { isTaskDateField, toDateInputValue } from "@/lib/sheetDates";
 
 export type EditableTaskField =
   | "우선순위"
@@ -39,6 +40,19 @@ type Props = {
   onSave: (taskId: string, field: EditableTaskField, nextValue: string) => Promise<void>;
 };
 
+function displayValue(field: EditableTaskField, value: string): string {
+  if (!isTaskDateField(field)) return value;
+  const normalized = toDateInputValue(value);
+  return normalized || value;
+}
+
+function commitValue(field: EditableTaskField, draft: string): string {
+  if (!isTaskDateField(field)) return draft;
+  const trimmed = draft.trim();
+  if (!trimmed) return "";
+  return toDateInputValue(trimmed) || trimmed;
+}
+
 export function TaskInlineCell({
   value,
   field,
@@ -52,32 +66,33 @@ export function TaskInlineCell({
   onSave,
 }: Props) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState(() => displayValue(field, value));
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [value, editing]);
+    if (!editing) setDraft(displayValue(field, value));
+  }, [value, editing, field]);
 
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      if (!isTaskDateField(field)) inputRef.current.select();
     }
-  }, [editing]);
+  }, [editing, field]);
 
   const alignCls = align === "center" ? "text-center" : "text-left";
+  const shown = displayValue(field, value);
 
   async function commit() {
     const trimmed = draft.trim();
     if (field === "업무명" && !trimmed) {
-      setDraft(value);
+      setDraft(shown);
       setEditing(false);
       return;
     }
-    const next = field === "업무명" ? trimmed : draft;
-    if (next === value) {
+    const next = field === "업무명" ? trimmed : commitValue(field, draft);
+    if (next === shown) {
       setEditing(false);
       return;
     }
@@ -86,7 +101,7 @@ export function TaskInlineCell({
       await onSave(taskId, field, next);
       setEditing(false);
     } catch {
-      setDraft(value);
+      setDraft(shown);
       setEditing(false);
     } finally {
       setSaving(false);
@@ -94,8 +109,13 @@ export function TaskInlineCell({
   }
 
   function cancel() {
-    setDraft(value);
+    setDraft(shown);
     setEditing(false);
+  }
+
+  function startEdit() {
+    setDraft(displayValue(field, value));
+    setEditing(true);
   }
 
   if (isPriorityTagField(field)) {
@@ -115,7 +135,7 @@ export function TaskInlineCell({
     return (
       <input
         ref={inputRef}
-        type={field === "실행일" ? "date" : "text"}
+        type={isTaskDateField(field) ? "date" : "text"}
         value={draft}
         disabled={saving}
         onChange={(e) => setDraft(e.target.value)}
@@ -137,12 +157,12 @@ export function TaskInlineCell({
   return (
     <div className={`min-w-0 w-full max-w-full ${className}`}>
       <TableTruncatedText
-        value={value}
+        value={shown}
         disabled={disabled}
         align={align}
         muted={muted}
         tabular={tabular}
-        onRequestEdit={() => setEditing(true)}
+        onRequestEdit={startEdit}
       />
     </div>
   );

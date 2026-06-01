@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { toDateInputValue } from "@/lib/sheetDates";
 import { WeeklyAgendaPersonGrid } from "@/components/WeeklyAgendaPersonGrid";
 import { fetchTasks, updateTaskFields, type TaskSheetRow } from "@/lib/tasks";
 import {
@@ -244,24 +245,22 @@ export function WeeklyAgendaTasksClient() {
                         <td className={tdCls}>{taskAgendaDetails(t) || "—"}</td>
                         <td className={tdCls}>
                           <input
-                            type="text"
+                            type="date"
                             spellCheck={false}
-                            defaultValue={(t["마감일"] ?? "").trim()}
+                            defaultValue={toDateInputValue((t["마감일"] ?? "").trim())}
                             key={`${t.id}-due-${t["마감일"]}`}
                             onBlur={(e) => void patchTaskField(t.id, "마감일", e.target.value.trim())}
                             className={agendaCellInputCls}
-                            placeholder="—"
                           />
                         </td>
                         <td className={tdCls}>
                           <input
-                            type="text"
+                            type="date"
                             spellCheck={false}
-                            defaultValue={(t["실행일"] ?? "").trim()}
+                            defaultValue={toDateInputValue((t["실행일"] ?? "").trim())}
                             key={`${t.id}-exec-${t["실행일"]}`}
                             onBlur={(e) => void patchTaskField(t.id, "실행일", e.target.value.trim())}
                             className={agendaCellInputCls}
-                            placeholder="—"
                           />
                         </td>
                         <td className={tdCls}>—</td>

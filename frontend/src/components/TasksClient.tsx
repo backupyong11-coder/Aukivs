@@ -21,6 +21,7 @@ import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 import { useTableListDisplay } from "@/hooks/useTableListDisplay";
 import { useTableRowOrder } from "@/hooks/useTableRowOrder";
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { isTaskDateField, toDateInputValue } from "@/lib/sheetDates";
 import { TABLE_LIST_DATE_FIELDS } from "@/lib/tableListView";
 import {
   UNDO_TOAST_MS,
@@ -252,8 +253,12 @@ function TaskFormModal(props: {
                 {label}{required ? " *" : ""}
               </span>
               <input
-                type="text"
-                value={fields[key]}
+                type={isTaskDateField(key) ? "date" : "text"}
+                value={
+                  isTaskDateField(key)
+                    ? toDateInputValue(fields[key])
+                    : fields[key]
+                }
                 onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.value }))}
                 className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
