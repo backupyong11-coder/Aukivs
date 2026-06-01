@@ -39,6 +39,11 @@ import {
   readTaskManager,
   readWorkAssignee,
 } from "@/lib/taskAssignee";
+import {
+  composeQuantificationType,
+  isQuantificationTypeSourceField,
+  withAutoQuantificationType,
+} from "@/lib/taskQuantificationType";
 
 type TaskRow = {
   id: string;
@@ -251,16 +256,32 @@ function TaskFormModal(props: {
             <label key={key} className="block">
               <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 {label}{required ? " *" : ""}
+                {key === "정량화 구분" ? (
+                  <span className="ml-1 font-normal text-zinc-400">(분야·분류·정량화 분 자동)</span>
+                ) : null}
               </span>
               <input
                 type={isTaskDateField(key) ? "date" : "text"}
+                readOnly={key === "정량화 구분"}
                 value={
                   isTaskDateField(key)
                     ? toDateInputValue(fields[key])
-                    : fields[key]
+                    : key === "정량화 구분"
+                      ? composeQuantificationType(fields)
+                      : fields[key]
                 }
-                onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.value }))}
-                className="mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                onChange={(e) =>
+                  setFields((prev) => {
+                    const next = { ...prev, [key]: e.target.value };
+                    if (isQuantificationTypeSourceField(key)) {
+                      next["정량화 구분"] = composeQuantificationType(next);
+                    }
+                    return next;
+                  })
+                }
+                className={`mt-0.5 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 ${
+                  key === "정량화 구분" ? "cursor-default text-zinc-500 dark:text-zinc-400" : ""
+                }`}
               />
             </label>
           ))}
@@ -358,6 +379,7 @@ export function TasksClient() {
           sheet_row: String(r.sheet_row ?? ""),
           외부담당자: readWorkAssignee(r as Record<string, string>),
           담당자: readTaskManager(r as Record<string, string>),
+          "정량화 구분": composeQuantificationType(r as Record<string, string>),
         };
       });
       setState({ kind: "ready", items });
@@ -711,7 +733,7 @@ export function TasksClient() {
       "정량화 분": item["정량화 분"] ?? "",
       업무명: item.업무명 ?? "",
       정량화: item.정량화 ?? "",
-      "정량화 구분": item["정량화 구분"] ?? "",
+      "정량화 구분": composeQuantificationType(item),
       시간: item.시간 ?? "",
       시간변환: item.시간변환 ?? "",
       관련플랫폼: item.관련플랫폼 ?? "",
@@ -729,7 +751,7 @@ export function TasksClient() {
     if (!editItem) return;
     setSaving(true); setActionError(null);
     try {
-      await apiFetch("/tasks/update", { id: editItem.id, ...form });
+      await apiFetch("/tasks/update", { id: editItem.id, ...withAutoQuantificationType(form) });
       setEditItem(null);
       setRefreshKey(k => k + 1);
     } catch (e) {
@@ -740,7 +762,7 @@ export function TasksClient() {
   const handleCreate = async () => {
     setSaving(true); setActionError(null);
     try {
-      await apiFetch("/tasks/create", newForm);
+      await apiFetch("/tasks/create", withAutoQuantificationType(newForm));
       setCreateOpen(false);
       setNewForm(EMPTY_FORM);
       setRefreshKey(k => k + 1);
@@ -765,10 +787,15 @@ export function TasksClient() {
       const item = state.items.find((it) => it.id === taskId);
       if (!item) return;
       const prev = item[field] ?? "";
-      if (prev === newValue) return;
+      const prevType = item["정량화 구분"] ?? "";
       if (field === "업무명" && !newValue.trim()) {
         throw new Error("업무명은 비울 수 없습니다.");
       }
+      const patched = { ...item, [field]: newValue };
+      const nextType = composeQuantificationType(patched);
+      const syncType = isQuantificationTypeSourceField(field) && nextType !== prevType;
+      if (prev === newValue && !syncType) return;
+
       const cellKey = `${taskId}:${field}`;
       setPatchingCell(cellKey);
       setActionError(null);
@@ -777,19 +804,33 @@ export function TasksClient() {
         return {
           kind: "ready",
           items: s.items.map((it) =>
-            it.id === taskId ? { ...it, [field]: newValue } : it,
+            it.id === taskId
+              ? {
+                  ...it,
+                  [field]: newValue,
+                  ...(syncType ? { "정량화 구분": nextType } : {}),
+                }
+              : it,
           ),
         };
       });
       try {
-        await apiFetch("/tasks/update", { id: taskId, [field]: newValue });
+        const body: Record<string, string> = { id: taskId, [field]: newValue };
+        if (syncType) body["정량화 구분"] = nextType;
+        await apiFetch("/tasks/update", body);
       } catch (e) {
         setState((s) => {
           if (s.kind !== "ready") return s;
           return {
             kind: "ready",
             items: s.items.map((it) =>
-              it.id === taskId ? { ...it, [field]: prev } : it,
+              it.id === taskId
+                ? {
+                    ...it,
+                    [field]: prev,
+                    ...(syncType ? { "정량화 구분": prevType } : {}),
+                  }
+                : it,
             ),
           };
         });
@@ -1096,14 +1137,20 @@ export function TasksClient() {
                       }`}
                     >
                       <TaskInlineCell
-                        value={item[col.key] ?? ""}
+                        value={
+                          col.key === "정량화 구분"
+                            ? composeQuantificationType(item)
+                            : (item[col.key] ?? "")
+                        }
                         field={col.key}
                         taskId={item.id}
                         align={col.align}
                         wide={col.wide}
                         muted={col.muted}
                         tabular={col.tabular}
-                        disabled={isCellPatching(item.id, col.key)}
+                        disabled={
+                          col.key === "정량화 구분" || isCellPatching(item.id, col.key)
+                        }
                         onSave={handleInlineSave}
                       />
                     </td>
