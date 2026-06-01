@@ -53,6 +53,9 @@ from schemas import (
     ThumbnailSpecsGetResponse,
     ThumbnailSpecsPutRequest,
     ThumbnailSpecsPutResponse,
+    ProductionProcessGetResponse,
+    ProductionProcessPutRequest,
+    ProductionProcessPutResponse,
     PlatformMatrixPreferencesGetResponse,
     PlatformMatrixPreferencesPutRequest,
     PlatformMatrixPreferencesPutResponse,
@@ -100,6 +103,7 @@ from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works
 from repositories import weekly_agenda_repo
 from repositories import company_repo
 from repositories import thumbnail_specs_repo
+from repositories import production_process_repo
 from repositories import weekly_meeting_minutes_repo
 from repositories import table_list_prefs_repo
 from repositories import snapshot_repo
@@ -1261,6 +1265,43 @@ def put_thumbnail_specs(body: ThumbnailSpecsPutRequest) -> ThumbnailSpecsPutResp
     try:
         updated_at = thumbnail_specs_repo.upsert_profile(settings, body.profile)
         return ThumbnailSpecsPutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ── 제작공정 대시보드 (Supabase JSON 문서) ───────────────────────────────
+@app.get("/production-process", response_model=ProductionProcessGetResponse)
+def get_production_process() -> ProductionProcessGetResponse:
+    settings = load_settings()
+    try:
+        row = production_process_repo.get_profile(settings)
+        if not row:
+            return ProductionProcessGetResponse(profile=None, updated_at=None)
+        ua = row.get("updated_at")
+        return ProductionProcessGetResponse(
+            profile=row["profile"],
+            updated_at=str(ua) if ua is not None else None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/production-process", response_model=ProductionProcessPutResponse)
+def put_production_process(body: ProductionProcessPutRequest) -> ProductionProcessPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = production_process_repo.upsert_profile(settings, body.profile)
+        return ProductionProcessPutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SupabaseRequestError as e:
