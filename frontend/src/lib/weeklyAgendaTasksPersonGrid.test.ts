@@ -50,8 +50,8 @@ describe("buildAutoPersonGridFromTasks", () => {
     );
     expect(matchedCount).toBe(1);
     const row = grid.rows.find((r) => r.name === "김영화");
-    expect(row?.cells.wed).toContain("[업로드]");
-    expect(row?.cells.wed).toContain("코스프레 유부녀 미툰");
+    expect(row?.cells.wed).toBe("코스프레 유부녀 미툰");
+    expect(row?.cells.wed).not.toContain("[업로드]");
   });
 });
 

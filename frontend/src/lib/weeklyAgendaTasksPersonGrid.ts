@@ -96,10 +96,8 @@ export function buildWeekColumnDefs(from: string, to: string): WeekColumnDef[] {
 }
 
 function formatTaskLine(task: TaskSheetRow): string {
-  const minor = (task["정량화 분"] ?? "").trim();
   const title = (task["업무명"] ?? "").trim();
-  if (minor && title) return `${minor}\n${title}`;
-  return title || minor || "(제목 없음)";
+  return title || "(제목 없음)";
 }
 
 /** 일반 업무표 — 소분류(정량화 분) · 세부 내용(업무명) */

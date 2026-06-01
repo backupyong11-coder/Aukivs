@@ -138,7 +138,7 @@ export function WeeklyAgendaTasksClient() {
           <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">주간 아젠다</p>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
             업무정리 DB의 <strong className="font-medium text-zinc-700 dark:text-zinc-300">실행일</strong>이 선택한
-            기간에 포함되는 업무를 표시합니다. 소분류=정량화 분, 세부 내용=업무명 · 담당자 기준 월~금 표는 아래에
+            기간에 포함되는 업무를 표시합니다. 소분류=정량화 분, 세부 내용=업무명 · 인물별 주간 표에는 업무명만 표시됩니다.
             자동 배치됩니다.
           </p>
         </div>
