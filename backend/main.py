@@ -50,6 +50,9 @@ from schemas import (
     CompanyProfileGetResponse,
     CompanyProfilePutRequest,
     CompanyProfilePutResponse,
+    ThumbnailSpecsGetResponse,
+    ThumbnailSpecsPutRequest,
+    ThumbnailSpecsPutResponse,
     PlatformMatrixPreferencesGetResponse,
     PlatformMatrixPreferencesPutRequest,
     PlatformMatrixPreferencesPutResponse,
@@ -96,6 +99,7 @@ from repositories.memos_repo import update_memo as update_memo_supabase
 from repositories import tasks_repo, upload_rows_repo, platform_rows_repo, works_repo
 from repositories import weekly_agenda_repo
 from repositories import company_repo
+from repositories import thumbnail_specs_repo
 from repositories import weekly_meeting_minutes_repo
 from repositories import table_list_prefs_repo
 from repositories import snapshot_repo
@@ -1220,6 +1224,43 @@ def put_company_profile(body: CompanyProfilePutRequest) -> CompanyProfilePutResp
     try:
         updated_at = company_repo.upsert_profile(settings, body.profile)
         return CompanyProfilePutResponse(ok=True, updated_at=updated_at)
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ── 썸네일 규격 대시보드 (Supabase JSON 문서) ───────────────────────────
+@app.get("/thumbnail-specs", response_model=ThumbnailSpecsGetResponse)
+def get_thumbnail_specs() -> ThumbnailSpecsGetResponse:
+    settings = load_settings()
+    try:
+        row = thumbnail_specs_repo.get_profile(settings)
+        if not row:
+            return ThumbnailSpecsGetResponse(profile=None, updated_at=None)
+        ua = row.get("updated_at")
+        return ThumbnailSpecsGetResponse(
+            profile=row["profile"],
+            updated_at=str(ua) if ua is not None else None,
+        )
+    except SupabaseConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except SupabaseRequestError as e:
+        status = e.status_code if e.status_code and e.status_code >= 400 else 502
+        raise HTTPException(status_code=status, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/thumbnail-specs", response_model=ThumbnailSpecsPutResponse)
+def put_thumbnail_specs(body: ThumbnailSpecsPutRequest) -> ThumbnailSpecsPutResponse:
+    settings = load_settings()
+    try:
+        updated_at = thumbnail_specs_repo.upsert_profile(settings, body.profile)
+        return ThumbnailSpecsPutResponse(ok=True, updated_at=updated_at)
     except SupabaseConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except SupabaseRequestError as e:

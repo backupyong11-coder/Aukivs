@@ -560,6 +560,26 @@ class CompanyProfilePutResponse(BaseModel):
     updated_at: str | None = None
 
 
+class ThumbnailSpecsGetResponse(BaseModel):
+    """GET /thumbnail-specs — 서버에 문서가 없으면 profile=null."""
+
+    profile: dict[str, Any] | None = None
+    updated_at: str | None = None
+
+
+class ThumbnailSpecsPutRequest(BaseModel):
+    """PUT /thumbnail-specs — 전체 프로필 교체."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: dict[str, Any]
+
+
+class ThumbnailSpecsPutResponse(BaseModel):
+    ok: bool = True
+    updated_at: str | None = None
+
+
 class TableListColumnWidthsGetResponse(BaseModel):
     """GET /table-list-preferences/{page_id}"""
 

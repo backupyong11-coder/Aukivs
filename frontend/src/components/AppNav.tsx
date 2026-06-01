@@ -24,6 +24,11 @@ const links: NavLink[] = [
     href: "/weekly-agenda",
     label: "주간아젠다",
     title: "대분류 병합 표(로컬 저장)",
+  },
+  {
+    href: "/thumbnail-specs",
+    label: "썸네일규격",
+    title: "플랫폼별 썸네일·원고 작업 사이즈 대시보드",
     dividerAfter: true,
   },
   { href: "/announcement-date", label: "발표일 DB", title: "발표 일정" },
