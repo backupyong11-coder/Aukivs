@@ -16,6 +16,7 @@ const links: NavLink[] = [
   { href: "/company", label: "회사", title: "오키브스 회사 정보·매출·연락처 대시보드" },
   { href: "/chatbot", label: "챗봇", title: "데이터 자연어 질의(/api/ops/ask)" },
   { href: "/memo", label: "메모", title: "메모장 시트 목록·추가" },
+  { href: "/distribution", label: "유통", title: "플랫폼별 유통 방법·단계별 체크·진행률" },
   { href: "/settlement", label: "정산", title: "플랫폼별 정산 방법·월별 체크 캘린더" },
   { href: "/calendar", label: "캘린더", title: "월·주·일 일정(시트 연동)" },
   { href: "/platform-matrix", label: "플랫폼", title: "작품×플랫폼 연동 매트릭스" },
