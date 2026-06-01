@@ -6,8 +6,8 @@ export const TASK_MANAGER_FIELD = "담당자";
 
 const WORK_ASSIGNEE_KEYS = ["외부담당자", "업무담당", "인물담당", "상태"] as const;
 
-/** 레거시: 업무담당 + 담당자까지 합쳐 읽기 (업무정리 테이블 등) */
-const LEGACY_ASSIGNEE_KEYS = ["상태", "담당자"] as const;
+/** 레거시: 예전 '상태' 헤더만 외부담당자로 매핑 (담당자와 분리) */
+const LEGACY_WORK_ASSIGNEE_KEYS = ["상태"] as const;
 
 /** 임직원별 보드 — 업무담당·인물담당·상태만 (담당자 제외) */
 export function readWorkAssignee(row: Record<string, string | undefined | null>): string {
@@ -26,11 +26,11 @@ export function readTaskManager(row: Record<string, string | undefined | null>):
   return (row["피로도"] ?? "").trim();
 }
 
-/** API/레거시 키에서 업무담당 문자열 추출 (담당자 폴백 포함) */
+/** 외부담당자 + 예전 '상태' 헤더 (담당자 열과 독립) */
 export function readTaskAssignee(row: Record<string, string | undefined | null>): string {
   const direct = readWorkAssignee(row);
   if (direct) return direct;
-  for (const key of LEGACY_ASSIGNEE_KEYS) {
+  for (const key of LEGACY_WORK_ASSIGNEE_KEYS) {
     const v = (row[key] ?? "").trim();
     if (v) return v;
   }
@@ -59,12 +59,20 @@ function nameMatchesField(fieldValue: string, personName: string): boolean {
   return assignee.includes(name);
 }
 
-/** 담당자 이름 일치 (완전 일치 우선, 포함도 허용) */
+/** 외부담당자 이름 일치 (담당자 열과 독립) */
 export function taskMatchesAssignee(
   row: Record<string, string | undefined | null>,
   personName: string,
 ): boolean {
   return nameMatchesField(readTaskAssignee(row), personName);
+}
+
+/** 담당자(내부) 이름 일치 */
+export function taskMatchesManager(
+  row: Record<string, string | undefined | null>,
+  personName: string,
+): boolean {
+  return nameMatchesField(readTaskManager(row), personName);
 }
 
 export function taskMatchesPersonnelAssignee(

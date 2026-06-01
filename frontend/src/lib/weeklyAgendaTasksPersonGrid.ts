@@ -1,6 +1,7 @@
 import { loadPersonnelBoard } from "@/lib/personnelBoardStorage";
 import {
   readTaskManager,
+  readWorkAssignee,
   taskMatchesPersonnelAssignee,
   type PersonnelAssigneeMode,
 } from "@/lib/taskAssignee";
@@ -157,7 +158,7 @@ export function collectWeeklyAgendaPersonNames(
 
   for (const task of tasks) {
     if (mode === "manager") add(readTaskManager(task));
-    else add(task["외부담당자"] ?? "");
+    else add(readWorkAssignee(task));
   }
 
   rest.sort((a, b) => a.localeCompare(b, "ko"));

@@ -34,7 +34,10 @@ import {
   TaskInlineCell,
   type EditableTaskField,
 } from "@/components/TaskInlineCell";
-import { TASK_ASSIGNEE_FIELD, readTaskAssignee } from "@/lib/taskAssignee";
+import {
+  readTaskManager,
+  readWorkAssignee,
+} from "@/lib/taskAssignee";
 
 type TaskRow = {
   id: string;
@@ -152,7 +155,7 @@ function loadColumnOrder(defaultKeys: EditableTaskField[]): EditableTaskField[] 
     for (const k of parsed) {
       if (typeof k !== "string") continue;
       let key: EditableTaskField =
-        k === "상태" || k === "담당자" ? TASK_ASSIGNEE_FIELD : (k as EditableTaskField);
+        k === "상태" ? "외부담당자" : (k as EditableTaskField);
       if (allowed.has(key) && !out.includes(key)) out.push(key);
     }
     for (const k of defaultKeys) {
@@ -348,8 +351,8 @@ export function TasksClient() {
           ...r,
           id: String(r.id ?? ""),
           sheet_row: String(r.sheet_row ?? ""),
-          외부담당자: readTaskAssignee(r as Record<string, string>),
-          담당자: (r as unknown as Record<string, string>)["담당자"] ?? (r as unknown as Record<string, string>)["피로도"] ?? "",
+          외부담당자: readWorkAssignee(r as Record<string, string>),
+          담당자: readTaskManager(r as Record<string, string>),
         };
       });
       setState({ kind: "ready", items });
@@ -554,7 +557,7 @@ export function TasksClient() {
 
   const allAssignees = useMemo(() => {
     if (state.kind !== "ready") return [];
-    return sortedKeys(state.items.map(it => readTaskAssignee(it)));
+    return sortedKeys(state.items.map((it) => readWorkAssignee(it)));
   }, [state]);
 
   const listLabel = (key: string) => (key === "" ? "(비어 있음)" : key);
@@ -640,7 +643,7 @@ export function TasksClient() {
         || (it.관련작품 ?? "").includes(q)
         || (it.난이도 ?? "").includes(q)
         || ((it as unknown as Record<string, string>)["담당자"] ?? (it as unknown as Record<string, string>)["피로도"] ?? "").includes(q)
-        || readTaskAssignee(it).includes(q)
+        || readWorkAssignee(it).includes(q)
         || (it.메모 ?? "").includes(q)
         || (it.마감일 ?? "").includes(q);
       items = items.filter(hay);
@@ -658,7 +661,7 @@ export function TasksClient() {
       items = items.filter(it => !hiddenFields.has((it.분야 ?? "").trim()));
     }
     if (hiddenAssignees.size > 0) {
-      items = items.filter(it => !hiddenAssignees.has(readTaskAssignee(it)));
+      items = items.filter((it) => !hiddenAssignees.has(readWorkAssignee(it)));
     }
     return [...items].sort((a, b) => {
       const va = a[sortKey] ?? "";
@@ -711,8 +714,8 @@ export function TasksClient() {
       세부단위: item.세부단위 ?? "",
       관련작품: item.관련작품 ?? "",
       난이도: item.난이도 ?? "",
-      담당자: item.담당자 ?? (item as unknown as Record<string, string>)["피로도"] ?? "",
-      외부담당자: readTaskAssignee(item),
+      담당자: readTaskManager(item),
+      외부담당자: readWorkAssignee(item),
       메모: item.메모 ?? "",
     });
   };
