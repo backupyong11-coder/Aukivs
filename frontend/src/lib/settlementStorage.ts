@@ -30,9 +30,13 @@ export type SettlementVendor = {
   settlementDateNote: string;
   invoiceNote: string;
   depositDateNote: string;
+  /** 세금계산서 발행 메일 (해당 시) */
+  invoiceEmail: string;
   method: string;
   verifyMethod: string;
   monthlyTasks: SettlementMonthlyTask[];
+  /** 업체별 자유 메모 */
+  memo: string;
   notes?: string;
 };
 
@@ -40,7 +44,11 @@ export type SettlementProfile = {
   version: 1;
   title: string;
   vendors: SettlementVendor[];
+  /** 시드 데이터 갱신 버전 — 올리면 알려진 업체 본문만 병합 */
+  seedRevision?: number;
 };
+
+export const SETTLEMENT_SEED_REVISION = 2;
 
 const STORAGE_KEY = "worksheet_settlement_v1";
 
@@ -94,25 +102,31 @@ export function createDefaultSettlementProfile(): SettlementProfile {
   return {
     version: 1,
     title: "플랫폼 정산",
+    seedRevision: SETTLEMENT_SEED_REVISION,
     vendors: [
       vendor(1, {
         company: "무툰",
-        settlementName: "무툰/큐툰",
+        settlementName: "무툰/큐툰/핑거스토리",
         launchDate: "5.7",
-        flow: "5월 판매 → 6월 10일까지 정산자료 수령 → 정산자료 받은 뒤 10일 이내 계산서 발행 → 6월 말 입금",
-        verifyFrequency: "월마다 보내줌",
-        site: "메일",
+        flow:
+          "5월 판매분 → 6월 10일까지 무툰/핑거스토리 정산자료(메일·서면) 대기 → 금액 확인 후 우리가 세금계산서 발행 → 6월 말 입금",
+        verifyFrequency: "CP 실시간 확인 불가 — 정산자료를 메일/서면으로 수령·확인",
+        site: "메일 (핑거스토리/무툰)",
         loginId: "",
         loginPassword: "",
-        settlementDateNote: "익월 10일",
-        invoiceNote: "정산 후 10일 이내 계산서 발행",
-        depositDateNote: "익월 말일",
+        settlementDateNote: "익월 10일까지 정산자료",
+        invoiceNote: "정산자료 수령 후 10일 이내 우리가 세금계산서 발행",
+        depositDateNote: "계산서 정상 접수 시 해당 월 말일",
+        invoiceEmail: "",
         method:
-          "운영사: 핑거스토리 / 무툰·큐툰 / 월 1회 / 매월 1~말일 판매분 / 결제수수료 10% 공제 후 순매출 70:30 / 1코인=100원 VAT 제외",
-        verifyMethod: "CP사별 CMS 페이지 없음 — 메일·본문 안내",
+          "운영: 핑거스토리 / 무툰·큐툰 · 매월 1~말일 판매분 · 익월 10일까지 이메일/서면 정산자료 · 우리가 계산서 발행 · 월말 입금. CP 신청 구조 아님 — 자료 올 때까지 대기.",
+        verifyMethod: "정산자료 메일/서면 수령 → 금액 확인 → 이상 없으면 세금계산서 발행",
+        memo: "",
+        notes:
+          "관련: 2026.4.2 강지윤/핑거스토리 계약서 메일 · 2026.4.6 회사정보 회신. 무툰 사업자등록증 단독 첨부 메일은 미확인 — 계약서 참고.",
         monthlyTasks: [
-          task(10, "정산자료 수령", "receive"),
-          task(11, "계산서 발행 (수령 후 10일 이내)", "invoice", 20),
+          task(10, "정산자료 메일/서면 수령 (전월 1~말 판매분)", "receive"),
+          task(11, "세금계산서 발행 (수령 후 10일 이내)", "invoice", 20),
           task(28, "입금 확인 (월말)", "deposit", 31),
         ],
       }),
@@ -128,8 +142,10 @@ export function createDefaultSettlementProfile(): SettlementProfile {
         settlementDateNote: "익월 20일",
         invoiceNote: "말일까지 계산서 발행",
         depositDateNote: "그 다음 말일 입금",
+        invoiceEmail: "",
         method: "매주 월요일 정산 메일 → 매월 20일 합산 정산서",
         verifyMethod: "매주 월요일 정산 메일 확인",
+        memo: "",
         monthlyTasks: [
           task(1, "매주 월요일 정산 메일 확인", "verify", undefined, 1),
           task(20, "월간 정산서 수령", "receive"),
@@ -138,39 +154,50 @@ export function createDefaultSettlementProfile(): SettlementProfile {
       }),
       vendor(3, {
         company: "리디",
-        settlementName: "CP 사이트",
+        settlementName: "리디북스 CP",
         launchDate: "",
-        flow: "5월 판매 → 6월 20일경 정산 리포트 → 약 2주 뒤 역발행·입금",
-        verifyFrequency: "실시간 확인 가능",
+        flow:
+          "5월 매출 → 6월 25일경 정산보고 메일 대기 → 약 2주 후 리디 역발행 계산서 + 입금 (우리 발행 아님, 확인·승인)",
+        verifyFrequency: "CP [정산]·[통계] 탭 수시 확인 가능",
         site: "https://cp.ridibooks.com/cp/login",
         loginId: "803-87-02636",
         loginPassword: "aukivs8910",
-        settlementDateNote: "익월 20일",
-        invoiceNote: "역발행",
-        depositDateNote: "리포트 후 약 2주",
-        method: "정산보고(25일) 후 약 2주 뒤 역발행 계산서 및 입금",
-        verifyMethod: "CP 사이트 정산 메뉴",
+        settlementDateNote: "익월 25일경 정산보고",
+        invoiceNote: "역발행 — 리디가 계산서 발행, 우리 확인/승인",
+        depositDateNote: "정산보고 약 2주 후",
+        invoiceEmail: "",
+        method:
+          "익월 25일경 정산보고 메일 → 약 2주 뒤 역발행 세금계산서 + 입금. 우리가 먼저 계산서 발행하는 구조 아님.",
+        verifyMethod: "CP [정산] 판매/정산 · [통계] · 하단 [정산 가이드]",
+        memo: "",
+        notes: "관련: 2026.5.11 리디웹툰운영팀 메일 · 우리 사업자등록증 2026.5.4 발송.",
         monthlyTasks: [
-          task(20, "정산 리포트 메일 수령", "receive"),
-          task(1, "역발행·입금 확인 (익월 초)", "deposit", 7),
+          task(25, "정산보고 메일 확인 (전월 매출)", "receive"),
+          task(1, "역발행 계산서·입금 확인 (전월 보고 후 ~2주)", "deposit", 14),
+          task(1, "CP [정산]·[통계] 탭 수시 확인", "verify", 31),
         ],
       }),
       vendor(4, {
         company: "미툰앤노벨",
         settlementName: "CP 페이지",
         launchDate: "4.23",
-        flow: "5월 수익 → 6월 1~4일 CMS 출금신청 → 6월 25일 입금",
-        verifyFrequency: "실시간 확인 가능",
+        flow: "5월 수익 → 6월 1~4일 CMS 출금신청 + 세금계산서 → 6월 25일 입금",
+        verifyFrequency: "CMS 실시간 · 수익금 매일 새벽 3~4시 갱신",
         site: "http://cp.me.co.kr/login.php",
         loginId: "Studioaukivs",
         loginPassword: "123456",
-        settlementDateNote: "익월 25일",
-        invoiceNote: "매월 4일까지 세금계산서 (과세/면세)",
-        depositDateNote: "1~4일 신청 시 25일 입금",
-        method: "CMS [정산신청] > [월별 정산금액] 조회 / [출금신청] 최소 1만원",
-        verifyMethod: "CMS 로그인 > 정산신청 > 월별 정산금액",
+        settlementDateNote: "매월 1~4일 신청 → 25일 입금",
+        invoiceNote: "과세/면세 구분 · 매월 4일까지 세금계산서 발행",
+        depositDateNote: "신청월 25일 (비영업일 다음 영업일)",
+        invoiceEmail: "meent.manager@me.co.kr",
+        method:
+          "자사 플랫폼 익월(M+1) · 타 플랫폼 유통 익익월(M+2) 정산. 1~4일 출금신청(0원 이상, 마이너스는 이월). 4일까지 세금계산서(과세/면세·사업자등록증). 25일 입금. 신청금액=전월까지 수익−기지급(당월 제외).",
+        verifyMethod: "CMS [정산신청] > [월별 정산금액] · [출금신청]",
+        memo: "",
+        notes:
+          "계산서: ㈜미툰앤노벨 / 정현준 / 272-81-00259 / meent.manager@me.co.kr · 계좌 변경 시 서류 재제출.",
         monthlyTasks: [
-          task(1, "출금 신청 + 세금계산서", "withdraw", 4),
+          task(1, "CMS 출금신청 + 세금계산서 (과세/면세)", "withdraw", 4),
           task(25, "입금 확인", "deposit"),
         ],
       }),
@@ -186,8 +213,10 @@ export function createDefaultSettlementProfile(): SettlementProfile {
         settlementDateNote: "익월 10일",
         invoiceNote: "익월 1~10일",
         depositDateNote: "익월 마지막 주 수요일",
+        invoiceEmail: "",
         method: "계약상 통계 보고서 또는 관리자 사이트",
         verifyMethod: "본문에서 위치 미확인",
+        memo: "",
         monthlyTasks: [
           task(1, "정산내역 수령", "receive", 10),
           task(1, "계산서·세금계산서 발행", "invoice", 10),
@@ -206,8 +235,10 @@ export function createDefaultSettlementProfile(): SettlementProfile {
         settlementDateNote: "익익월 10일",
         invoiceNote: "익익월 1~10일",
         depositDateNote: "익익월 마지막 주 수요일",
+        invoiceEmail: "",
         method: "국내와 동일 주기, 2개월 후 정산",
         verifyMethod: "본문에서 위치 미확인",
+        memo: "",
         notes: "전월 판매 기준 2개월 뒤(익익월)에 아래 일정 적용",
         monthlyTasks: [
           task(1, "정산내역 수령 (익익월)", "receive", 10),
@@ -262,10 +293,52 @@ function normalizeVendor(raw: unknown, i: number): SettlementVendor | null {
     settlementDateNote: typeof o.settlementDateNote === "string" ? o.settlementDateNote : "",
     invoiceNote: typeof o.invoiceNote === "string" ? o.invoiceNote : "",
     depositDateNote: typeof o.depositDateNote === "string" ? o.depositDateNote : "",
+    invoiceEmail: typeof o.invoiceEmail === "string" ? o.invoiceEmail : "",
     method: typeof o.method === "string" ? o.method : "",
     verifyMethod: typeof o.verifyMethod === "string" ? o.verifyMethod : "",
+    memo: typeof o.memo === "string" ? o.memo : "",
     monthlyTasks,
     ...(typeof o.notes === "string" && o.notes ? { notes: o.notes } : {}),
+  };
+}
+
+const MERGE_BY_COMPANY = new Set(["무툰", "리디", "미툰앤노벨"]);
+
+/** 알려진 업체 본문·일정을 시드로 병합 (memo·완료 체크는 유지) */
+export function mergeSettlementSeedContent(profile: SettlementProfile): SettlementProfile {
+  const rev = profile.seedRevision ?? 0;
+  if (rev >= SETTLEMENT_SEED_REVISION) return profile;
+  const defaults = createDefaultSettlementProfile();
+  const byCompany = new Map(defaults.vendors.map((v) => [v.company, v]));
+  return {
+    ...profile,
+    seedRevision: SETTLEMENT_SEED_REVISION,
+    vendors: profile.vendors.map((v) => {
+      const seed = byCompany.get(v.company);
+      if (!seed || !MERGE_BY_COMPANY.has(v.company)) {
+        return { ...v, memo: v.memo ?? "", invoiceEmail: v.invoiceEmail ?? "" };
+      }
+      const doneByLabel = new Map(v.monthlyTasks.map((t) => [t.label, t.done]));
+      return {
+        ...v,
+        settlementName: seed.settlementName,
+        flow: seed.flow,
+        verifyFrequency: seed.verifyFrequency,
+        settlementDateNote: seed.settlementDateNote,
+        invoiceNote: seed.invoiceNote,
+        depositDateNote: seed.depositDateNote,
+        invoiceEmail: seed.invoiceEmail,
+        method: seed.method,
+        verifyMethod: seed.verifyMethod,
+        notes: seed.notes,
+        memo: v.memo ?? "",
+        monthlyTasks: seed.monthlyTasks.map((t) => ({
+          ...t,
+          id: newId("stask"),
+          done: doneByLabel.get(t.label) === true,
+        })),
+      };
+    }),
   };
 }
 
@@ -281,11 +354,12 @@ export function normalizeSettlementProfile(raw: unknown): SettlementProfile | nu
     if (item) vendors.push(item);
   });
   vendors.sort((a, b) => a.order - b.order);
-  return {
+  return mergeSettlementSeedContent({
     version: 1,
     title: typeof p.title === "string" ? p.title : "플랫폼 정산",
+    seedRevision: typeof p.seedRevision === "number" ? p.seedRevision : 0,
     vendors,
-  };
+  });
 }
 
 export function loadSettlementProfile(): SettlementProfile {
